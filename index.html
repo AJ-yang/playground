@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>배구 로테이션 보드</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root{
+  --navy:#13294B;
+  --court:#E8722A;
+  --court-dark:#D2601F;
+  --line:#F7F2E7;
+  --front:#FFD65C;
+  --back:#7ED9CF;
+  --ink:#0E1D33;
+  --card:#1B3560;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'Noto Sans KR',sans-serif;
+  background:var(--navy);
+  color:var(--line);
+  min-height:100vh;
+  padding-bottom:40px;
+  touch-action:manipulation;
+}
+header{padding:16px 16px 10px;text-align:center}
+header h1{font-family:'Black Han Sans',sans-serif;font-size:24px;letter-spacing:1px}
+header h1 span{color:var(--court)}
+.wrap{max-width:480px;margin:0 auto;padding:0 14px}
+
+/* 설정 */
+.setup-card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px}
+.setup-card h2{font-family:'Black Han Sans',sans-serif;font-size:16px;margin-bottom:4px}
+.setup-card .hint{font-size:12px;opacity:.7;margin-bottom:12px;line-height:1.5}
+.player-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.pos-badge{flex:0 0 40px;height:40px;border-radius:10px;background:var(--court);color:var(--ink);font-family:'Black Han Sans',sans-serif;font-size:16px;display:flex;align-items:center;justify-content:center}
+.player-row input{flex:1;min-width:0;height:44px;border:none;border-radius:10px;padding:0 12px;font-size:15px;font-family:inherit;background:#0F2246;color:var(--line)}
+.player-row input::placeholder{color:rgba(247,242,231,.35)}
+.player-row select{flex:0 0 92px;height:44px;border:none;border-radius:10px;padding:0 8px;font-size:14px;font-family:inherit;background:#0F2246;color:var(--line);appearance:none}
+.btn{width:100%;height:50px;border:none;border-radius:12px;background:var(--court);color:var(--ink);font-family:'Black Han Sans',sans-serif;font-size:18px;letter-spacing:1px;cursor:pointer}
+.btn:active{transform:scale(.98)}
+.btn.ghost{background:transparent;border:1.5px solid rgba(247,242,231,.35);color:var(--line);font-size:14px;height:40px;margin-top:8px}
+.player-row .del{flex:0 0 36px;height:36px;border:none;border-radius:9px;background:transparent;color:rgba(247,242,231,.45);font-size:18px;cursor:pointer}
+.chip{
+  display:flex;align-items:center;gap:10px;
+  width:100%;
+  border:none;border-radius:12px;
+  background:#0F2246;color:var(--line);
+  padding:10px 12px;margin-bottom:8px;
+  font-family:inherit;font-size:15px;cursor:pointer;
+  text-align:left;
+}
+.chip .num{
+  flex:0 0 32px;height:32px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(247,242,231,.12);
+  font-family:'Black Han Sans',sans-serif;font-size:15px;
+  color:rgba(247,242,231,.4);
+}
+.chip.picked{background:var(--court);color:var(--ink)}
+.chip.picked .num{background:rgba(14,29,51,.25);color:var(--ink)}
+.chip .r{margin-left:auto;font-size:12px;opacity:.7}
+.modal-bg{position:fixed;inset:0;background:rgba(9,18,35,.78);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal-bg.show{display:flex}
+.modal{background:var(--card);border-radius:16px;padding:18px;width:100%;max-width:360px;max-height:82vh;overflow:auto}
+.modal h3{font-family:'Black Han Sans',sans-serif;font-size:18px;margin-bottom:4px}
+.modal .sub-h{font-size:12px;font-weight:700;opacity:.6;margin:12px 0 6px;letter-spacing:1px}
+.save-row{display:flex;gap:8px;margin-top:8px}
+.save-row input{flex:1;min-width:0;height:44px;border:none;border-radius:10px;padding:0 12px;font-size:15px;font-family:inherit;background:#0F2246;color:var(--line)}
+.save-row input::placeholder{color:rgba(247,242,231,.35)}
+.save-btn{flex:0 0 64px;border:none;border-radius:10px;background:var(--court);color:var(--ink);font-family:'Black Han Sans',sans-serif;font-size:15px;cursor:pointer}
+.save-item{display:flex;align-items:center;gap:8px;background:#0F2246;border-radius:11px;padding:8px 10px;margin-bottom:8px}
+.save-item .snm{flex:1;min-width:0;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.save-item .dt{font-size:11px;opacity:.5;margin-right:2px}
+.save-item button{border:none;border-radius:8px;height:34px;padding:0 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.save-item .load{background:var(--court);color:var(--ink)}
+.save-item .del{background:transparent;color:rgba(247,242,231,.5);padding:0 6px;font-size:16px}
+
+/* 로테이션 화면 */
+#rotationView{display:none}
+.rot-tabs{display:flex;gap:6px;margin-bottom:10px}
+.rot-tabs button{flex:1;height:38px;border:none;border-radius:10px;background:#0F2246;color:rgba(247,242,231,.6);font-family:'Black Han Sans',sans-serif;font-size:14px;cursor:pointer}
+.rot-tabs button.active{background:var(--court);color:var(--ink)}
+
+/* 모드 토글 */
+.mode-toggle{display:flex;background:#0F2246;border-radius:12px;padding:4px;gap:4px;margin-bottom:10px}
+.mode-toggle button{flex:1;height:42px;border:none;border-radius:9px;background:transparent;color:rgba(247,242,231,.55);font-family:'Black Han Sans',sans-serif;font-size:15px;cursor:pointer}
+.mode-toggle button.active{background:var(--line);color:var(--ink)}
+
+/* 코트 (절대좌표) */
+.court-outer{background:#0F2246;border-radius:16px;padding:12px;margin-bottom:10px}
+.net{height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,var(--line) 0 8px,transparent 8px 14px);margin-bottom:4px}
+.court{
+  background:var(--court);
+  border:3px solid var(--line);
+  border-radius:6px;
+  position:relative;
+  width:100%;
+  aspect-ratio:1/1;
+  overflow:hidden;
+}
+.attack-line{position:absolute;left:0;right:0;top:33%;border-top:2.5px dashed var(--line);pointer-events:none}
+.token{
+  position:absolute;
+  width:74px;
+  margin-left:-37px;
+  margin-top:-28px;
+  border-radius:12px;
+  padding:6px 3px 5px;
+  text-align:center;
+  background:var(--court-dark);
+  border:2px solid transparent;
+  user-select:none;
+  touch-action:none;
+}
+.token .name{font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:14px;line-height:1.2;letter-spacing:-.3px;color:var(--ink);word-break:keep-all}
+.token .role{display:inline-block;margin-top:2px;font-size:9.5px;font-weight:700;letter-spacing:.3px;padding:1px 6px;border-radius:6px;background:rgba(14,29,51,.18);color:rgba(14,29,51,.85)}
+.token .serve-tag{font-size:9px;font-weight:700;color:var(--ink);margin-top:2px;letter-spacing:.5px}
+.token.front-row{background:var(--front)}
+.token.back-row{background:var(--back)}
+.token.libero{background:#C89BFF}
+.dot.l{background:#C89BFF}
+#captureTitle{display:none;text-align:center;font-family:'Black Han Sans',sans-serif;font-size:15px;padding:8px 0 2px;color:var(--line)}
+.token.server{border-color:var(--line);box-shadow:0 0 0 3px rgba(247,242,231,.35)}
+.token.dragging{transform:scale(1.12);z-index:10;box-shadow:0 6px 14px rgba(0,0,0,.4)}
+.range-box{
+  position:absolute;
+  border:2px dashed var(--line);
+  border-radius:10px;
+  background:rgba(247,242,231,.22);
+  pointer-events:none;
+  z-index:5;
+}
+.drag-hint{text-align:center;font-size:11.5px;opacity:.6;margin-bottom:10px}
+
+.legend{display:flex;gap:14px;justify-content:center;font-size:11.5px;opacity:.85;margin-bottom:10px}
+.legend span{display:flex;align-items:center;gap:5px}
+.dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+.dot.f{background:var(--front)} .dot.b{background:var(--back)}
+
+.rot-controls{display:flex;gap:10px;margin-bottom:10px}
+.rot-controls button{flex:1;height:50px;border:none;border-radius:12px;background:var(--card);color:var(--line);font-family:'Black Han Sans',sans-serif;font-size:16px;cursor:pointer}
+.rot-controls button:active{transform:scale(.97)}
+
+/* 액션 카드 3개 */
+.action-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.action{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  height:82px;border:none;border-radius:16px;cursor:pointer;
+  background:linear-gradient(160deg,#22447a 0%,#183258 100%);
+  color:var(--line);
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+  transition:transform .12s;
+}
+.action:active{transform:translateY(2px) scale(.98)}
+.action .ico{
+  font-size:22px;line-height:1;
+  width:40px;height:40px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(232,114,42,.18);
+}
+.action .lbl{font-family:'Black Han Sans',sans-serif;font-size:12.5px;line-height:1.2;text-align:center}
+
+/* 보조 버튼 */
+.minor-row{display:flex;gap:10px;margin-bottom:6px}
+.minor{
+  flex:1;height:42px;border:1.5px solid rgba(247,242,231,.18);border-radius:11px;
+  background:transparent;color:rgba(247,242,231,.7);
+  font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
+}
+.minor:active{background:rgba(247,242,231,.06)}
+</style>
+</head>
+<body>
+<header>
+  <h1>배구 <span>로테이션</span> 보드</h1>
+</header>
+
+<div class="wrap">
+
+  <div id="setupView">
+    <div class="setup-card" id="rosterCard">
+      <h2>선수 명단</h2>
+      <p class="hint">후보 포함 전체 명단을 먼저 적어주세요. 서브 순서는 다음 단계에서 정합니다.</p>
+      <div id="rosterList"></div>
+      <button class="btn ghost" onclick="addRosterRow()">＋ 선수 추가</button>
+      <button class="btn" style="margin-top:10px" onclick="goOrder()">서브 순서 정하기</button>
+      <button class="btn ghost" onclick="fillSample()">예시 명단 채우기</button>
+    </div>
+
+    <div class="setup-card" id="orderCard" style="display:none">
+      <h2>서브 순서 정하기</h2>
+      <p class="hint">코트에 나갈 6명을 서브 넣을 순서대로 탭하세요. 다시 탭하면 취소됩니다.<br>1번 = 첫 서버 (R1 오른쪽 뒤)</p>
+      <div id="orderChips"></div>
+      <div id="liberoSection" style="display:none">
+        <p class="hint" style="margin-top:12px">리베로 지정 (선택) — 수비·서브캐치에서 MB가 후위로 갈 때 자동 교대돼요</p>
+        <div id="liberoChips"></div>
+      </div>
+      <button class="btn" id="startBtn" style="margin-top:10px" onclick="startBoard()" disabled>로테이션 확인하기</button>
+      <button class="btn ghost" onclick="clearOrder()">순서 초기화</button>
+      <button class="btn ghost" onclick="backToRoster()">명단 수정</button>
+    </div>
+  </div>
+
+  <div id="rotationView">
+    <div class="rot-tabs" id="rotTabs"></div>
+
+    <div class="mode-toggle">
+      <button id="modeAttack" onclick="setMode('attack')">공격</button>
+      <button id="modeDefense" onclick="setMode('defense')">수비</button>
+      <button id="modeReceive" onclick="setMode('receive')">서브캐치</button>
+    </div>
+
+    <div id="captureArea">
+      <div id="captureTitle"></div>
+      <div class="court-outer">
+        <div class="net"></div>
+        <div class="court" id="courtEl">
+          <div class="attack-line"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="dot f"></span>전위</span>
+        <span><span class="dot b"></span>후위</span>
+        <span><span class="dot l"></span>리베로</span>
+        <span>흰 테두리 = 서버</span>
+      </div>
+    </div>
+
+    <p class="drag-hint" id="dragHint">서브캐치 모드: 선수를 드래그해서 리시브 대형을 직접 조정하세요</p>
+
+    <div class="rot-controls">
+      <button onclick="rotate(-1)">◀ 이전</button>
+      <button onclick="rotate(1)">다음 ▶</button>
+    </div>
+
+    <div class="action-grid">
+      <button class="action" onclick="openSaves()">
+        <span class="ico">💾</span><span class="lbl">라인업<br>저장</span>
+      </button>
+      <button class="action" onclick="openSub()">
+        <span class="ico">🔄</span><span class="lbl">선수<br>교체</span>
+      </button>
+      <button class="action" onclick="exportImage()">
+        <span class="ico">📷</span><span class="lbl">이미지<br>저장</span>
+      </button>
+    </div>
+
+    <div class="minor-row">
+      <button class="minor" onclick="resetCurrent()">위치 초기화</button>
+      <button class="minor" onclick="backToSetup()">라인업 수정</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-bg" id="subModal">
+  <div class="modal">
+    <h3>선수 교체</h3>
+    <p class="hint" id="subHint">코트 선수 1명, 벤치 선수 1명을 차례로 탭하면 교체돼요.</p>
+    <h4 class="sub-h">코트</h4>
+    <div id="courtSubList"></div>
+    <h4 class="sub-h">벤치</h4>
+    <div id="benchSubList"></div>
+    <button class="btn ghost" onclick="closeSub()">닫기</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="savesModal">
+  <div class="modal">
+    <h3>라인업 저장 / 불러오기</h3>
+    <p class="hint">현재 명단·대형을 이름 붙여 저장하고 언제든 불러올 수 있어요.</p>
+    <div class="save-row">
+      <input id="saveName" placeholder="라인업 이름 (예: A팀 주전)" maxlength="20">
+      <button class="save-btn" onclick="saveNamed()">저장</button>
+    </div>
+    <h4 class="sub-h">저장된 라인업</h4>
+    <div id="savesList"></div>
+    <button class="btn ghost" onclick="closeSaves()">닫기</button>
+  </div>
+</div>
+
+<script>
+const ROLES = ['S','OP','OH','MB','L','ETC'];
+const ROLE_LABEL = {S:'S', OP:'OP', OH:'OH', MB:'MB', L:'L', ETC:'ETC'};
+
+let players = [];
+let rotation = 0;
+let mode = 'attack'; // 'attack' | 'receive'
+
+// 기본 좌표 (% : x, y) — 존별
+const ATTACK_POS = {
+  4:{x:17,y:16}, 3:{x:50,y:16}, 2:{x:83,y:16},
+  5:{x:17,y:74}, 6:{x:50,y:74}, 1:{x:83,y:74}
+};
+const RECEIVE_POS = {
+  4:{x:20,y:24}, 3:{x:50,y:20}, 2:{x:80,y:24},
+  5:{x:22,y:66}, 6:{x:50,y:74}, 1:{x:78,y:66}
+};
+// 수비 기본: 전위 블로킹 라인, 후위 페리미터 수비
+const DEFENSE_POS = {
+  4:{x:17,y:14}, 3:{x:50,y:12}, 2:{x:83,y:14},
+  5:{x:14,y:58}, 6:{x:50,y:82}, 1:{x:86,y:58}
+};
+
+// 사용자 조정 좌표: coords[mode][rotation][zone] = {x,y}
+const coords = {attack:{}, defense:{}, receive:{}};
+
+let roster = [];      // {name, role} 전체 명단 (후보 포함)
+let serveOrder = [];  // roster 인덱스, 탭한 순서 = 서브 순서 (0번째 = 첫 서버 = 존1)
+let liberoIdx = null; // roster 인덱스, 리베로로 지정된 선수
+
+const rosterListEl = document.getElementById('rosterList');
+
+function addRosterRow(name = '', role = 'OH'){
+  const row = document.createElement('div');
+  row.className = 'player-row';
+  row.innerHTML = `
+    <input placeholder="선수 이름" maxlength="10" value="${name}">
+    <select>${ROLES.map(r=>`<option value="${r}" ${r===role?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}</select>
+    <button class="del" onclick="this.parentElement.remove()">✕</button>`;
+  rosterListEl.appendChild(row);
+}
+for (let i = 0; i < 8; i++) addRosterRow();
+
+function fillSample(){
+  rosterListEl.innerHTML = '';
+  [['김세터','S'],['박라이트','OP'],['이센터','MB'],['최레프트','OH'],
+   ['정레프트','OH'],['한센터','MB'],['오후보','OH'],['서후보','S']]
+   .forEach(s=>addRosterRow(s[0], s[1]));
+}
+
+function readRoster(){
+  roster = [];
+  rosterListEl.querySelectorAll('.player-row').forEach(row=>{
+    const name = row.querySelector('input').value.trim();
+    const role = row.querySelector('select').value;
+    if (name) roster.push({name, role});
+  });
+}
+
+function goOrder(){
+  readRoster();
+  if (roster.length < 6) { alert('선수를 6명 이상 입력해주세요.'); return; }
+  serveOrder = [];
+  document.getElementById('rosterCard').style.display = 'none';
+  document.getElementById('orderCard').style.display = 'block';
+  renderChips();
+}
+
+function backToRoster(){
+  document.getElementById('orderCard').style.display = 'none';
+  document.getElementById('rosterCard').style.display = 'block';
+}
+
+function clearOrder(){ serveOrder = []; liberoIdx = null; renderChips(); }
+
+function toggleOrder(i){
+  const pos = serveOrder.indexOf(i);
+  if (pos >= 0) serveOrder.splice(pos, 1);
+  else if (serveOrder.length < 6) serveOrder.push(i);
+  if (liberoIdx !== null && serveOrder.includes(liberoIdx)) liberoIdx = null;
+  renderChips();
+}
+
+function renderChips(){
+  const el = document.getElementById('orderChips');
+  el.innerHTML = '';
+  roster.forEach((p, i)=>{
+    const pos = serveOrder.indexOf(i);
+    const b = document.createElement('button');
+    b.className = 'chip' + (pos >= 0 ? ' picked' : '');
+    b.innerHTML = `<span class="num">${pos >= 0 ? pos+1 : '·'}</span>${p.name}<span class="r">${ROLE_LABEL[p.role]}</span>`;
+    b.onclick = ()=>toggleOrder(i);
+    el.appendChild(b);
+  });
+  document.getElementById('startBtn').disabled = (serveOrder.length !== 6);
+  renderLiberoChips();
+}
+
+function renderLiberoChips(){
+  const sec = document.getElementById('liberoSection');
+  const el = document.getElementById('liberoChips');
+  // 리베로 후보 = 코트에 나가지 않는(서브순서 미포함) 선수
+  const bench = roster.map((p,i)=>i).filter(i => !serveOrder.includes(i));
+  if (serveOrder.length !== 6 || bench.length === 0) { sec.style.display='none'; return; }
+  sec.style.display = 'block';
+  el.innerHTML = '';
+  bench.forEach(i=>{
+    const p = roster[i];
+    const b = document.createElement('button');
+    b.className = 'chip' + (liberoIdx===i ? ' picked' : '');
+    b.innerHTML = `<span class="num">${liberoIdx===i?'L':'·'}</span>${p.name}<span class="r">${ROLE_LABEL[p.role]}</span>`;
+    b.onclick = ()=>{ liberoIdx = (liberoIdx===i ? null : i); renderLiberoChips(); };
+    el.appendChild(b);
+  });
+}
+
+let libero = null; // 리베로 선수 객체 (없으면 null)
+let bench = [];    // 벤치 선수 객체 배열 (코트 6명·리베로 제외)
+
+function startBoard(){
+  if (serveOrder.length !== 6) return;
+  players = serveOrder.map(i => roster[i]); // players[0]=존1(첫 서버), 이후 서브 순서대로 존2~6
+  libero = (liberoIdx !== null) ? roster[liberoIdx] : null;
+  bench = roster.filter((p,i) => !serveOrder.includes(i) && i !== liberoIdx);
+  rotation = 0;
+  document.getElementById('setupView').style.display = 'none';
+  document.getElementById('rotationView').style.display = 'block';
+  buildTabs();
+  setMode('attack');
+  saveState();
+  window.scrollTo(0,0);
+}
+
+function backToSetup(){
+  document.getElementById('rotationView').style.display = 'none';
+  document.getElementById('setupView').style.display = 'block';
+}
+
+function buildTabs(){
+  const tabs = document.getElementById('rotTabs');
+  tabs.innerHTML = '';
+  for (let r = 0; r < 6; r++) {
+    const b = document.createElement('button');
+    b.textContent = 'R'+(r+1);
+    b.onclick = ()=>{ rotation = r; render(); };
+    tabs.appendChild(b);
+  }
+}
+
+function setMode(m){
+  mode = m;
+  document.getElementById('modeAttack').classList.toggle('active', m==='attack');
+  document.getElementById('modeDefense').classList.toggle('active', m==='defense');
+  document.getElementById('modeReceive').classList.toggle('active', m==='receive');
+  document.getElementById('dragHint').textContent = m==='receive'
+    ? '드래그로 서브캐치 대형 조정 · 오버랩 룰 범위 내에서만 이동돼요'
+    : '드래그로 위치 자유 조정 · 위치 제한 없음';
+  render();
+}
+
+function playerAtZone(z){
+  const startZone = ((z - 1 + rotation) % 6);
+  return players[startZone];
+}
+
+function rotate(dir){
+  rotation = (rotation + dir + 6) % 6;
+  render();
+}
+
+function getCoord(zone){
+  const saved = coords[mode][rotation]?.[zone];
+  if (saved) return saved;
+  const base = mode==='attack' ? ATTACK_POS : mode==='defense' ? DEFENSE_POS : RECEIVE_POS;
+  return base[zone];
+}
+
+function resetCurrent(){
+  if (coords[mode][rotation]) delete coords[mode][rotation];
+  saveState();
+  render();
+}
+
+function render(){
+  [...document.getElementById('rotTabs').children].forEach((b,i)=>{
+    b.classList.toggle('active', i === rotation);
+  });
+  const court = document.getElementById('courtEl');
+  court.querySelectorAll('.token').forEach(t=>t.remove());
+  for (let zone = 1; zone <= 6; zone++) {
+    let p = playerAtZone(zone);
+    const isFront = (zone===2||zone===3||zone===4);
+    // 리베로 자동 교대: 수비/서브캐치 모드에서 MB가 후위(존 1,5,6)에 오면 리베로로 표시
+    let isLibero = false;
+    if (libero && !isFront && p.role === 'MB' && (mode === 'defense' || mode === 'receive')) { p = libero; isLibero = true; }
+    const c = getCoord(zone);
+    const t = document.createElement('div');
+    t.className = 'token ' + (isLibero ? 'libero' : isFront?'front-row':'back-row') + (zone===1?' server':'');
+    t.style.left = c.x + '%';
+    t.style.top  = c.y + '%';
+    t.innerHTML = `<div class="name">${p.name}</div><div class="role">${ROLE_LABEL[p.role]}</div>${zone===1?'<div class="serve-tag">🏐 서브</div>':''}`;
+    attachDrag(t, zone);
+    court.appendChild(t);
+  }
+}
+
+// 6인제 오버랩 룰: 같은 열 좌우 순서 + 전/후위 짝(2-1, 3-6, 4-5) 앞뒤 순서 유지
+const COUNTERPART = {1:2, 2:1, 3:6, 6:3, 4:5, 5:4};
+const ROW = {4:['front',0], 3:['front',1], 2:['front',2], 5:['back',0], 6:['back',1], 1:['back',2]};
+const ROW_ORDER = {front:[4,3,2], back:[5,6,1]};
+const M = 5; // 최소 간격(%)
+
+function getBounds(zone){
+  let xMin = 6, xMax = 94, yMin = 8, yMax = 92;
+  // 오버랩 룰은 서브 순간에만 적용 — 공격/수비(랠리) 상황은 위치 제한 없음
+  if (mode !== 'receive') return {xMin, xMax, yMin, yMax};
+
+  const [rowName, idx] = ROW[zone];
+  const order = ROW_ORDER[rowName];
+  const leftZ = order[idx-1], rightZ = order[idx+1];
+  if (leftZ)  xMin = Math.max(xMin, getCoord(leftZ).x + M);
+  if (rightZ) xMax = Math.min(xMax, getCoord(rightZ).x - M);
+  const cp = COUNTERPART[zone];
+  if (rowName === 'front') yMax = Math.min(yMax, getCoord(cp).y - M);
+  else                     yMin = Math.max(yMin, getCoord(cp).y + M);
+  return {xMin, xMax, yMin, yMax};
+}
+
+function clampByRule(zone, x, y){
+  const b = getBounds(zone);
+  return {
+    x: Math.max(b.xMin, Math.min(b.xMax, x)),
+    y: Math.max(b.yMin, Math.min(b.yMax, y))
+  };
+}
+
+function attachDrag(el, zone){
+  el.addEventListener('pointerdown', e=>{
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('dragging');
+    const court = document.getElementById('courtEl');
+    const rect = court.getBoundingClientRect();
+    // 이동 가능 범위 표시
+    const b = getBounds(zone);
+    const box = document.createElement('div');
+    box.className = 'range-box';
+    box.style.left = b.xMin + '%';
+    box.style.top = b.yMin + '%';
+    box.style.width = (b.xMax - b.xMin) + '%';
+    box.style.height = (b.yMax - b.yMin) + '%';
+    court.appendChild(box);
+    const move = ev=>{
+      let x = ((ev.clientX - rect.left) / rect.width) * 100;
+      let y = ((ev.clientY - rect.top) / rect.height) * 100;
+      x = Math.max(6, Math.min(94, x));
+      y = Math.max(8, Math.min(92, y));
+      ({x, y} = clampByRule(zone, x, y));
+      el.style.left = x + '%';
+      el.style.top  = y + '%';
+      if (!coords[mode][rotation]) coords[mode][rotation] = {};
+      coords[mode][rotation][zone] = {x, y};
+    };
+    const up = ev=>{
+      el.classList.remove('dragging');
+      box.remove();
+      saveState();
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  });
+}
+
+/* ---------- 선수 교체 ---------- */
+let subPick = null; // {type:'court'|'bench', idx}
+
+function openSub(){ subPick = null; renderSub(); document.getElementById('subModal').classList.add('show'); }
+function closeSub(){ document.getElementById('subModal').classList.remove('show'); }
+
+function renderSub(){
+  const cEl = document.getElementById('courtSubList');
+  const bEl = document.getElementById('benchSubList');
+  cEl.innerHTML = '';
+  bEl.innerHTML = '';
+  players.forEach((p,i)=>{
+    const b = document.createElement('button');
+    b.className = 'chip' + (subPick&&subPick.type==='court'&&subPick.idx===i ? ' picked' : '');
+    b.innerHTML = `<span class="num">${i+1}</span>${p.name}<span class="r">${ROLE_LABEL[p.role]}</span>`;
+    b.onclick = ()=>pickSub('court',i);
+    cEl.appendChild(b);
+  });
+  if (bench.length === 0){
+    bEl.innerHTML = '<p class="hint">벤치 선수가 없습니다</p>';
+  } else {
+    bench.forEach((p,i)=>{
+      const b = document.createElement('button');
+      b.className = 'chip' + (subPick&&subPick.type==='bench'&&subPick.idx===i ? ' picked' : '');
+      b.innerHTML = `<span class="num">·</span>${p.name}<span class="r">${ROLE_LABEL[p.role]}</span>`;
+      b.onclick = ()=>pickSub('bench',i);
+      bEl.appendChild(b);
+    });
+  }
+  document.getElementById('subHint').textContent = subPick
+    ? '교체할 상대 선수를 탭하세요. (다시 탭하면 취소)'
+    : '코트 선수 1명, 벤치 선수 1명을 차례로 탭하면 교체돼요.';
+}
+
+function pickSub(type, idx){
+  // 같은 항목 다시 탭 → 선택 취소
+  if (subPick && subPick.type===type && subPick.idx===idx){ subPick=null; renderSub(); return; }
+  // 아직 선택 없음 또는 같은 쪽 다른 선수 → 선택 갱신
+  if (!subPick || subPick.type===type){ subPick={type,idx}; renderSub(); return; }
+  // 코트 1명 + 벤치 1명 → 교체
+  const courtIdx = type==='court' ? idx : subPick.idx;
+  const benchIdx = type==='bench' ? idx : subPick.idx;
+  const tmp = players[courtIdx];
+  players[courtIdx] = bench[benchIdx];
+  bench[benchIdx] = tmp;
+  subPick = null;
+  saveState();
+  renderSub();
+  render();
+}
+
+/* ---------- 저장 / 불러오기 ---------- */
+const STORAGE_KEY = 'volleyRotationBoard_v1';
+const SAVES_KEY = 'volleyRotationBoard_saves_v1';
+
+function snapshot(){
+  return {players, libero, bench, coords, rotation};
+}
+
+function applyState(s){
+  if (!s || !s.players || s.players.length !== 6) return false;
+  players = s.players;
+  libero = s.libero || null;
+  bench = s.bench || [];
+  rotation = s.rotation || 0;
+  coords.attack = {}; coords.defense = {}; coords.receive = {};
+  ['attack','defense','receive'].forEach(m=>{
+    if (s.coords && s.coords[m]) coords[m] = s.coords[m];
+  });
+  document.getElementById('setupView').style.display = 'none';
+  document.getElementById('rotationView').style.display = 'block';
+  buildTabs();
+  setMode('attack');
+  return true;
+}
+
+function saveState(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot())); } catch(e){}
+}
+
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    return applyState(JSON.parse(raw));
+  } catch(e){ return false; }
+}
+
+/* ---------- 이름 붙인 라인업 저장 ---------- */
+function getSaves(){
+  try { return JSON.parse(localStorage.getItem(SAVES_KEY)) || []; } catch(e){ return []; }
+}
+function putSaves(arr){
+  try { localStorage.setItem(SAVES_KEY, JSON.stringify(arr)); } catch(e){}
+}
+
+function openSaves(){ renderSaves(); document.getElementById('savesModal').classList.add('show'); }
+function closeSaves(){ document.getElementById('savesModal').classList.remove('show'); }
+
+function saveNamed(){
+  const input = document.getElementById('saveName');
+  const name = input.value.trim();
+  if (!name){ alert('라인업 이름을 입력해주세요.'); return; }
+  const saves = getSaves();
+  const now = new Date();
+  const dt = `${now.getMonth()+1}/${now.getDate()}`;
+  const entry = {name, dt, data: snapshot()};
+  const existing = saves.findIndex(s => s.name === name);
+  if (existing >= 0){
+    if (!confirm(`"${name}" 라인업을 덮어쓸까요?`)) return;
+    saves[existing] = entry;
+  } else {
+    saves.unshift(entry);
+  }
+  putSaves(saves);
+  input.value = '';
+  renderSaves();
+}
+
+function loadNamed(i){
+  const saves = getSaves();
+  if (!saves[i]) return;
+  if (applyState(JSON.parse(JSON.stringify(saves[i].data)))){
+    saveState();
+    closeSaves();
+    render();
+    window.scrollTo(0,0);
+  }
+}
+
+function deleteNamed(i){
+  const saves = getSaves();
+  if (!saves[i]) return;
+  if (!confirm(`"${saves[i].name}" 라인업을 삭제할까요?`)) return;
+  saves.splice(i,1);
+  putSaves(saves);
+  renderSaves();
+}
+
+function renderSaves(){
+  const el = document.getElementById('savesList');
+  const saves = getSaves();
+  if (saves.length === 0){ el.innerHTML = '<p class="hint">저장된 라인업이 없습니다.</p>'; return; }
+  el.innerHTML = '';
+  saves.forEach((s,i)=>{
+    const row = document.createElement('div');
+    row.className = 'save-item';
+    row.innerHTML = `
+      <span class="snm">${s.name}</span>
+      <span class="dt">${s.dt}</span>
+      <button class="load">불러오기</button>
+      <button class="del">✕</button>`;
+    row.querySelector('.load').onclick = ()=>loadNamed(i);
+    row.querySelector('.del').onclick = ()=>deleteNamed(i);
+    el.appendChild(row);
+  });
+}
+
+/* ---------- 이미지 내보내기 ---------- */
+const MODE_LABEL = {attack:'공격', defense:'수비', receive:'서브캐치'};
+function exportImage(){
+  const title = document.getElementById('captureTitle');
+  title.textContent = `R${rotation+1} · ${MODE_LABEL[mode]}`;
+  title.style.display = 'block';
+  const area = document.getElementById('captureArea');
+  html2canvas(area, {backgroundColor:'#13294B', scale:2}).then(canvas=>{
+    title.style.display = 'none';
+    canvas.toBlob(blob=>{
+      const file = new File([blob], `rotation-R${rotation+1}-${mode}.png`, {type:'image/png'});
+      // 모바일 공유 시트 우선, 안 되면 다운로드
+      if (navigator.canShare && navigator.canShare({files:[file]})) {
+        navigator.share({files:[file], title:'배구 로테이션'}).catch(()=>{});
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = file.name;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+    }, 'image/png');
+  }).catch(()=>{ title.style.display='none'; });
+}
+
+// 앱 시작 시 저장된 상태 자동 복원
+loadState();
+</script>
+</body>
+</html>
