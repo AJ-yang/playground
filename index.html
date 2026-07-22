@@ -172,6 +172,18 @@ header h1 span{color:var(--court)}
   font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
 }
 .minor:active{background:rgba(247,242,231,.06)}
+
+/* 로테이션 메모 */
+.note-card{background:var(--card);border-radius:14px;padding:12px 12px 10px;margin-bottom:10px}
+.note-card .note-label{font-family:'Black Han Sans',sans-serif;font-size:13.5px;margin-bottom:8px;color:var(--court)}
+.note-card textarea{
+  width:100%;min-height:52px;resize:vertical;
+  border:none;border-radius:10px;padding:10px 12px;
+  font-family:inherit;font-size:14px;line-height:1.5;
+  background:#0F2246;color:var(--line);
+}
+.note-card textarea::placeholder{color:rgba(247,242,231,.32)}
+#captureNote{display:none;text-align:left;font-size:13px;line-height:1.5;padding:8px 12px 4px;color:var(--line);white-space:pre-wrap;word-break:keep-all}
 </style>
 </head>
 <body>
@@ -228,9 +240,15 @@ header h1 span{color:var(--court)}
         <span><span class="dot l"></span>리베로</span>
         <span>흰 테두리 = 서버</span>
       </div>
+      <div id="captureNote"></div>
     </div>
 
     <p class="drag-hint" id="dragHint">서브캐치 모드: 선수를 드래그해서 리시브 대형을 직접 조정하세요</p>
+
+    <div class="note-card">
+      <div class="note-label" id="noteLabel">📝 R1 메모</div>
+      <textarea id="rotNote" placeholder="이 로테이션 주의사항·전술 메모를 적어두세요 (예: 3번 이동 늦지 않게 / 서브 코스 등)" maxlength="300"></textarea>
+    </div>
 
     <div class="rot-controls">
       <button onclick="rotate(-1)">◀ 이전</button>
@@ -290,6 +308,7 @@ const ROLE_LABEL = {S:'S', OP:'OP', OH:'OH', MB:'MB', L:'L', ETC:'ETC'};
 let players = [];
 let rotation = 0;
 let mode = 'attack'; // 'attack' | 'receive'
+let notes = {};      // notes[rotation] = 메모 문자열 (로테이션별)
 
 // 기본 좌표 (% : x, y) — 존별
 const ATTACK_POS = {
@@ -408,6 +427,7 @@ function startBoard(){
   libero = (liberoIdx !== null) ? roster[liberoIdx] : null;
   bench = roster.filter((p,i) => !serveOrder.includes(i) && i !== liberoIdx);
   rotation = 0;
+  notes = {};
   document.getElementById('setupView').style.display = 'none';
   document.getElementById('rotationView').style.display = 'block';
   buildTabs();
@@ -487,6 +507,14 @@ function render(){
     attachDrag(t, zone);
     court.appendChild(t);
   }
+  renderNote();
+}
+
+function renderNote(){
+  const label = document.getElementById('noteLabel');
+  const ta = document.getElementById('rotNote');
+  if (label) label.textContent = `📝 R${rotation+1} 메모`;
+  if (ta) ta.value = notes[rotation] || '';
 }
 
 // 6인제 오버랩 룰: 같은 열 좌우 순서 + 전/후위 짝(2-1, 3-6, 4-5) 앞뒤 순서 유지
@@ -616,7 +644,7 @@ const STORAGE_KEY = 'volleyRotationBoard_v1';
 const SAVES_KEY = 'volleyRotationBoard_saves_v1';
 
 function snapshot(){
-  return {players, libero, bench, coords, rotation};
+  return {players, libero, bench, coords, rotation, notes};
 }
 
 function applyState(s){
@@ -625,6 +653,7 @@ function applyState(s){
   libero = s.libero || null;
   bench = s.bench || [];
   rotation = s.rotation || 0;
+  notes = s.notes || {};
   coords.attack = {}; coords.defense = {}; coords.receive = {};
   ['attack','defense','receive'].forEach(m=>{
     if (s.coords && s.coords[m]) coords[m] = s.coords[m];
@@ -724,9 +753,13 @@ function exportImage(){
   const title = document.getElementById('captureTitle');
   title.textContent = `R${rotation+1} · ${MODE_LABEL[mode]}`;
   title.style.display = 'block';
+  const noteCap = document.getElementById('captureNote');
+  const noteText = (notes[rotation] || '').trim();
+  if (noteText){ noteCap.textContent = '📝 ' + noteText; noteCap.style.display = 'block'; }
   const area = document.getElementById('captureArea');
   html2canvas(area, {backgroundColor:'#13294B', scale:2}).then(canvas=>{
     title.style.display = 'none';
+    noteCap.style.display = 'none';
     canvas.toBlob(blob=>{
       const file = new File([blob], `rotation-R${rotation+1}-${mode}.png`, {type:'image/png'});
       // 모바일 공유 시트 우선, 안 되면 다운로드
@@ -740,8 +773,16 @@ function exportImage(){
         URL.revokeObjectURL(a.href);
       }
     }, 'image/png');
-  }).catch(()=>{ title.style.display='none'; });
+  }).catch(()=>{ title.style.display='none'; noteCap.style.display='none'; });
 }
+
+// 로테이션 메모 입력 → 현재 로테이션에 저장
+document.getElementById('rotNote').addEventListener('input', e=>{
+  const v = e.target.value;
+  if (v.trim() === '') delete notes[rotation];
+  else notes[rotation] = v;
+  saveState();
+});
 
 // 앱 시작 시 저장된 상태 자동 복원
 loadState();
