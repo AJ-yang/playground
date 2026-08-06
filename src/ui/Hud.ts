@@ -4,6 +4,7 @@ import { getEnemyDef } from '../data/enemies'
 import { TARGET_PRIORITY_LABEL } from '../game/types'
 import { FONT, PALETTE, roundRect } from '../render/palette'
 import { enemySilhouettePath } from '../render/shapes'
+import { ENEMY_ART, TOWER_ART, drawArt } from '../render/art'
 import type { Layout, UiButton } from './layout'
 
 const SPEEDS = [1, 2, 3] as const
@@ -53,7 +54,7 @@ export class Hud {
     ctx.textAlign = 'left'
 
     let x = 16
-    x = this.stat(x, h / 2, '♥', String(game.lives), PALETTE.life)
+    x = this.drawLives(x, h / 2, game)
     x = this.stat(x, h / 2, '◈', String(game.gold), PALETTE.gold)
     x = this.stat(
       x,
@@ -148,6 +149,43 @@ export class Hud {
       enabled: canCall,
       primary: canCall,
     })
+  }
+
+  /**
+   * 생명 표시. 남을수록 조용하고, 줄어들수록 커지고 붉어지고 맥동한다.
+   *
+   * 다른 지표(골드·웨이브)와 같은 크기로 나란히 두면 "20 → 19"가 눈에 들어오지
+   * 않는다. 위험도에 따라 시각적 무게를 바꿔서, 화면을 안 보고 있어도 주변시로
+   * 알아챌 수 있게 했다.
+   */
+  private drawLives(x: number, y: number, game: Game): number {
+    const { ctx } = this
+    const danger = game.dangerLevel
+    const critical = danger > 0.55
+    const pulse = critical ? 0.82 + 0.18 * Math.sin(performance.now() / 1000 * 6) : 1
+
+    // 위험하면 배경에 붉은 알약을 깔아 영역 자체를 강조한다.
+    if (danger > 0) {
+      ctx.fillStyle = `rgba(255,60,60,${(0.16 * danger * pulse).toFixed(3)})`
+      roundRect(ctx, x - 8, y - 15, 78, 30, 15)
+      ctx.fill()
+      ctx.strokeStyle = `rgba(255,80,80,${(0.5 * danger * pulse).toFixed(3)})`
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+    }
+
+    const size = 16 + danger * 6
+    ctx.font = `700 ${size.toFixed(0)}px system-ui, sans-serif`
+    ctx.fillStyle = danger > 0 ? PALETTE.danger : PALETTE.life
+    ctx.globalAlpha = pulse
+    ctx.fillText('♥', x, y)
+    const iconW = ctx.measureText('♥').width
+    ctx.fillStyle = danger > 0.3 ? PALETTE.danger : PALETTE.text
+    ctx.fillText(String(game.lives), x + iconW + 6, y)
+    const valueW = ctx.measureText(String(game.lives)).width
+    ctx.globalAlpha = 1
+
+    return x + iconW + 6 + valueW + 26
   }
 
   private stat(x: number, y: number, icon: string, value: string, color: string): number {
@@ -259,14 +297,13 @@ export class Hud {
       ctx.lineWidth = selected ? 1.6 : 1
       ctx.stroke()
 
-      // 타워 색 배지
-      ctx.fillStyle = def.color
+      // 타워 배지 — 보드에 서는 건물 그림을 그대로 축소해 넣는다.
+      // 색 사각형만 있던 시절에는 메뉴와 보드가 별개의 언어였다.
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'
       roundRect(ctx, x + 8, y + 10, 32, 32, 6)
       ctx.fill()
-      ctx.fillStyle = def.accent
-      ctx.beginPath()
-      ctx.arc(x + 24, y + 26, 7, 0, Math.PI * 2)
-      ctx.fill()
+      const towerArt = TOWER_ART[def.id]
+      if (towerArt) drawArt(ctx, towerArt, x + 24, y + 41, 34, { color: def.color, accent: def.accent })
 
       ctx.globalAlpha = affordable ? 1 : 0.45
       ctx.font = FONT.bodyBold
@@ -429,13 +466,19 @@ export class Hud {
     for (const [enemyId, count] of counts) {
       const def = getEnemyDef(enemyId)
 
-      // 보드와 같은 실루엣 함수를 쓴다 — 미리보기가 곧 범례가 되도록.
-      ctx.fillStyle = def.color
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)'
-      ctx.lineWidth = 1
-      enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 6.5)
+      // 보드와 **같은 그림**을 쓴다 — 미리보기가 곧 범례가 되도록.
+      // 뒤의 어두운 실루엣까지 그대로 깔아야 형태 규칙이 패널에서도 성립한다.
+      const art = ENEMY_ART[def.id]
+      ctx.fillStyle = 'rgba(8,10,14,0.5)'
+      enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 7)
       ctx.fill()
-      ctx.stroke()
+      if (art) {
+        drawArt(ctx, art, p.x + 22, y + 8, 17, { color: def.color, accent: def.color }, false)
+      } else {
+        ctx.fillStyle = def.color
+        enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 6.5)
+        ctx.fill()
+      }
       if (def.flying) {
         // 공중은 형태가 아니라 부가 표식이므로 작은 날개 힌트만 붙인다.
         ctx.strokeStyle = def.color

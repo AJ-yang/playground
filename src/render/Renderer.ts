@@ -1,3 +1,4 @@
+import { Rng } from '../core/rng'
 import { TILE_SIZE } from '../game/Game'
 import type { Game } from '../game/Game'
 import type { Enemy } from '../game/Enemy'
@@ -6,6 +7,46 @@ import { getTowerDef } from '../data/towers'
 import type { Layout } from '../ui/layout'
 import { FONT, PALETTE, roundRect } from './palette'
 import { enemySilhouettePath, enemyWingsPath } from './shapes'
+import { CASTLE_ART, ENEMY_ART, GATE_ART, ROCK_ART, TOWER_ART, TREE_ART, WEAPON_ART, drawArt } from './art'
+
+/**
+ * 아트가 화면에서 실제로 차지하는 범위.
+ *
+ * `size`는 32 좌표계를 몇 픽셀로 펼칠지, 나머지는 32 좌표계 기준 원본 치수다.
+ * `up`/`down`은 바닥 기준선(y=29)에서 위아래로 뻗는 양.
+ */
+interface ArtFootprint {
+  size: number
+  halfWidth: number
+  up: number
+  down: number
+}
+
+/** 왕성 — 깃발이 위로 튀어나와 있어 up이 크다. */
+const CASTLE_FOOTPRINT: ArtFootprint = { size: 54, halfWidth: 15.5, up: 30, down: 1 }
+/** 무너진 성문 — 찢긴 깃발이 위로 뻗는다. */
+const GATE_FOOTPRINT: ArtFootprint = { size: 46, halfWidth: 14, up: 30, down: 1 }
+
+/** 라벨과 그림 꼭대기 사이 간격(px). */
+const LABEL_GAP = 13
+
+/** 그림이 보드 밖으로 잘리지 않도록 앵커를 안쪽으로 민다. */
+function fitArt(
+  at: { x: number; y: number },
+  fp: ArtFootprint,
+  board: { w: number; h: number },
+): { x: number; baseline: number; labelY: number } {
+  const s = fp.size / 32
+  const halfW = fp.halfWidth * s
+  const up = fp.up * s
+  const down = fp.down * s
+  const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(Math.max(v, lo), hi))
+
+  const x = clamp(at.x, halfW + 3, board.w - halfW - 3)
+  // 라벨까지 포함해 위쪽 여유를 잡는다. 아래쪽은 그림 바닥만 들어가면 된다.
+  const baseline = clamp(at.y + up * 0.55, up + LABEL_GAP + 9, board.h - down - 4)
+  return { x, baseline, labelY: baseline - up - LABEL_GAP }
+}
 
 /**
  * 보드 렌더러.
@@ -45,6 +86,7 @@ export class Renderer {
     this.drawEnemies(game, time)
     this.drawProjectiles(game)
     this.drawEffects(game)
+    this.drawDangerOverlay(game, time)
 
     ctx.restore()
 
@@ -60,6 +102,13 @@ export class Renderer {
     this.ctx.drawImage(this.terrainCache, 0, 0)
   }
 
+  /**
+   * 지형을 한 번만 그려 캐시한다.
+   *
+   * 디테일(풀 뭉치·자갈·바위 결)은 전부 **시드 난수**로 흩뿌린다. Math.random을
+   * 쓰면 다시 시작할 때마다 지형이 달라져 같은 맵이 다른 곳처럼 보이고,
+   * 스크린샷 비교도 불가능해진다. 맵 ID에서 시드를 뽑아 항상 같은 그림이 나온다.
+   */
   private buildTerrain(game: Game): HTMLCanvasElement {
     const { board } = this.layout
     const canvas = document.createElement('canvas')
@@ -67,94 +116,214 @@ export class Renderer {
     canvas.height = board.h
     const ctx = canvas.getContext('2d')!
     const { grid, paths } = game
+    const level = game.stage.level
 
-    // 잔디 체크무늬
+    // 맵 ID를 숫자로 접어 시드를 만든다 — 맵마다 다르고, 같은 맵은 항상 같다.
+    let seed = 2166136261
+    for (const ch of level.id) seed = (Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0)
+    const rng = new Rng(seed)
+
+    this.paintGrass(ctx, grid, rng)
+    this.paintPaths(ctx, paths)
+    this.paintObstacles(ctx, grid, rng)
+    this.paintEndpoints(ctx, paths, board)
+
+    return canvas
+  }
+
+  /**
+   * 잔디.
+   *
+   * 처음에는 타일마다 색을 바꿨는데, 그러면 지형이 아니라 **격자**로 읽힌다.
+   * 그래서 순서를 바꿨다 — 바탕을 한 번에 깔고, 타일과 무관한 유기적 얼룩을
+   * 얹은 뒤, 마지막에 풀 뭉치를 흩뿌린다. 체크무늬는 건설 칸을 알려주는
+   * 최소한의 힌트로만 아주 옅게 남긴다.
+   */
+  private paintGrass(ctx: CanvasRenderingContext2D, grid: Game['grid'], rng: Rng): void {
+    const w = grid.widthPx
+    const h = grid.heightPx
+
+    // 1. 바탕
+    ctx.fillStyle = PALETTE.grassB
+    ctx.fillRect(0, 0, w, h)
+
+    // 2. 유기적 얼룩 — 타일 경계를 무시하고 퍼져야 격자가 안 보인다.
+    const blobs = Math.round((w * h) / 5200)
+    for (let i = 0; i < blobs; i++) {
+      const bx = rng.range(0, w)
+      const by = rng.range(0, h)
+      const br = rng.range(28, 82)
+      const light = rng.next() < 0.5
+      const grad = ctx.createRadialGradient(bx, by, 0, bx, by, br)
+      grad.addColorStop(0, light ? 'rgba(58,80,50,0.34)' : 'rgba(18,26,17,0.34)')
+      grad.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = grad
+      ctx.fillRect(bx - br, by - br, br * 2, br * 2)
+    }
+
+    // 3. 건설 칸 힌트 — 아주 옅은 체크무늬. 없으면 어디에 지을 수 있는지
+    //    가늠이 안 되고, 진하면 지형이 아니라 표가 된다.
     for (let row = 0; row < grid.rows; row++) {
       for (let col = 0; col < grid.cols; col++) {
-        ctx.fillStyle = (col + row) % 2 === 0 ? PALETTE.grassA : PALETTE.grassB
+        if ((col + row) % 2 !== 0) continue
+        ctx.fillStyle = 'rgba(255,255,255,0.016)'
         ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
       }
     }
 
-    // 건설 가능 타일 격자선
+    // 4. 풀 뭉치 — 가닥 수·각도·길이를 전부 흩어야 반복되는 기호처럼 보이지 않는다.
+    ctx.lineCap = 'round'
+    const tufts = Math.round((w * h) / 900)
+    for (let i = 0; i < tufts; i++) {
+      const gx = rng.range(4, w - 4)
+      const gy = rng.range(8, h - 4)
+      const blades = rng.int(2, 4)
+      ctx.strokeStyle = `rgba(150,200,120,${rng.range(0.05, 0.13).toFixed(3)})`
+      ctx.lineWidth = rng.range(0.9, 1.5)
+      ctx.beginPath()
+      for (let b = 0; b < blades; b++) {
+        const lean = rng.range(-0.55, 0.55)
+        const len = rng.range(3.5, 7)
+        const ox = rng.range(-3.5, 3.5)
+        ctx.moveTo(gx + ox, gy)
+        ctx.lineTo(gx + ox + lean * len, gy - len)
+      }
+      ctx.stroke()
+    }
+
+    // 5. 격자선은 거의 보이지 않을 만큼만 — 배치 정렬용 최소 안내
     ctx.strokeStyle = PALETTE.grassLine
     ctx.lineWidth = 1
     for (let col = 0; col <= grid.cols; col++) {
       ctx.beginPath()
       ctx.moveTo(col * TILE_SIZE + 0.5, 0)
-      ctx.lineTo(col * TILE_SIZE + 0.5, board.h)
+      ctx.lineTo(col * TILE_SIZE + 0.5, h)
       ctx.stroke()
     }
     for (let row = 0; row <= grid.rows; row++) {
       ctx.beginPath()
       ctx.moveTo(0, row * TILE_SIZE + 0.5)
-      ctx.lineTo(board.w, row * TILE_SIZE + 0.5)
+      ctx.lineTo(w, row * TILE_SIZE + 0.5)
       ctx.stroke()
     }
+  }
 
-    // 경로: 두꺼운 폴리라인 위에 밝은 안쪽 선을 겹쳐 흙길처럼 보이게 한다.
-    // 경로가 여러 개면 겹치는 구간이 생기는데, 전부 먼저 어둡게 깐 뒤
-    // 밝은 안쪽 선을 얹어야 합류 지점이 하나의 길로 자연스럽게 이어진다.
-    const strokeAll = (width: number, color: string) => {
+  /**
+   * 흙길 — 둑 → 흙 → 밝은 바퀴자국 순으로 겹쳐 깊이를 만든다.
+   *
+   * 경로가 여러 개면 겹치는 구간이 생기므로, 층마다 모든 경로를 한 번씩 그린 뒤
+   * 다음 층으로 넘어간다. 경로별로 세 층을 다 그리면 합류 지점에서 나중 경로의
+   * 어두운 둑이 앞 경로의 밝은 흙을 덮어 이음매가 드러난다.
+   */
+  private paintPaths(ctx: CanvasRenderingContext2D, paths: Game['paths']): void {
+    const strokeAll = (width: number, color: string, dash?: number[]) => {
       ctx.strokeStyle = color
       ctx.lineWidth = width
       ctx.lineJoin = 'round'
       ctx.lineCap = 'round'
+      if (dash) ctx.setLineDash(dash)
       for (const p of paths) {
         ctx.beginPath()
         p.points.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)))
         ctx.stroke()
       }
+      if (dash) ctx.setLineDash([])
     }
+
+    strokeAll(TILE_SIZE + 6, PALETTE.pathBank)
     strokeAll(TILE_SIZE, PALETTE.pathOuter)
-    strokeAll(TILE_SIZE - 10, PALETTE.pathInner)
+    strokeAll(TILE_SIZE - 8, PALETTE.pathInner)
 
-    ctx.setLineDash([6, 12])
-    strokeAll(2, PALETTE.pathDash)
-    ctx.setLineDash([])
+    // 자갈 — 어두운 짧은 파선을 길 안쪽에 흩어 놓는다.
+    strokeAll(TILE_SIZE - 14, PALETTE.pathGravel, [2, 9])
 
-    // 장애물 바위
+    // 바퀴자국 두 줄. 가운데 점선 하나보다 길이 다져진 느낌이 난다.
+    ctx.save()
+    for (const offset of [-7, 7]) {
+      ctx.strokeStyle = PALETTE.pathRut
+      ctx.lineWidth = 2.5
+      ctx.lineJoin = 'round'
+      ctx.lineCap = 'round'
+      for (const p of paths) {
+        ctx.beginPath()
+        p.points.forEach((pt, i) => {
+          // 진행 방향의 수직으로 밀어 두 줄을 만든다.
+          const prev = p.points[Math.max(0, i - 1)]!
+          const next = p.points[Math.min(p.points.length - 1, i + 1)]!
+          const dx = next.x - prev.x
+          const dy = next.y - prev.y
+          const len = Math.hypot(dx, dy) || 1
+          const nx = (-dy / len) * offset
+          const ny = (dx / len) * offset
+          i === 0 ? ctx.moveTo(pt.x + nx, pt.y + ny) : ctx.lineTo(pt.x + nx, pt.y + ny)
+        })
+        ctx.stroke()
+      }
+    }
+    ctx.restore()
+  }
+
+  /** 장애물 — 바위와 나무 두 종류를 섞어 지형에 리듬을 준다. */
+  private paintObstacles(ctx: CanvasRenderingContext2D, grid: Game['grid'], rng: Rng): void {
     for (let row = 0; row < grid.rows; row++) {
       for (let col = 0; col < grid.cols; col++) {
         if (grid.kindAt(col, row) !== 'blocked') continue
         const cx = (col + 0.5) * TILE_SIZE
-        const cy = (row + 0.5) * TILE_SIZE
-        ctx.fillStyle = PALETTE.blockedFill
-        ctx.strokeStyle = PALETTE.blockedEdge
-        ctx.lineWidth = 1.5
+        const cy = (col + row) % 3 === 0 ? (row + 0.5) * TILE_SIZE - 2 : (row + 0.5) * TILE_SIZE
+
+        // 바닥 그림자 — 이것만으로도 지형에 붙어 있다는 느낌이 크게 산다.
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'
         ctx.beginPath()
-        ctx.moveTo(cx - 13, cy + 9)
-        ctx.lineTo(cx - 8, cy - 8)
-        ctx.lineTo(cx + 3, cy - 12)
-        ctx.lineTo(cx + 13, cy + 2)
-        ctx.lineTo(cx + 9, cy + 11)
-        ctx.closePath()
+        ctx.ellipse(cx, cy + 11, 13, 5, 0, 0, Math.PI * 2)
         ctx.fill()
-        ctx.stroke()
+
+        if ((col * 7 + row * 3) % 5 < 2) this.paintTree(ctx, cx, cy, rng)
+        else this.paintRock(ctx, cx, cy, rng)
       }
     }
+  }
 
-    // 출발지 표식 — 경로마다 하나씩. 다중 경로 맵에서 어디를 막아야 하는지
-    // 준비 단계에 바로 보여야 한다.
+  private paintRock(ctx: CanvasRenderingContext2D, cx: number, cy: number, rng: Rng): void {
+    drawArt(ctx, ROCK_ART, cx, cy + 12, rng.range(28, 34))
+  }
+
+  private paintTree(ctx: CanvasRenderingContext2D, cx: number, cy: number, rng: Rng): void {
+    drawArt(ctx, TREE_ART, cx, cy + 12, rng.range(30, 37))
+  }
+
+  /**
+   * 출발지·왕성 표식.
+   *
+   * 경로는 보드 가장자리에서 시작하고 끝나므로, 좌표를 그대로 쓰면 건물이
+   * 절반쯤 잘려 나간다. 그래서 그림이 실제로 차지하는 폭·높이를 계산해
+   * 그만큼 안쪽으로 밀어 넣는다 — 위치가 조금 어긋나도 잘리는 것보다 낫다.
+   */
+  private paintEndpoints(
+    ctx: CanvasRenderingContext2D,
+    paths: Game['paths'],
+    board: { w: number; h: number },
+  ): void {
     ctx.font = FONT.label
     ctx.textBaseline = 'middle'
+
+    // 출발지 — 무너진 성문. 그림이 있으면 "여기서 나온다"가 글자보다 빨리 읽힌다.
     paths.forEach((p, i) => {
       const start = p.positionAt(0)
-      ctx.fillStyle = 'rgba(255,107,107,0.9)'
-      ctx.textAlign = 'left'
-      const label = paths.length > 1 ? `▶ 출현 ${i + 1}` : '▶ 적 출현'
-      // 화면 밖에서 들어오는 경로는 라벨이 잘리지 않도록 안쪽으로 당긴다.
-      const lx = Math.min(Math.max(6, start.x + 8), board.w - 76)
-      const ly = Math.min(Math.max(16, start.y - 26), board.h - 10)
-      ctx.fillText(label, lx, ly)
+      const spot = fitArt(start, GATE_FOOTPRINT, board)
+      drawArt(ctx, GATE_ART, spot.x, spot.baseline, GATE_FOOTPRINT.size)
+
+      ctx.fillStyle = 'rgba(255,120,120,0.95)'
+      ctx.textAlign = 'center'
+      ctx.fillText(paths.length > 1 ? `출현 ${i + 1}` : '적 출현', spot.x, spot.labelY)
     })
 
+    // 왕성 — 지켜야 하는 곳
     const end = paths[0]!.positionAt(paths[0]!.totalLength)
-    ctx.textAlign = 'right'
-    ctx.fillStyle = 'rgba(90,169,230,0.95)'
-    ctx.fillText('왕성 ◀', Math.min(board.w - 6, end.x - 6), end.y - 26)
-
-    return canvas
+    const spot = fitArt(end, CASTLE_FOOTPRINT, board)
+    drawArt(ctx, CASTLE_ART, spot.x, spot.baseline, CASTLE_FOOTPRINT.size)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = 'rgba(120,180,240,0.95)'
+    ctx.fillText('왕성', spot.x, spot.labelY)
   }
 
   /** 건설 모드일 때 커서 아래 타일의 가/불가를 표시. */
@@ -211,118 +380,105 @@ export class Renderer {
     for (const tower of game.towers) this.drawTower(tower, tower === game.selectedTower, time)
   }
 
+  /**
+   * 타워 1기.
+   *
+   * 예전에는 둥근 사각형 하나에 작은 포신이 전부라 "판 위에 놓인 색칠한 칩"처럼
+   * 보였다. 지금은 세 겹으로 쌓는다 — **바닥 그림자 → 석재 받침 → 타워 몸체 →
+   * 포신**. 받침은 타워 종류와 무관하게 같은 재질이라 다섯 종류가 한 세계의
+   * 물건으로 읽히고, 그림자가 지형에 붙여 준다.
+   *
+   * 레벨은 좌상단 점 대신 **받침 모서리의 기둥 수**로 보여준다. 판을 훑을 때
+   * 실루엣 자체가 달라지는 편이 훨씬 빨리 읽힌다.
+   */
+  /**
+   * 타워 1기.
+   *
+   * 몸체는 `render/art.ts`의 중세 건물 벡터 아트다. 무기 부분만 따로 그려
+   * 목표를 향해 회전시킨다 — 건물이 통째로 도는 것은 어색하고, 지금 어느
+   * 타워가 무엇을 겨누는지는 여전히 보여야 하기 때문이다.
+   */
   private drawTower(tower: Tower, selected: boolean, time: number): void {
     const { ctx } = this
-    const { pos, def } = tower
-    const size = TILE_SIZE - 8
+    const { pos, def, level } = tower
 
     ctx.save()
     ctx.translate(pos.x, pos.y)
 
-    // 받침대
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'
-    roundRect(ctx, -size / 2 + 2, -size / 2 + 4, size, size, 7)
+    // 바닥 그림자 — 이것 하나로 지형에 붙어 있다는 느낌이 크게 산다.
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'
+    ctx.beginPath()
+    ctx.ellipse(0, TILE_SIZE * 0.3, TILE_SIZE * 0.4, TILE_SIZE * 0.16, 0, 0, Math.PI * 2)
     ctx.fill()
 
-    ctx.fillStyle = def.color
-    ctx.strokeStyle = selected ? '#ffffff' : 'rgba(0,0,0,0.45)'
-    ctx.lineWidth = selected ? 2 : 1.5
-    roundRect(ctx, -size / 2, -size / 2, size, size, 7)
-    ctx.fill()
-    ctx.stroke()
-
-    // 레벨 표시 — 좌상단 점 개수
-    ctx.fillStyle = def.accent
-    for (let i = 0; i < tower.level; i++) {
+    if (selected) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+      ctx.lineWidth = 2
+      ctx.setLineDash([4, 3])
       ctx.beginPath()
-      ctx.arc(-size / 2 + 5 + i * 5, -size / 2 + 5, 1.8, 0, Math.PI * 2)
-      ctx.fill()
+      ctx.ellipse(0, TILE_SIZE * 0.3, TILE_SIZE * 0.44, TILE_SIZE * 0.2, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
     }
 
-    // 포신 — 발사 직후 뒤로 밀렸다가 돌아온다
+    // 건물 — 레벨이 오를수록 조금씩 커진다. 판을 훑을 때 성장이 보인다.
+    const art = TOWER_ART[def.id]
+    const size = TILE_SIZE * (0.92 + level * 0.06)
+    if (art) drawArt(ctx, art, 0, TILE_SIZE * 0.32, size, { color: def.color, accent: def.accent })
+
+    // 레벨 깃발 — 건물 왼쪽에 level개
+    ctx.fillStyle = def.accent
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'
+    ctx.lineWidth = 0.8
+    for (let i = 0; i < level; i++) {
+      const fx = -TILE_SIZE * 0.42 + i * 5
+      const fy = TILE_SIZE * 0.24
+      ctx.beginPath()
+      ctx.arc(fx, fy, 2.2, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+
+    // 무기 — 목표를 향해 회전. 건물 상단에 얹는다.
+    ctx.translate(0, -TILE_SIZE * 0.12)
     ctx.rotate(tower.turretAngle)
-    const recoil = tower.recoil * 3
-    ctx.translate(-recoil, 0)
+    ctx.translate(-tower.recoil * 3, 0)
+
+    // 머즐 플래시 — 지금 일하는 타워가 한눈에 보인다.
+    if (tower.recoil > 0.35) {
+      const f = (tower.recoil - 0.35) / 0.65
+      ctx.globalAlpha = f * 0.85
+      ctx.fillStyle = def.accent
+      ctx.beginPath()
+      ctx.arc(15, 0, 4 + f * 4, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+
     this.drawTurret(def.shape, def.accent, time)
 
     ctx.restore()
   }
 
+  /**
+   * 무기.
+   *
+   * 예전에는 삼각형·사각형 같은 도형이었다. 지금은 활·봄바드·플라스크 같은
+   * 실제 물건이라 무엇을 하는 타워인지가 아이콘 없이도 읽힌다. 시간 기반
+   * 움직임(맥동·회전·흔들림)은 아트가 아니라 여기서 준다 — 같은 그림을
+   * 패널에서 정지 상태로도 써야 하기 때문이다.
+   */
   private drawTurret(shape: string, accent: string, time: number): void {
     const { ctx } = this
-    ctx.fillStyle = accent
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)'
-    ctx.lineWidth = 1.2
+    const art = WEAPON_ART[shape]
+    if (!art) return
 
-    switch (shape) {
-      case 'arrow':
-        ctx.beginPath()
-        ctx.moveTo(14, 0)
-        ctx.lineTo(-2, -5)
-        ctx.lineTo(-2, 5)
-        ctx.closePath()
-        ctx.fill()
-        ctx.stroke()
-        break
+    let size = 30
+    if (shape === 'orb') size = 26 * (1 + Math.sin(time * 3) * 0.08)
+    if (shape === 'crystal') ctx.rotate(time * 1.2)
+    if (shape === 'flask') ctx.rotate(Math.sin(time * 4) * 0.25)
 
-      case 'orb': {
-        const pulse = 1 + Math.sin(time * 3) * 0.1
-        ctx.beginPath()
-        ctx.arc(4, 0, 6 * pulse, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.stroke()
-        ctx.globalAlpha = 0.35
-        ctx.beginPath()
-        ctx.arc(4, 0, 9 * pulse, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.globalAlpha = 1
-        break
-      }
-
-      case 'cannon':
-        ctx.beginPath()
-        ctx.rect(-2, -4.5, 16, 9)
-        ctx.fill()
-        ctx.stroke()
-        ctx.beginPath()
-        ctx.arc(0, 0, 6, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.stroke()
-        break
-
-      case 'flask': {
-        // 흔들리는 약병 — 던지는 무기라는 인상을 준다.
-        const wobble = Math.sin(time * 4) * 0.25
-        ctx.rotate(wobble)
-        ctx.beginPath()
-        ctx.moveTo(2, -5)
-        ctx.lineTo(11, -3.5)
-        ctx.lineTo(11, 3.5)
-        ctx.lineTo(2, 5)
-        ctx.closePath()
-        ctx.fill()
-        ctx.stroke()
-        ctx.beginPath()
-        ctx.rect(-3, -2.5, 5, 5)
-        ctx.fill()
-        ctx.stroke()
-        break
-      }
-
-      case 'crystal': {
-        const spin = time * 1.2
-        ctx.rotate(spin)
-        ctx.beginPath()
-        ctx.moveTo(0, -9)
-        ctx.lineTo(6, 0)
-        ctx.lineTo(0, 9)
-        ctx.lineTo(-6, 0)
-        ctx.closePath()
-        ctx.fill()
-        ctx.stroke()
-        break
-      }
-    }
+    drawArt(ctx, art, 0, 0, size, { color: accent, accent }, false)
   }
 
   private drawEnemies(game: Game, time: number): void {
@@ -381,26 +537,47 @@ export class Renderer {
       ctx.restore()
     }
 
-    // 본체 실루엣
-    ctx.fillStyle = hit ? '#ffffff' : def.color
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)'
-    ctx.lineWidth = def.silhouette === 'boss' ? 2.5 : 1.5
-    enemySilhouettePath(ctx, def.silhouette, pos.x, bodyY, r, angle)
+    // 실루엣 배경.
+    //
+    // 그림이 도형을 대체했지만 **형태로 방어 유형을 읽는 규칙은 유지해야 한다**.
+    // 그래서 원래의 도형을 어두운 한 겹으로 뒤에 깔았다. 어두운 지형 위에서
+    // 적을 떠오르게 하는 아웃라인 역할도 겸한다.
+    const sil = def.silhouette
+    const facing = Math.cos(angle) < 0
+    ctx.fillStyle = 'rgba(8,10,14,0.55)'
+    enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 1.04, facing ? Math.PI : 0)
     ctx.fill()
-    ctx.stroke()
+
+    // 본체 — 손으로 그린 벡터 아트. 진행 방향을 보도록 좌우를 뒤집는다.
+    const art = ENEMY_ART[def.id]
+    if (art) {
+      drawArt(ctx, art, pos.x, bodyY, r * 2.45, { color: def.color, accent: def.color }, false, facing)
+    } else {
+      ctx.fillStyle = def.color
+      enemySilhouettePath(ctx, sil, pos.x, bodyY, r, angle)
+      ctx.fill()
+    }
+
+    // 피격 섬광 — 그림 위에 실루엣을 흰색으로 덮는다. 아트의 디테일이
+    // 그대로 보이면 "맞았다"가 안 읽힌다.
+    if (hit) {
+      ctx.fillStyle = 'rgba(255,255,255,0.62)'
+      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 0.94, facing ? Math.PI : 0)
+      ctx.fill()
+    }
 
     // 방어 표식은 실루엣에서 파생시킨다 — 임계값을 따로 두면 실루엣과
     // 어긋난다 (예전에는 마저 45%인 보스에 마법 표식이 안 떴다).
-    const sil = def.silhouette
     const showArmor = def.armor > 0 && (sil === 'armored' || sil === 'bulwark' || sil === 'boss')
     const showWard =
       def.magicResist > 0 && (sil === 'warded' || sil === 'bulwark' || sil === 'boss')
 
-    // 장갑 — 같은 실루엣을 안쪽에 한 겹 더
+    // 장갑 — 같은 실루엣을 바깥에 한 겹 더. 예전에는 안쪽에 그렸는데
+    // 그림으로 바뀐 뒤로는 본체를 덮어 버려서 테두리로 옮겼다.
     if (showArmor) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'
-      ctx.lineWidth = 2
-      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 0.62, angle)
+      ctx.strokeStyle = 'rgba(226,236,255,0.6)'
+      ctx.lineWidth = 1.8
+      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 1.12, facing ? Math.PI : 0)
       ctx.stroke()
     }
     // 마법 저항 — 점선 오라
@@ -508,6 +685,48 @@ export class Renderer {
       ctx.fillText(t.text, t.pos.x, t.pos.y)
     }
     ctx.globalAlpha = 1
+  }
+
+  /**
+   * 생명 위기 표시 — 붉은 비네트와 피격 번쩍임.
+   *
+   * 유출은 이 게임에서 가장 중요한 사건인데, 화면 구석의 숫자가 조용히 1 줄어드는
+   * 것만으로는 전혀 눈에 띄지 않았다. 그래서 두 겹으로 알린다.
+   *   1. 새는 순간   — 보드 전체가 붉게 번쩍인다 (놓칠 수 없는 즉각 신호)
+   *   2. 생명이 적을 때 — 가장자리가 상시 붉게 물든다 (지금 위험하다는 지속 신호)
+   * 비네트는 시야 가장자리에 두어 판 위의 정보를 가리지 않게 했다.
+   */
+  private drawDangerOverlay(game: Game, time: number): void {
+    const { ctx } = this
+    const { board } = this.layout
+    const danger = game.dangerLevel
+
+    if (danger > 0) {
+      // 위험할수록 빠르고 깊게 맥동한다.
+      const pulse = 0.78 + 0.22 * Math.sin(time * (2.4 + danger * 3.4))
+      const strength = danger * pulse
+
+      const cx = board.w / 2
+      const cy = board.h / 2
+      const inner = Math.min(board.w, board.h) * (0.62 - danger * 0.22)
+      const outer = Math.hypot(cx, cy)
+      const grad = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer)
+      grad.addColorStop(0, 'rgba(200,20,20,0)')
+      grad.addColorStop(1, `rgba(190,16,16,${(0.5 * strength).toFixed(3)})`)
+      ctx.fillStyle = grad
+      ctx.fillRect(0, 0, board.w, board.h)
+
+      // 가장자리에 붉은 테두리를 한 겹 더 — 비네트만으로는 경계가 흐려 보인다.
+      ctx.strokeStyle = `rgba(255,70,70,${(0.5 * strength).toFixed(3)})`
+      ctx.lineWidth = 2 + danger * 6
+      ctx.strokeRect(1, 1, board.w - 2, board.h - 2)
+    }
+
+    if (game.damageFlash > 0) {
+      const f = Math.min(1, game.damageFlash)
+      ctx.fillStyle = `rgba(255,48,48,${(0.34 * f).toFixed(3)})`
+      ctx.fillRect(0, 0, board.w, board.h)
+    }
   }
 
   /** 승리/패배 시 보드 위에 덮는 결과 화면. */

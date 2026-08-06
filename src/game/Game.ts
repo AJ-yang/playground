@@ -61,6 +61,13 @@ export class Game {
   /** 조기 소환으로 얻은 누적 보너스 골드 */
   earlyCallBonus = 0
 
+  /**
+   * 생명이 깎인 직후 잠깐 1에서 0으로 떨어지는 값. 화면 전체를 붉게 번쩍이는
+   * 연출에 쓴다. 유출은 게임에서 가장 중요한 사건인데 화면 구석의 숫자가
+   * 조용히 1 줄어드는 것만으로는 전혀 눈에 띄지 않았다.
+   */
+  damageFlash = 0
+
   /** 건설 대기 중인 타워 ID (null이면 건설 모드 아님) */
   selectedBuildId: string | null = null
   /** 선택된(정보 패널이 열린) 타워 */
@@ -235,6 +242,8 @@ export class Game {
 
   update(dt: number): void {
     this.effects.update(dt)
+    // 게임이 끝난 뒤에도 번쩍임은 자연스럽게 잦아들어야 한다.
+    if (this.damageFlash > 0) this.damageFlash = Math.max(0, this.damageFlash - dt * 2.2)
     if (this.isOver) return
 
     this.updateWaves(dt)
@@ -281,6 +290,8 @@ export class Game {
       if (enemy.leaked) {
         this.lives -= enemy.def.leak
         this.totalLeaked++
+        // 여러 마리가 연속으로 새면 번쩍임이 겹쳐 더 강해진다.
+        this.damageFlash = Math.min(1.4, this.damageFlash + 0.55 + enemy.def.leak * 0.12)
         const end = enemy.path.positionAt(enemy.path.totalLength)
         this.effects.text(end, `-${enemy.def.leak}`, '#ff6b6b', 1.2)
         if (this.lives <= 0) {
@@ -378,6 +389,18 @@ export class Game {
   }
 
   // ────────────────────────────── 조회 헬퍼 ──────────────────────────────
+
+  /**
+   * 생명 위기도 0~1. 0이면 여유, 1이면 곧 패배.
+   *
+   * 남은 생명 비율이 60% 아래로 내려가야 켜진다 — 처음 한두 번 샜다고 화면이
+   * 붉어지면 경고가 소음이 되고, 정작 위험할 때 눈에 들어오지 않는다.
+   */
+  get dangerLevel(): number {
+    const ratio = this.lives / Math.max(1, this.stage.startLives)
+    if (ratio >= 0.6) return 0
+    return Math.min(1, (0.6 - ratio) / 0.6)
+  }
 
   /** 현재 건설 모드에서 hoverTile에 지을 수 있는지 여부. */
   get hoverBuildable(): boolean {

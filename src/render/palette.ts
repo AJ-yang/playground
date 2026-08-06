@@ -3,16 +3,35 @@ export const PALETTE = {
   bg: '#0e1117',
   boardEdge: '#1b2230',
 
-  grassA: '#233021',
-  grassB: '#1e2a1d',
-  grassLine: 'rgba(255,255,255,0.035)',
+  // 잔디 — 한 색이 아니라 밝기가 다른 세 톤을 섞어 평평해 보이지 않게 한다
+  grassA: '#243322',
+  grassB: '#1f2c1e',
+  grassDeep: '#1a2519',
+  grassLight: '#2c3d29',
+  grassBlade: 'rgba(150,200,120,0.16)',
+  grassLine: 'rgba(255,255,255,0.03)',
 
-  pathOuter: '#3a2f22',
-  pathInner: '#584533',
-  pathDash: 'rgba(255,255,255,0.06)',
+  // 흙길 — 둑(가장 어두움) → 흙 → 밝은 자국 순으로 세 겹
+  pathBank: '#2b2118',
+  pathOuter: '#453626',
+  pathInner: '#5c4834',
+  pathLight: '#6b5540',
+  pathGravel: 'rgba(0,0,0,0.22)',
+  pathRut: 'rgba(255,255,255,0.05)',
 
   blockedFill: '#2a3040',
   blockedEdge: '#3b4457',
+  rockFill: '#3a4152',
+  rockLight: '#4c5568',
+  rockShade: '#232a38',
+  treeTrunk: '#3b2d20',
+  treeCanopy: '#2c4526',
+  treeCanopyLight: '#3a5931',
+
+  // 타워 석재 받침 — 색은 타워마다 다르지만 받침은 공통 재질
+  stoneBase: '#4a4f5c',
+  stoneBaseLight: '#5c6272',
+  stoneBaseShade: '#2e323c',
 
   hudBg: '#131a24',
   hudEdge: '#222c3a',
