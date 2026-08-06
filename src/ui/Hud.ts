@@ -4,6 +4,7 @@ import { getEnemyDef } from '../data/enemies'
 import { TOTAL_WAVES } from '../data/waves'
 import { TARGET_PRIORITY_LABEL } from '../game/types'
 import { FONT, PALETTE, roundRect } from '../render/palette'
+import { enemySilhouettePath } from '../render/shapes'
 import type { Layout, UiButton } from './layout'
 
 const SPEEDS = [1, 2, 3] as const
@@ -416,10 +417,25 @@ export class Hud {
 
     for (const [enemyId, count] of counts) {
       const def = getEnemyDef(enemyId)
+
+      // 보드와 같은 실루엣 함수를 쓴다 — 미리보기가 곧 범례가 되도록.
       ctx.fillStyle = def.color
-      ctx.beginPath()
-      ctx.arc(p.x + 22, y + 8, 6, 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'
+      ctx.lineWidth = 1
+      enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 6.5)
       ctx.fill()
+      ctx.stroke()
+      if (def.flying) {
+        // 공중은 형태가 아니라 부가 표식이므로 작은 날개 힌트만 붙인다.
+        ctx.strokeStyle = def.color
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(p.x + 12, y + 5)
+        ctx.lineTo(p.x + 15.5, y + 8)
+        ctx.moveTo(p.x + 32, y + 5)
+        ctx.lineTo(p.x + 28.5, y + 8)
+        ctx.stroke()
+      }
 
       ctx.font = FONT.body
       ctx.fillStyle = PALETTE.text
@@ -431,11 +447,18 @@ export class Hud {
       y += 17
 
       // 위협 태그
+      // 태그는 실루엣이 나타내는 것과 같은 기준으로 뽑는다.
+      // 형태와 글자가 어긋나면 형태를 못 믿게 된다.
+      const sil = def.silhouette
       const tags: string[] = []
       if (def.flying) tags.push('공중')
-      if (def.armor >= 7) tags.push(`장갑 ${def.armor}`)
-      if (def.magicResist >= 0.5) tags.push(`마저 ${Math.round(def.magicResist * 100)}%`)
-      if (def.speed >= 3) tags.push('고속')
+      if (def.armor > 0 && (sil === 'armored' || sil === 'bulwark' || sil === 'boss')) {
+        tags.push(`장갑 ${def.armor}`)
+      }
+      if (def.magicResist > 0 && (sil === 'warded' || sil === 'bulwark' || sil === 'boss')) {
+        tags.push(`마저 ${Math.round(def.magicResist * 100)}%`)
+      }
+      if (sil === 'swift') tags.push('고속')
       if (def.boss) tags.push('보스')
       if (tags.length) {
         ctx.font = FONT.tiny

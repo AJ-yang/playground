@@ -1,3 +1,5 @@
+import type { Silhouette } from '../game/types'
+
 /**
  * 적 정의 (밸런스 데이터).
  *
@@ -27,6 +29,18 @@ export interface EnemyDef {
   color: string
   /** 공중 유닛 여부 — 지상 전용 타워는 타겟팅하지 못한다 */
   flying: boolean
+  /**
+   * 실루엣 — 화면에서 방어 유형을 형태만으로 읽게 한다.
+   *
+   * **반드시 아래 스탯과 일치시킬 것.** 색이 아니라 형태가 정보를 나르는 구조라,
+   * 여기가 어긋나면 플레이어가 화면을 보고 잘못된 타워를 짓는다.
+   *   armor 지배적          → 'armored'
+   *   magicResist 지배적     → 'warded'
+   *   둘 다 유의미           → 'bulwark'
+   *   방어 없이 speed >= 3   → 'swift'
+   *   아무것도 없음          → 'basic'
+   */
+  silhouette: Silhouette
   /** 보스 여부 — HP 바와 이펙트를 크게 표시 */
   boss: boolean
   desc: string
@@ -41,6 +55,7 @@ function def(partial: Partial<EnemyDef> & Pick<EnemyDef, 'id' | 'name' | 'maxHp'
     radius: 11,
     color: '#8bd450',
     flying: false,
+    silhouette: 'basic',
     boss: false,
     desc: '',
     ...partial,
@@ -50,6 +65,7 @@ function def(partial: Partial<EnemyDef> & Pick<EnemyDef, 'id' | 'name' | 'maxHp'
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
   grunt: def({
     id: 'grunt',
+    silhouette: 'basic',
     name: '고블린',
     maxHp: 60,
     speed: 2.2,
@@ -59,6 +75,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   runner: def({
     id: 'runner',
+    silhouette: 'swift',
     name: '늑대 기수',
     maxHp: 48,
     speed: 4.2,
@@ -69,6 +86,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   armored: def({
     id: 'armored',
+    silhouette: 'armored',
     name: '강철 병사',
     maxHp: 170,
     speed: 1.8,
@@ -80,6 +98,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   shaman: def({
     id: 'shaman',
+    silhouette: 'warded',
     name: '주술사',
     maxHp: 140,
     speed: 2.0,
@@ -91,6 +110,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   wyvern: def({
     id: 'wyvern',
+    silhouette: 'swift',
     name: '와이번',
     maxHp: 120,
     speed: 3.1,
@@ -104,6 +124,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   brute: def({
     id: 'brute',
+    silhouette: 'bulwark',
     name: '트롤 파괴자',
     maxHp: 560,
     speed: 1.4,
@@ -117,6 +138,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   warlock: def({
     id: 'warlock',
+    silhouette: 'warded',
     name: '흑마법사',
     maxHp: 360,
     speed: 2.4,
@@ -128,6 +150,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   sentinel: def({
     id: 'sentinel',
+    silhouette: 'armored',
     name: '수정 감시자',
     maxHp: 520,
     speed: 2.6,
@@ -140,6 +163,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   }),
   overlord: def({
     id: 'overlord',
+    silhouette: 'boss',
     name: '마왕 그라즈',
     maxHp: 5200,
     speed: 1.15,

@@ -5,6 +5,7 @@ import type { Tower } from '../game/Tower'
 import { getTowerDef } from '../data/towers'
 import type { Layout } from '../ui/layout'
 import { FONT, PALETTE, roundRect } from './palette'
+import { enemySilhouettePath, enemyWingsPath } from './shapes'
 
 /**
  * 보드 렌더러.
@@ -41,7 +42,7 @@ export class Renderer {
     this.drawPlacementHint(game)
     this.drawRangeCircles(game)
     this.drawTowers(game, time)
-    this.drawEnemies(game)
+    this.drawEnemies(game, time)
     this.drawProjectiles(game)
     this.drawEffects(game)
 
@@ -293,50 +294,91 @@ export class Renderer {
     }
   }
 
-  private drawEnemies(game: Game): void {
+  private drawEnemies(game: Game, time: number): void {
     for (const enemy of game.enemies) {
       if (enemy.distance < 0) continue
-      this.drawEnemy(enemy)
+      // 쐐기 실루엣과 날개는 진행 방향을 따라야 한다.
+      const dir = game.path.directionAt(enemy.distance)
+      this.drawEnemy(enemy, Math.atan2(dir.y, dir.x), time)
     }
   }
 
-  private drawEnemy(enemy: Enemy): void {
+  private drawEnemy(enemy: Enemy, angle: number, time: number): void {
     const { ctx } = this
     const { pos, def } = enemy
     const r = def.radius
 
-    // 공중 유닛은 그림자를 아래에 깔고 본체를 띄워 구분한다.
-    const lift = def.flying ? 8 : 0
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'
+    // 공중 유닛은 그림자를 아래에 깔고 본체를 띄운다. 형태(날개)와 함께
+    // 세 겹으로 표시하는 이유는 정지 화면·고배속·색각 이상 어디서도
+    // "이건 대포탑이 못 때린다"가 읽혀야 하기 때문이다.
+    // 그림자는 공중일 때 더 작고 진하게 — 본체와의 거리를 만든다.
+    const lift = def.flying ? 13 : 0
+    ctx.fillStyle = def.flying ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.35)'
     ctx.beginPath()
-    ctx.ellipse(pos.x, pos.y + r * 0.55, r * 0.85, r * 0.35, 0, 0, Math.PI * 2)
+    ctx.ellipse(
+      pos.x,
+      pos.y + r * 0.55,
+      r * (def.flying ? 0.6 : 0.85),
+      r * (def.flying ? 0.24 : 0.35),
+      0,
+      0,
+      Math.PI * 2,
+    )
     ctx.fill()
 
     const bodyY = pos.y - lift
+    const hit = enemy.flashTimer > 0
 
-    ctx.fillStyle = enemy.flashTimer > 0 ? '#ffffff' : def.color
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.arc(pos.x, bodyY, r, 0, Math.PI * 2)
+    // 날개 (본체 뒤).
+    //
+    // 본체와 같은 색·같은 명도로 그리면 실루엣이 하나로 뭉쳐서 "날고 있다"가
+    // 안 읽힌다 — 늑대 기수(지상 쐐기)와 와이번(공중 쐐기)이 색으로만 구분되는
+    // 상태가 된다. 그래서 밝은 테두리로 본체와 값을 분리하고 폭을 키웠다.
+    if (def.flying) {
+      const flap = (Math.sin(time * 9 + enemy.id) + 1) / 2
+      ctx.save()
+      ctx.translate(pos.x, bodyY)
+      ctx.rotate(angle + Math.PI / 2)
+      enemyWingsPath(ctx, 0, 0, r, flap)
+      ctx.fillStyle = hit ? '#ffffff' : def.color
+      ctx.globalAlpha = 0.75
+      ctx.fill()
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    // 본체 실루엣
+    ctx.fillStyle = hit ? '#ffffff' : def.color
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+    ctx.lineWidth = def.silhouette === 'boss' ? 2.5 : 1.5
+    enemySilhouettePath(ctx, def.silhouette, pos.x, bodyY, r, angle)
     ctx.fill()
     ctx.stroke()
 
-    // 장갑 표식 — 두꺼운 유닛은 안쪽에 링을 하나 더 그린다
-    if (def.armor >= 7) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)'
+    // 방어 표식은 실루엣에서 파생시킨다 — 임계값을 따로 두면 실루엣과
+    // 어긋난다 (예전에는 마저 45%인 보스에 마법 표식이 안 떴다).
+    const sil = def.silhouette
+    const showArmor = def.armor > 0 && (sil === 'armored' || sil === 'bulwark' || sil === 'boss')
+    const showWard =
+      def.magicResist > 0 && (sil === 'warded' || sil === 'bulwark' || sil === 'boss')
+
+    // 장갑 — 같은 실루엣을 안쪽에 한 겹 더
+    if (showArmor) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'
       ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.arc(pos.x, bodyY, r - 4, 0, Math.PI * 2)
+      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 0.62, angle)
       ctx.stroke()
     }
-    // 마법 저항 표식 — 점선 오라
-    if (def.magicResist >= 0.5) {
-      ctx.strokeStyle = 'rgba(200,150,255,0.75)'
+    // 마법 저항 — 점선 오라
+    if (showWard) {
+      ctx.strokeStyle = 'rgba(206,158,255,0.8)'
       ctx.lineWidth = 1.5
       ctx.setLineDash([3, 3])
       ctx.beginPath()
-      ctx.arc(pos.x, bodyY, r + 3, 0, Math.PI * 2)
+      ctx.arc(pos.x, bodyY, r * 1.32, 0, Math.PI * 2)
       ctx.stroke()
       ctx.setLineDash([])
     }
@@ -345,7 +387,7 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(168,236,255,0.9)'
       ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.arc(pos.x, bodyY, r + 5, 0, Math.PI * 2)
+      ctx.arc(pos.x, bodyY, r * 1.55, 0, Math.PI * 2)
       ctx.stroke()
     }
 
@@ -354,7 +396,9 @@ export class Renderer {
       const barW = def.boss ? r * 3 : r * 2
       const barH = def.boss ? 5 : 3
       const bx = pos.x - barW / 2
-      const by = bodyY - r - barH - 4
+      // 마름모·보스는 위로 더 뾰족해서 바가 겹친다 — 실루엣 높이만큼 띄운다.
+      const topExtent = sil === 'warded' ? r * 1.2 : sil === 'boss' ? r * 1.12 : r
+      const by = bodyY - topExtent - barH - (showWard || enemy.isSlowed ? 9 : 4)
       ctx.fillStyle = 'rgba(0,0,0,0.6)'
       ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2)
       ctx.fillStyle =
