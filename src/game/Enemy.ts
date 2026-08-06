@@ -40,12 +40,23 @@ export class Enemy {
   /** 피격 시 잠깐 밝게 번쩍이는 연출용 타이머 */
   flashTimer = 0
 
-  constructor(id: number, def: EnemyDef, path: Path, spawnOffset = 0) {
+  /**
+   * 길 폭 안에서 좌우로 밀린 정도 (픽셀). **렌더링에서만** 쓴다.
+   *
+   * 같은 타이밍에 나온 두 마리가 경로 위 같은 지점에 겹쳐 서면 몇 마리인지
+   * 안 읽힌다. 진행 방향으로만 흩뿌리던 것을 수직 방향으로도 흩어 해결했는데,
+   * `pos` 자체를 옮기면 타워 사거리 판정이 바뀌어 밸런스가 흔들린다.
+   * 그래서 시뮬레이션은 여전히 경로 중심선 하나로 돌고, 그림만 밀린다.
+   */
+  readonly lateral: number
+
+  constructor(id: number, def: EnemyDef, path: Path, spawnOffset = 0, lateral = 0) {
     this.id = id
     this.def = def
     this.path = path
     this.hp = def.maxHp
     this.distance = -spawnOffset
+    this.lateral = lateral
     this.pos = path.positionAt(0)
   }
 

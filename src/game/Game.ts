@@ -43,6 +43,14 @@ export class Game {
   /** 이번 판에 건설 가능한 타워 ID */
   readonly availableTowers: readonly string[]
   private readonly rng: Rng
+  /**
+   * 연출 전용 난수. **시뮬레이션 난수와 반드시 분리한다.**
+   *
+   * 같은 스트림을 쓰면 그림용 값을 하나 뽑는 것만으로 이후 모든 시뮬레이션
+   * 난수가 한 칸씩 밀려, 렌더링만 바꿨는데 밸런스 수치가 달라진다.
+   * 실제로 좌우 흩뿌림을 넣자마자 임계값 근처 전략의 클리어율이 흔들렸다.
+   */
+  private readonly cosmeticRng: Rng
 
   readonly enemies: Enemy[] = []
   readonly towers: Tower[] = []
@@ -80,6 +88,7 @@ export class Game {
   constructor(stage: StageDef, options: GameOptions = {}) {
     this.stage = stage
     this.rng = new Rng(options.seed ?? 20240816)
+    this.cosmeticRng = new Rng((options.seed ?? 20240816) ^ 0x5f3759df)
     this.availableTowers = options.availableTowers ?? TOWER_ORDER
     this.waves = new WaveManager(stage.waves)
 
@@ -177,7 +186,13 @@ export class Game {
     this.goldSpent += cost
     tower.upgrade()
     this.effects.blast(tower.pos, TILE_SIZE * 0.9, tower.def.accent, 0.3)
-    this.effects.text(tower.pos, `Lv.${tower.level}`, tower.def.accent)
+    // 건물 위로 띄운다. 타워 좌표에 그대로 띄우면 글자가 지붕을 가려
+    // 무엇을 올렸는지가 안 보인다.
+    this.effects.text(
+      { x: tower.pos.x, y: tower.pos.y - TILE_SIZE * 0.75 },
+      `Lv.${tower.level}`,
+      tower.def.accent,
+    )
     return { ok: true }
   }
 
@@ -264,8 +279,11 @@ export class Game {
       const def = getEnemyDef(spawn.enemy)
       const path = this.paths[spawn.route] ?? this.mainPath
       // 같은 타이밍에 여러 마리가 겹쳐 보이지 않도록 살짝 흩뿌린다.
+      // 진행 방향(jitter)만으로는 부족해 길 폭 안에서 좌우(lateral)로도 민다 —
+      // 이쪽은 렌더링 전용이라 사거리 판정에는 영향이 없다.
       const jitter = this.rng.range(0, TILE_SIZE * 0.6)
-      this.enemies.push(new Enemy(this.nextEntityId++, def, path, jitter))
+      const lateral = this.cosmeticRng.range(-TILE_SIZE * 0.22, TILE_SIZE * 0.22)
+      this.enemies.push(new Enemy(this.nextEntityId++, def, path, jitter, lateral))
     }
   }
 

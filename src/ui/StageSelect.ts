@@ -2,6 +2,7 @@ import { STAGES, TOTAL_STAGES, type StageDef } from '../data/stages'
 import { TOWER_ORDER, getTowerDef } from '../data/towers'
 import type { Progress } from '../game/Progress'
 import { FONT, PALETTE, roundRect } from '../render/palette'
+import { TOWER_ART, drawArt } from '../render/art'
 import type { Layout, UiButton } from './layout'
 
 /**
@@ -81,7 +82,7 @@ export class StageSelect {
     const top = 152
     const gap = 14
     const cardW = (layout.width - 80 - gap * (TOTAL_STAGES - 1)) / TOTAL_STAGES
-    const cardH = 326
+    const cardH = 430
 
     STAGES.forEach((stage, i) => {
       const x = 40 + i * (cardW + gap)
@@ -121,12 +122,24 @@ export class StageSelect {
       ctx.fillText(stage.name, x + 16, y + 50)
 
       // 맵 축소도 — 지형 차이를 형태로 보여준다
-      this.drawMapThumbnail(stage, x + 16, y + 68, cardW - 32, 92)
+      this.drawMapThumbnail(stage, x + 16, y + 68, cardW - 32, 150)
+
+      // 잠긴 스테이지는 축소도를 덮고 자물쇠를 올린다. 글자만 흐리게 하면
+      // 축소도가 그대로 선명해서 잠금/해금 구분이 거의 안 됐다.
+      if (!unlocked) {
+        ctx.save()
+        ctx.globalAlpha = 1
+        ctx.fillStyle = 'rgba(12,16,22,0.68)'
+        roundRect(ctx, x + 16, y + 68, cardW - 32, 150, 5)
+        ctx.fill()
+        this.lockIcon(x + cardW / 2, y + 143, 26, 'rgba(255,255,255,0.42)')
+        ctx.restore()
+      }
 
       // 한 줄 소개 (좁은 카드라 두 줄까지 접는다)
       ctx.font = FONT.tiny
       ctx.fillStyle = PALETTE.textMuted
-      this.wrapText(stage.subtitle, x + 16, y + 178, cardW - 32, 14)
+      this.wrapText(stage.subtitle, x + 16, y + 236, cardW - 32, 14)
 
       // 정보
       ctx.font = FONT.tiny
@@ -135,32 +148,35 @@ export class StageSelect {
       ctx.fillText(
         `${stage.waves.length}웨이브 · 경로 ${routes}갈래 · ${stage.startGold}G`,
         x + 16,
-        y + 214,
+        y + 272,
       )
 
       const best = progress.bestLivesFor(stage.id)
       if (best !== null) {
         ctx.fillStyle = PALETTE.good
-        ctx.fillText(`최고 기록 — 생명 ${best} 남김`, x + 16, y + 230)
+        ctx.fillText(`최고 기록 — 생명 ${best} 남김`, x + 16, y + 288)
       }
 
-      // 보상
+      // 보상 — 색 사각형이 아니라 실제 타워 그림. 보드에서 보게 될 물건과
+      // 카드에서 보는 물건이 같아야 "무엇이 열리는가"가 한 번에 읽힌다.
       if (stage.unlocksTower) {
         const reward = getTowerDef(stage.unlocksTower)
-        ctx.fillStyle = reward.color
-        roundRect(ctx, x + 16, y + 244, 14, 14, 4)
-        ctx.fill()
+        const art = TOWER_ART[reward.id]
+        if (art) {
+          drawArt(ctx, art, x + 24, y + 317, 22, { color: reward.color, accent: reward.accent })
+        }
         ctx.fillStyle = cleared ? PALETTE.textDim : PALETTE.gold
         ctx.font = FONT.tiny
+        ctx.textBaseline = 'middle'
         ctx.fillText(
           cleared ? `${reward.name} 해금됨` : `보상 · ${reward.name}`,
-          x + 36,
-          y + 251,
+          x + 38,
+          y + 309,
         )
       } else {
         ctx.fillStyle = PALETTE.danger
         ctx.font = FONT.tiny
-        ctx.fillText('최종 스테이지', x + 16, y + 251)
+        ctx.fillText('최종 스테이지', x + 16, y + 309)
       }
 
       ctx.globalAlpha = 1
@@ -192,12 +208,22 @@ export class StageSelect {
     })
   }
 
-  /** 맵의 경로를 카드 안에 축소해 그린다. */
+  /**
+   * 맵의 경로를 카드 안에 축소해 그린다.
+   *
+   * 보드와 **같은 색**을 쓴다. 예전에는 장애물을 `blockedFill`(푸른 회색)로
+   * 칠했는데, 실제 보드에서는 회색 바위와 초록 소나무라 축소도만 보라빛
+   * 얼룩처럼 보였다 — 지형이 아니라 렌더 오류로 읽혔다.
+   *
+   * 출발점·목표는 경로가 보드 가장자리에서 끝나므로 안쪽으로 밀어 그린다.
+   * 그러지 않으면 위쪽에서 내려오는 경로(S5의 3번 갈래)는 표식이 잘려
+   * 갈래가 하나 없는 것처럼 보인다.
+   */
   private drawMapThumbnail(stage: StageDef, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     const { cols, rows, routes, blocked } = stage.level
 
-    ctx.fillStyle = PALETTE.grassA
+    ctx.fillStyle = PALETTE.grassB
     roundRect(ctx, x, y, w, h, 5)
     ctx.fill()
 
@@ -211,9 +237,22 @@ export class StageSelect {
     roundRect(ctx, x, y, w, h, 5)
     ctx.clip()
 
-    ctx.fillStyle = PALETTE.blockedFill
+    // 장애물 — 보드처럼 바위(회색)와 나무(초록)를 섞는다. 좌표에서 결정하므로
+    // 같은 맵은 항상 같은 배치가 나온다.
     for (const b of blocked) {
-      ctx.fillRect(ox + b.x * scale, oy + b.y * scale, scale, scale)
+      const isTree = (b.x * 7 + b.y * 13) % 3 === 0
+      ctx.fillStyle = isTree ? PALETTE.treeCanopy : PALETTE.rockFill
+      ctx.beginPath()
+      ctx.ellipse(
+        ox + (b.x + 0.5) * scale,
+        oy + (b.y + 0.5) * scale,
+        scale * 0.34,
+        scale * 0.3,
+        0,
+        0,
+        Math.PI * 2,
+      )
+      ctx.fill()
     }
 
     const strokeAll = (width: number, color: string) => {
@@ -231,21 +270,39 @@ export class StageSelect {
         ctx.stroke()
       }
     }
-    strokeAll(scale * 0.95, PALETTE.pathOuter)
-    strokeAll(scale * 0.55, PALETTE.pathInner)
+    strokeAll(scale * 1.05, PALETTE.pathBank)
+    strokeAll(scale * 0.85, PALETTE.pathOuter)
+    strokeAll(scale * 0.45, PALETTE.pathInner)
+
+    // 표식이 잘리지 않게 축소도 안쪽으로 민다.
+    const dot = Math.max(2.6, scale * 0.72)
+    const inset = (px: number, py: number): [number, number] => [
+      Math.min(Math.max(px, x + dot + 1), x + w - dot - 1),
+      Math.min(Math.max(py, y + dot + 1), y + h - dot - 1),
+    ]
 
     // 출발점 표식 — 갈래 수가 한눈에 들어오게
     for (const route of routes) {
       const start = route[0]!
+      const [sx, sy] = inset(ox + toPx(start.x), oy + toPx(start.y))
       ctx.fillStyle = PALETTE.danger
       ctx.beginPath()
-      ctx.arc(ox + toPx(start.x), oy + toPx(start.y), scale * 0.7, 0, Math.PI * 2)
+      ctx.arc(sx, sy, dot, 0, Math.PI * 2)
       ctx.fill()
     }
+    // 목표는 왕성이라 점이 아니라 작은 탑 실루엣으로 — 출발점과 역할이 다르다.
     const goal = routes[0]![routes[0]!.length - 1]!
+    const [gx, gy] = inset(ox + toPx(goal.x), oy + toPx(goal.y))
+    const kw = dot * 1.7
+    const kh = dot * 1.9
     ctx.fillStyle = PALETTE.accent
     ctx.beginPath()
-    ctx.arc(ox + toPx(goal.x), oy + toPx(goal.y), scale * 0.7, 0, Math.PI * 2)
+    // 아래 몸통
+    ctx.rect(gx - kw / 2, gy - kh * 0.18, kw, kh * 0.68)
+    // 위 톱니 세 개
+    ctx.rect(gx - kw / 2, gy - kh * 0.5, kw * 0.28, kh * 0.34)
+    ctx.rect(gx - kw * 0.14, gy - kh * 0.5, kw * 0.28, kh * 0.34)
+    ctx.rect(gx + kw * 0.22, gy - kh * 0.5, kw * 0.28, kh * 0.34)
     ctx.fill()
 
     ctx.restore()
@@ -272,22 +329,43 @@ export class StageSelect {
       const def = getTowerDef(id)
       const has = unlocked.includes(id)
 
-      ctx.globalAlpha = has ? 1 : 0.28
-      ctx.fillStyle = def.color
-      roundRect(ctx, x, y - 13, 26, 26, 6)
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'
+      roundRect(ctx, x, y - 16, 32, 32, 7)
       ctx.fill()
-      ctx.fillStyle = def.accent
-      ctx.beginPath()
-      ctx.arc(x + 13, y, 5.5, 0, Math.PI * 2)
-      ctx.fill()
+
+      if (has) {
+        const art = TOWER_ART[id]
+        if (art) drawArt(ctx, art, x + 16, y + 15, 32, { color: def.color, accent: def.accent })
+      } else {
+        // 잠긴 칸은 그림 대신 자물쇠 — 실루엣만 보여주면 "이미 있는 것"으로 읽힌다.
+        this.lockIcon(x + 16, y, 11, 'rgba(255,255,255,0.3)')
+      }
 
       ctx.font = FONT.body
       ctx.fillStyle = has ? PALETTE.text : PALETTE.textDim
-      ctx.fillText(has ? def.name : '???', x + 34, y)
-      ctx.globalAlpha = 1
+      ctx.textBaseline = 'middle'
+      ctx.fillText(has ? def.name : '???', x + 40, y)
 
-      x += 34 + ctx.measureText(has ? def.name : '???').width + 26
+      x += 40 + ctx.measureText(has ? def.name : '???').width + 26
     }
+  }
+
+  /** 자물쇠 아이콘. 잠금은 흐리게 처리하는 것만으로는 잘 안 읽힌다. */
+  private lockIcon(cx: number, cy: number, size: number, color: string): void {
+    const { ctx } = this
+    const w = size
+    const h = size * 0.78
+    const bodyTop = cy - h / 2 + size * 0.24
+
+    ctx.strokeStyle = color
+    ctx.lineWidth = Math.max(1.4, size * 0.14)
+    ctx.beginPath()
+    ctx.arc(cx, bodyTop, w * 0.29, Math.PI, 0)
+    ctx.stroke()
+
+    ctx.fillStyle = color
+    roundRect(ctx, cx - w / 2, bodyTop, w, h * 0.72, size * 0.16)
+    ctx.fill()
   }
 
   /** 카드 폭에 맞춰 글자를 접는다. 캔버스에는 자동 줄바꿈이 없다. */

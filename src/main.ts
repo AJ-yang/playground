@@ -5,6 +5,7 @@ import { Game, TILE_SIZE } from './game/Game'
 import { Progress, browserStorage } from './game/Progress'
 import { Renderer } from './render/Renderer'
 import { PALETTE, FONT } from './render/palette'
+import { TOWER_ART, drawArt } from './render/art'
 import { Hud } from './ui/Hud'
 import { StageSelect } from './ui/StageSelect'
 import { computeLayout, hitTest } from './ui/layout'
@@ -84,14 +85,32 @@ function drawPlayChrome(): void {
   if (game.isOver && unlockBanner) {
     const def = getTowerDef(unlockBanner)
     const cx = layout.board.x + layout.board.w / 2
-    const cy = layout.board.y + layout.board.h / 2 + 128
+    // 결과 문구(중앙 ~ +92) 아래로 충분히 내린다. 그림의 바닥 기준선.
+    const base = layout.board.y + layout.board.h / 2 + 182
+
+    // 보상은 글자보다 **그림**이 먼저 와야 한다. 게임 전체에서 새 물건을
+    // 처음 보여주는 순간인데 예전에는 이름만 적고 넘어갔다.
+    const art = TOWER_ART[def.id]
+    if (art) {
+      ctx!.save()
+      const glowY = base - 26
+      const glow = ctx!.createRadialGradient(cx, glowY, 2, cx, glowY, 52)
+      glow.addColorStop(0, `${def.accent}38`)
+      glow.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx!.fillStyle = glow
+      ctx!.fillRect(cx - 52, glowY - 52, 104, 104)
+      drawArt(ctx!, art, cx, base, 62, { color: def.color, accent: def.accent })
+      ctx!.restore()
+    }
+
     ctx!.textAlign = 'center'
+    ctx!.textBaseline = 'middle'
     ctx!.font = FONT.title
     ctx!.fillStyle = def.accent
-    ctx!.fillText(`새 기물 해금 — ${def.name}`, cx, cy)
+    ctx!.fillText(`새 기물 해금 — ${def.name}`, cx, base + 24)
     ctx!.font = FONT.small
     ctx!.fillStyle = PALETTE.textMuted
-    ctx!.fillText(def.tagline, cx, cy + 22)
+    ctx!.fillText(def.tagline, cx, base + 46)
     ctx!.textAlign = 'left'
   }
 }

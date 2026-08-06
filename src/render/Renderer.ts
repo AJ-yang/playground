@@ -216,51 +216,71 @@ export class Renderer {
    * 어두운 둑이 앞 경로의 밝은 흙을 덮어 이음매가 드러난다.
    */
   private paintPaths(ctx: CanvasRenderingContext2D, paths: Game['paths']): void {
-    const strokeAll = (width: number, color: string, dash?: number[]) => {
-      ctx.strokeStyle = color
-      ctx.lineWidth = width
-      ctx.lineJoin = 'round'
-      ctx.lineCap = 'round'
-      if (dash) ctx.setLineDash(dash)
+    const strokeAll = (
+      target: CanvasRenderingContext2D,
+      width: number,
+      color: string,
+      dash?: number[],
+    ) => {
+      target.strokeStyle = color
+      target.lineWidth = width
+      target.lineJoin = 'round'
+      target.lineCap = 'round'
+      if (dash) target.setLineDash(dash)
       for (const p of paths) {
-        ctx.beginPath()
-        p.points.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)))
-        ctx.stroke()
+        target.beginPath()
+        p.points.forEach((pt, i) => (i === 0 ? target.moveTo(pt.x, pt.y) : target.lineTo(pt.x, pt.y)))
+        target.stroke()
       }
-      if (dash) ctx.setLineDash([])
+      if (dash) target.setLineDash([])
     }
 
-    strokeAll(TILE_SIZE + 6, PALETTE.pathBank)
-    strokeAll(TILE_SIZE, PALETTE.pathOuter)
-    strokeAll(TILE_SIZE - 8, PALETTE.pathInner)
+    strokeAll(ctx, TILE_SIZE + 6, PALETTE.pathBank)
+    strokeAll(ctx, TILE_SIZE, PALETTE.pathOuter)
+    strokeAll(ctx, TILE_SIZE - 8, PALETTE.pathInner)
+
+    // 자갈·바퀴자국은 **반투명**이라 경로마다 그대로 겹쳐 그리면 교차 지점만
+    // 두 번 칠해져 어두운 사각 얼룩이 생긴다 (3갈래 맵에서 특히 티가 났다).
+    // 그래서 각 층을 불투명하게 한 번 합성한 뒤, 통째로 한 겹만 얹는다.
+    const composite = (alpha: number, paint: (lc: CanvasRenderingContext2D) => void) => {
+      const layer = document.createElement('canvas')
+      layer.width = ctx.canvas.width
+      layer.height = ctx.canvas.height
+      const lc = layer.getContext('2d')!
+      paint(lc)
+      ctx.save()
+      ctx.globalAlpha = alpha
+      ctx.drawImage(layer, 0, 0)
+      ctx.restore()
+    }
 
     // 자갈 — 어두운 짧은 파선을 길 안쪽에 흩어 놓는다.
-    strokeAll(TILE_SIZE - 14, PALETTE.pathGravel, [2, 9])
+    composite(0.22, (lc) => strokeAll(lc, TILE_SIZE - 14, '#000', [2, 9]))
 
     // 바퀴자국 두 줄. 가운데 점선 하나보다 길이 다져진 느낌이 난다.
-    ctx.save()
-    for (const offset of [-7, 7]) {
-      ctx.strokeStyle = PALETTE.pathRut
-      ctx.lineWidth = 2.5
-      ctx.lineJoin = 'round'
-      ctx.lineCap = 'round'
-      for (const p of paths) {
-        ctx.beginPath()
-        p.points.forEach((pt, i) => {
-          // 진행 방향의 수직으로 밀어 두 줄을 만든다.
-          const prev = p.points[Math.max(0, i - 1)]!
-          const next = p.points[Math.min(p.points.length - 1, i + 1)]!
-          const dx = next.x - prev.x
-          const dy = next.y - prev.y
-          const len = Math.hypot(dx, dy) || 1
-          const nx = (-dy / len) * offset
-          const ny = (dx / len) * offset
-          i === 0 ? ctx.moveTo(pt.x + nx, pt.y + ny) : ctx.lineTo(pt.x + nx, pt.y + ny)
-        })
-        ctx.stroke()
+    composite(0.05, (lc) => {
+      lc.strokeStyle = '#fff'
+      lc.lineWidth = 2.5
+      lc.lineJoin = 'round'
+      lc.lineCap = 'round'
+      for (const offset of [-7, 7]) {
+        for (const p of paths) {
+          lc.beginPath()
+          p.points.forEach((pt, i) => {
+            // 진행 방향의 수직으로 밀어 두 줄을 만든다.
+            const prev = p.points[Math.max(0, i - 1)]!
+            const next = p.points[Math.min(p.points.length - 1, i + 1)]!
+            const dx = next.x - prev.x
+            const dy = next.y - prev.y
+            const len = Math.hypot(dx, dy) || 1
+            const nx = (-dy / len) * offset
+            const ny = (dx / len) * offset
+            i === 0 ? lc.moveTo(pt.x + nx, pt.y + ny) : lc.lineTo(pt.x + nx, pt.y + ny)
+          })
+          lc.stroke()
+        }
       }
-    }
-    ctx.restore()
+    })
   }
 
   /** 장애물 — 바위와 나무 두 종류를 섞어 지형에 리듬을 준다. */
@@ -270,14 +290,16 @@ export class Renderer {
         if (grid.kindAt(col, row) !== 'blocked') continue
         const cx = (col + 0.5) * TILE_SIZE
         const cy = (col + row) % 3 === 0 ? (row + 0.5) * TILE_SIZE - 2 : (row + 0.5) * TILE_SIZE
+        const isTree = (col * 7 + row * 3) % 5 < 2
 
         // 바닥 그림자 — 이것만으로도 지형에 붙어 있다는 느낌이 크게 산다.
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'
+        // 나무는 밑동이 가늘어 바위와 같은 크기로 깔면 그림자만 둥둥 뜬다.
+        ctx.fillStyle = isTree ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.4)'
         ctx.beginPath()
-        ctx.ellipse(cx, cy + 11, 13, 5, 0, 0, Math.PI * 2)
+        ctx.ellipse(cx, cy + 11, isTree ? 8 : 13, isTree ? 3.2 : 5, 0, 0, Math.PI * 2)
         ctx.fill()
 
-        if ((col * 7 + row * 3) % 5 < 2) this.paintTree(ctx, cx, cy, rng)
+        if (isTree) this.paintTree(ctx, cx, cy, rng)
         else this.paintRock(ctx, cx, cy, rng)
       }
     }
@@ -492,8 +514,14 @@ export class Renderer {
 
   private drawEnemy(enemy: Enemy, angle: number, time: number): void {
     const { ctx } = this
-    const { pos, def } = enemy
+    const { def } = enemy
     const r = def.radius
+
+    // 길 폭 안에서 좌우로 민 위치. 시뮬레이션의 pos는 그대로 두고 그림만 옮긴다.
+    const pos = {
+      x: enemy.pos.x - Math.sin(angle) * enemy.lateral,
+      y: enemy.pos.y + Math.cos(angle) * enemy.lateral,
+    }
 
     // 공중 유닛은 그림자를 아래에 깔고 본체를 띄운다. 형태(날개)와 함께
     // 세 겹으로 표시하는 이유는 정지 화면·고배속·색각 이상 어디서도
@@ -544,9 +572,21 @@ export class Renderer {
     // 적을 떠오르게 하는 아웃라인 역할도 겸한다.
     const sil = def.silhouette
     const facing = Math.cos(angle) < 0
-    ctx.fillStyle = 'rgba(8,10,14,0.55)'
-    enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 1.04, facing ? Math.PI : 0)
-    ctx.fill()
+    const silAngle = facing ? Math.PI : 0
+
+    // 처음엔 단색으로 꽉 채웠는데, 가까이서 보면 적이 **검은 동전 위에 서 있는
+    // 것처럼** 보였다. 지금은 바깥으로 갈수록 옅어지는 그라디언트라 형태는
+    // 그대로 읽히면서 아웃라인처럼 자연스럽게 붙는다.
+    ctx.save()
+    enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 1.1, silAngle)
+    ctx.clip()
+    const halo = ctx.createRadialGradient(pos.x, bodyY, r * 0.3, pos.x, bodyY, r * 1.1)
+    halo.addColorStop(0, 'rgba(8,10,14,0.05)')
+    halo.addColorStop(0.6, 'rgba(8,10,14,0.3)')
+    halo.addColorStop(1, 'rgba(8,10,14,0.62)')
+    ctx.fillStyle = halo
+    ctx.fillRect(pos.x - r * 1.6, bodyY - r * 1.6, r * 3.2, r * 3.2)
+    ctx.restore()
 
     // 본체 — 손으로 그린 벡터 아트. 진행 방향을 보도록 좌우를 뒤집는다.
     const art = ENEMY_ART[def.id]
@@ -562,7 +602,7 @@ export class Renderer {
     // 그대로 보이면 "맞았다"가 안 읽힌다.
     if (hit) {
       ctx.fillStyle = 'rgba(255,255,255,0.62)'
-      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 0.94, facing ? Math.PI : 0)
+      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 0.94, silAngle)
       ctx.fill()
     }
 
@@ -572,21 +612,25 @@ export class Renderer {
     const showWard =
       def.magicResist > 0 && (sil === 'warded' || sil === 'bulwark' || sil === 'boss')
 
-    // 장갑 — 같은 실루엣을 바깥에 한 겹 더. 예전에는 안쪽에 그렸는데
+    // 표식 반지름은 서로 겹치지 않게 층을 나눈다. 예전에는 마저 오라가
+    // 실루엣보다 훨씬 커서(1.32r) **옆 적까지 침범해** 몇 마리인지 안 읽혔고,
+    // 장갑·마저가 둘 다 켜지는 트롤·보스는 링이 두 겹으로 보였다.
+    //
+    // 장갑 — 같은 실루엣을 몸에 딱 붙여 한 겹 더. 예전에는 안쪽에 그렸는데
     // 그림으로 바뀐 뒤로는 본체를 덮어 버려서 테두리로 옮겼다.
     if (showArmor) {
-      ctx.strokeStyle = 'rgba(226,236,255,0.6)'
+      ctx.strokeStyle = 'rgba(226,236,255,0.62)'
       ctx.lineWidth = 1.8
-      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 1.12, facing ? Math.PI : 0)
+      enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 1.12, silAngle)
       ctx.stroke()
     }
-    // 마법 저항 — 점선 오라
+    // 마법 저항 — 점선 오라. 장갑 테두리 바로 바깥.
     if (showWard) {
-      ctx.strokeStyle = 'rgba(206,158,255,0.8)'
+      ctx.strokeStyle = 'rgba(206,158,255,0.85)'
       ctx.lineWidth = 1.5
       ctx.setLineDash([3, 3])
       ctx.beginPath()
-      ctx.arc(pos.x, bodyY, r * 1.32, 0, Math.PI * 2)
+      ctx.arc(pos.x, bodyY, r * (showArmor ? 1.3 : 1.16), 0, Math.PI * 2)
       ctx.stroke()
       ctx.setLineDash([])
     }
@@ -595,7 +639,7 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(168,236,255,0.9)'
       ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.arc(pos.x, bodyY, r * 1.55, 0, Math.PI * 2)
+      ctx.arc(pos.x, bodyY, r * 1.42, 0, Math.PI * 2)
       ctx.stroke()
     }
     // 중독 표식 — 방어를 무시하고 계속 깎이는 중이라는 신호
@@ -604,7 +648,7 @@ export class Renderer {
       ctx.lineWidth = 2
       ctx.setLineDash([2, 4])
       ctx.beginPath()
-      ctx.arc(pos.x, bodyY, r * 1.75, 0, Math.PI * 2)
+      ctx.arc(pos.x, bodyY, r * 1.56, 0, Math.PI * 2)
       ctx.stroke()
       ctx.setLineDash([])
     }
@@ -701,32 +745,35 @@ export class Renderer {
     const { board } = this.layout
     const danger = game.dangerLevel
 
-    if (danger > 0) {
-      // 위험할수록 빠르고 깊게 맥동한다.
-      const pulse = 0.78 + 0.22 * Math.sin(time * (2.4 + danger * 3.4))
-      const strength = danger * pulse
+    const flash = Math.min(1, game.damageFlash)
+    if (danger <= 0 && flash <= 0) return
 
-      const cx = board.w / 2
-      const cy = board.h / 2
-      const inner = Math.min(board.w, board.h) * (0.62 - danger * 0.22)
-      const outer = Math.hypot(cx, cy)
-      const grad = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer)
-      grad.addColorStop(0, 'rgba(200,20,20,0)')
-      grad.addColorStop(1, `rgba(190,16,16,${(0.5 * strength).toFixed(3)})`)
-      ctx.fillStyle = grad
-      ctx.fillRect(0, 0, board.w, board.h)
+    // 두 효과가 **같은 비네트를 공유한다.**
+    //
+    // 예전에는 위험도 비네트와 유출 플래시가 각각 보드를 덮었고, 플래시는
+    // 화면 전체를 평면으로 채웠다. 생명이 3일 때 보스가 유출되면 두 겹이
+    // 더해져 판이 통째로 불투명한 빨간색이 됐다 — 티는 확실히 났지만 그
+    // 0.6초 동안 플레이가 불가능했다. 지금은 세기만 합치고 그림은 한 번,
+    // 그것도 가장자리 가중으로 그린다. 판 가운데는 언제나 보여야 한다.
+    const pulse = 0.78 + 0.22 * Math.sin(time * (2.4 + danger * 3.4))
+    const strength = Math.min(1, danger * pulse + flash * 0.85)
 
-      // 가장자리에 붉은 테두리를 한 겹 더 — 비네트만으로는 경계가 흐려 보인다.
-      ctx.strokeStyle = `rgba(255,70,70,${(0.5 * strength).toFixed(3)})`
-      ctx.lineWidth = 2 + danger * 6
-      ctx.strokeRect(1, 1, board.w - 2, board.h - 2)
-    }
+    const cx = board.w / 2
+    const cy = board.h / 2
+    // 세기가 오를수록 안쪽 반지름이 줄어 붉은 띠가 두꺼워진다.
+    const inner = Math.min(board.w, board.h) * (0.62 - strength * 0.28)
+    const outer = Math.hypot(cx, cy)
+    const grad = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer)
+    grad.addColorStop(0, 'rgba(200,20,20,0)')
+    grad.addColorStop(0.55, `rgba(196,20,20,${(0.26 * strength).toFixed(3)})`)
+    grad.addColorStop(1, `rgba(190,16,16,${(0.62 * strength).toFixed(3)})`)
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, board.w, board.h)
 
-    if (game.damageFlash > 0) {
-      const f = Math.min(1, game.damageFlash)
-      ctx.fillStyle = `rgba(255,48,48,${(0.34 * f).toFixed(3)})`
-      ctx.fillRect(0, 0, board.w, board.h)
-    }
+    // 가장자리 테두리 — 비네트만으로는 경계가 흐려 보인다.
+    ctx.strokeStyle = `rgba(255,70,70,${(0.55 * strength).toFixed(3)})`
+    ctx.lineWidth = 2 + strength * 7
+    ctx.strokeRect(1, 1, board.w - 2, board.h - 2)
   }
 
   /** 승리/패배 시 보드 위에 덮는 결과 화면. */

@@ -277,6 +277,10 @@ export class Hud {
     let y = startY + 20
     const cardH = 52
 
+    // 게임이 끝나면 메뉴 전체를 죽인다. 예전에는 패배 화면에서도 초록색
+    // 업그레이드 버튼이 그대로 살아 있어 눌릴 것처럼 보였다.
+    ctx.globalAlpha = game.isOver ? 0.4 : 1
+
     // 해금된 타워만 노출한다. 잠긴 타워를 흐리게 남겨두면 "언젠가 열린다"는
     // 정보는 주지만 준비 단계의 판단을 방해한다 — 스테이지 선택 화면이
     // 이미 해금 현황을 보여주므로 여기서는 쓸 수 있는 것만 보여준다.
@@ -299,11 +303,15 @@ export class Hud {
 
       // 타워 배지 — 보드에 서는 건물 그림을 그대로 축소해 넣는다.
       // 색 사각형만 있던 시절에는 메뉴와 보드가 별개의 언어였다.
-      ctx.fillStyle = 'rgba(255,255,255,0.05)'
+      //
+      // 배경에 타워 색을 옅게 깐다. 대포탑·얼음탑은 몸체가 회색 석재라
+      // 그림만으로는 작은 크기에서 서로 비슷해 보였다.
+      ctx.fillStyle = `${def.color}22`
       roundRect(ctx, x + 8, y + 10, 32, 32, 6)
       ctx.fill()
       const towerArt = TOWER_ART[def.id]
-      if (towerArt) drawArt(ctx, towerArt, x + 24, y + 41, 34, { color: def.color, accent: def.accent })
+      // 배지 안에 정확히 들어가도록 바닥 기준선을 상자 안쪽에 둔다.
+      if (towerArt) drawArt(ctx, towerArt, x + 24, y + 39, 30, { color: def.color, accent: def.accent })
 
       ctx.globalAlpha = affordable ? 1 : 0.45
       ctx.font = FONT.bodyBold
@@ -321,10 +329,19 @@ export class Hud {
       ctx.globalAlpha = 1
       ctx.textAlign = 'left'
 
-      this.buttons.push({ id: `build:${towerId}`, x, y, w, h: cardH, enabled: true, payload: towerId })
+      this.buttons.push({
+        id: `build:${towerId}`,
+        x,
+        y,
+        w,
+        h: cardH,
+        enabled: !game.isOver,
+        payload: towerId,
+      })
       y += cardH + 6
     })
 
+    ctx.globalAlpha = 1
     return y
   }
 
@@ -414,7 +431,7 @@ export class Hud {
       w: p.w - 24,
       h: 28,
       label: `타겟팅: ${TARGET_PRIORITY_LABEL[tower.targetPriority]}`,
-      enabled: true,
+      enabled: !game.isOver,
     })
     y += 34
 
@@ -427,8 +444,8 @@ export class Hud {
       w: p.w - 24,
       h: 34,
       label: upgradeCost === null ? '최대 레벨' : `업그레이드  ${upgradeCost}G`,
-      enabled: upgradeCost !== null && game.gold >= upgradeCost,
-      primary: upgradeCost !== null && game.gold >= upgradeCost,
+      enabled: !game.isOver && upgradeCost !== null && game.gold >= upgradeCost,
+      primary: !game.isOver && upgradeCost !== null && game.gold >= upgradeCost,
     })
     y += 40
 
@@ -440,7 +457,7 @@ export class Hud {
       w: p.w - 24,
       h: 28,
       label: `판매  +${tower.sellValue()}G`,
-      enabled: true,
+      enabled: !game.isOver,
       danger: true,
     })
   }
