@@ -1,0 +1,161 @@
+/**
+ * 적 정의 (밸런스 데이터).
+ *
+ * 설계 의도 — 적은 "어떤 타워로 잡아야 하는가"를 강제하는 장치다.
+ *   armor 높음  → 물리(궁수/대포)가 약해짐 → 마법탑 필요
+ *   magicResist 높음 → 마법(마법/얼음)이 약해짐 → 물리탑 필요
+ *   flying      → 대포탑이 아예 못 때림
+ *   speed 높음  → 얼음탑 감속 없이는 사거리 안에 머무는 시간이 부족
+ * 한 종류만 도배하면 반드시 막히도록 웨이브를 섞는 것이 밸런스의 축이다.
+ */
+export interface EnemyDef {
+  id: string
+  name: string
+  maxHp: number
+  /** 이동 속도 (타일/초) */
+  speed: number
+  /** 물리 데미지 고정 감소량 */
+  armor: number
+  /** 마법 데미지 감소 비율 (0~0.9) */
+  magicResist: number
+  /** 처치 보상 골드 */
+  bounty: number
+  /** 완주 시 깎이는 생명 */
+  leak: number
+  /** 렌더링 반지름 (픽셀) */
+  radius: number
+  color: string
+  /** 공중 유닛 여부 — 지상 전용 타워는 타겟팅하지 못한다 */
+  flying: boolean
+  /** 보스 여부 — HP 바와 이펙트를 크게 표시 */
+  boss: boolean
+  desc: string
+}
+
+function def(partial: Partial<EnemyDef> & Pick<EnemyDef, 'id' | 'name' | 'maxHp' | 'speed'>): EnemyDef {
+  return {
+    armor: 0,
+    magicResist: 0,
+    bounty: 10,
+    leak: 1,
+    radius: 11,
+    color: '#8bd450',
+    flying: false,
+    boss: false,
+    desc: '',
+    ...partial,
+  }
+}
+
+export const ENEMY_DEFS: Record<string, EnemyDef> = {
+  grunt: def({
+    id: 'grunt',
+    name: '고블린',
+    maxHp: 60,
+    speed: 2.2,
+    bounty: 8,
+    color: '#7cc36a',
+    desc: '약점 없는 기본 보병. 물량으로 밀어붙인다.',
+  }),
+  runner: def({
+    id: 'runner',
+    name: '늑대 기수',
+    maxHp: 48,
+    speed: 4.2,
+    bounty: 11,
+    radius: 10,
+    color: '#e0b341',
+    desc: '매우 빠르다. 감속 없이는 사거리 안에 오래 머물지 않는다.',
+  }),
+  armored: def({
+    id: 'armored',
+    name: '강철 병사',
+    maxHp: 150,
+    speed: 1.8,
+    armor: 9,
+    bounty: 17,
+    radius: 12,
+    color: '#9aa7b8',
+    desc: '두꺼운 갑옷. 물리 데미지를 9씩 깎는다 — 마법탑으로 녹여야 한다.',
+  }),
+  shaman: def({
+    id: 'shaman',
+    name: '주술사',
+    maxHp: 120,
+    speed: 2.0,
+    magicResist: 0.6,
+    bounty: 17,
+    radius: 11,
+    color: '#b884e8',
+    desc: '마법 저항 60%. 궁수탑·대포탑 같은 물리 화력이 필요하다.',
+  }),
+  wyvern: def({
+    id: 'wyvern',
+    name: '와이번',
+    maxHp: 100,
+    speed: 3.1,
+    armor: 2,
+    magicResist: 0.2,
+    bounty: 15,
+    radius: 12,
+    color: '#5fc9d8',
+    flying: true,
+    desc: '공중 유닛. 대포탑은 조준조차 하지 못한다.',
+  }),
+  brute: def({
+    id: 'brute',
+    name: '트롤 파괴자',
+    maxHp: 430,
+    speed: 1.4,
+    armor: 7,
+    magicResist: 0.25,
+    bounty: 42,
+    leak: 2,
+    radius: 15,
+    color: '#d1723f',
+    desc: '물리·마법 양쪽에 저항이 있는 탱커. 뚫으면 생명을 2 깎는다.',
+  }),
+  warlock: def({
+    id: 'warlock',
+    name: '흑마법사',
+    maxHp: 260,
+    speed: 2.4,
+    magicResist: 0.75,
+    bounty: 34,
+    radius: 12,
+    color: '#e05a8a',
+    desc: '마법 저항 75%. 후반부 마법탑 몰빵 빌드를 응징한다.',
+  }),
+  sentinel: def({
+    id: 'sentinel',
+    name: '수정 감시자',
+    maxHp: 380,
+    speed: 2.6,
+    armor: 14,
+    bounty: 38,
+    radius: 13,
+    color: '#7f9cf5',
+    flying: true,
+    desc: '중장갑 공중 유닛. 대포는 못 때리고 궁수는 긁히지도 않는다.',
+  }),
+  overlord: def({
+    id: 'overlord',
+    name: '마왕 그라즈',
+    maxHp: 3200,
+    speed: 1.15,
+    armor: 12,
+    magicResist: 0.4,
+    bounty: 220,
+    leak: 10,
+    radius: 22,
+    color: '#c8332f',
+    boss: true,
+    desc: '최종 보스. 모든 방어를 갖췄다 — 조합과 감속 없이는 절대 못 잡는다.',
+  }),
+}
+
+export function getEnemyDef(id: string): EnemyDef {
+  const found = ENEMY_DEFS[id]
+  if (!found) throw new Error(`알 수 없는 적 ID: ${id}`)
+  return found
+}

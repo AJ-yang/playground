@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>왕국 방어전 — Tower Defense</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e1117;
+        --fg: #e6edf3;
+        --muted: #8b949e;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'Malgun Gothic', system-ui, sans-serif;
+      }
+      #app {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 16px;
+      }
+      canvas {
+        display: block;
+        max-width: 100%;
+        border-radius: 10px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+        touch-action: none;
+        cursor: pointer;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+        text-align: center;
+        line-height: 1.7;
+      }
+      kbd {
+        background: #21262d;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 11px;
+        font-family: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game"></canvas>
+      <p class="hint">
+        <kbd>1</kbd>–<kbd>4</kbd> 타워 선택 &nbsp;·&nbsp; <kbd>Esc</kbd> 취소 &nbsp;·&nbsp;
+        <kbd>Space</kbd> 다음 웨이브 &nbsp;·&nbsp; <kbd>P</kbd> 일시정지 &nbsp;·&nbsp;
+        <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>배속은 상단 버튼<br />
+        타워 선택 후 빈 땅을 클릭해 건설 · 건설된 타워를 클릭하면 업그레이드 / 판매 / 타겟팅 변경
+      </p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
