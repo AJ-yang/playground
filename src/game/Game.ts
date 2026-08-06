@@ -41,12 +41,16 @@ export class Game {
 
   gold: number
   lives: number
+  /** 외부에서는 읽기만 한다. 변경은 setPhase()를 거친다. */
   phase: GamePhase = 'prep'
 
   /** 통계 */
   totalKills = 0
   totalLeaked = 0
   goldEarned = 0
+  goldSpent = 0
+  /** 조기 소환으로 얻은 누적 보너스 골드 */
+  earlyCallBonus = 0
 
   /** 건설 대기 중인 타워 ID (null이면 건설 모드 아님) */
   selectedBuildId: string | null = null
@@ -122,41 +126,51 @@ export class Game {
     this.towers.push(tower)
     this.grid.occupy(col, row, tower.id)
     this.gold -= cost
+    this.goldSpent += cost
 
     this.effects.blast(center, TILE_SIZE * 0.7, getTowerDef(towerId).accent, 0.28)
     this.selectedTower = tower
     return { ok: true }
   }
 
-  upgradeSelected(): BuildResult {
-    const tower = this.selectedTower
-    if (!tower) return { ok: false, reason: '선택된 타워가 없습니다' }
+  upgradeTower(tower: Tower): BuildResult {
+    if (this.isOver) return { ok: false, reason: '게임이 끝났습니다' }
     if (tower.isMaxLevel) return { ok: false, reason: '이미 최대 레벨입니다' }
 
     const cost = tower.upgradeCost!
     if (this.gold < cost) return { ok: false, reason: `골드가 ${cost - this.gold} 부족합니다` }
 
     this.gold -= cost
+    this.goldSpent += cost
     tower.upgrade()
     this.effects.blast(tower.pos, TILE_SIZE * 0.9, tower.def.accent, 0.3)
     this.effects.text(tower.pos, `Lv.${tower.level}`, tower.def.accent)
     return { ok: true }
   }
 
-  sellSelected(): BuildResult {
-    const tower = this.selectedTower
-    if (!tower) return { ok: false, reason: '선택된 타워가 없습니다' }
-
+  sellTower(tower: Tower): BuildResult {
     const refund = tower.sellValue()
     this.gold += refund
     this.grid.vacate(tower.col, tower.row)
     const index = this.towers.indexOf(tower)
     if (index >= 0) this.towers.splice(index, 1)
-    this.selectedTower = null
+    if (this.selectedTower === tower) this.selectedTower = null
 
     this.effects.burst(tower.pos, '#c9a227', 8, 70)
     this.effects.text(tower.pos, `+${refund}G`, '#f0c674')
     return { ok: true }
+  }
+
+  upgradeSelected(): BuildResult {
+    const tower = this.selectedTower
+    if (!tower) return { ok: false, reason: '선택된 타워가 없습니다' }
+    return this.upgradeTower(tower)
+  }
+
+  sellSelected(): BuildResult {
+    const tower = this.selectedTower
+    if (!tower) return { ok: false, reason: '선택된 타워가 없습니다' }
+    return this.sellTower(tower)
   }
 
   cycleSelectedTargeting(): void {
@@ -171,13 +185,27 @@ export class Game {
     if (bonus > 0) {
       this.gold += bonus
       this.goldEarned += bonus
+      this.earlyCallBonus += bonus
       const spawn = this.path.positionAt(0)
       this.effects.text({ x: spawn.x + 40, y: spawn.y }, `조기 소환 +${bonus}G`, '#f0c674', 1.4)
     }
-    this.phase = 'wave'
+    this.setPhase('wave')
   }
 
   // ────────────────────────────── 시뮬레이션 ──────────────────────────────
+
+  /**
+   * 상태 전이의 단일 창구.
+   *
+   * 승리·패배는 종착 상태다. 한번 확정되면 같은 프레임의 뒤쪽 단계나
+   * 다음 프레임이 절대 되돌릴 수 없어야 한다 — 이 가드가 없으면 마지막
+   * 적이 유출되며 생명이 0이 된 직후 웨이브 클리어 처리가 phase를 'prep'으로
+   * 덮어써서, 생명 0인 채로 게임이 계속되는 상태가 만들어진다.
+   */
+  private setPhase(next: GamePhase): void {
+    if (this.phase === 'victory' || this.phase === 'defeat') return
+    this.phase = next
+  }
 
   update(dt: number): void {
     this.effects.update(dt)
@@ -185,6 +213,8 @@ export class Game {
 
     this.updateWaves(dt)
     this.updateEnemies(dt)
+    // 이번 스텝에 패배가 확정됐다면 즉시 멈춘다.
+    if (this.isOver) return
     this.updateTowers(dt)
     this.updateProjectiles(dt)
     this.cleanup()
@@ -193,7 +223,7 @@ export class Game {
 
   private updateWaves(dt: number): void {
     const due = this.waves.update(dt)
-    this.phase = this.waves.running ? 'wave' : 'prep'
+    this.setPhase(this.waves.running ? 'wave' : 'prep')
 
     for (const enemyId of due) {
       const def = getEnemyDef(enemyId)
@@ -215,7 +245,7 @@ export class Game {
         this.effects.text(end, `-${enemy.def.leak}`, '#ff6b6b', 1.2)
         if (this.lives <= 0) {
           this.lives = 0
-          this.phase = 'defeat'
+          this.setPhase('defeat')
         }
       }
     }
@@ -298,12 +328,12 @@ export class Game {
     this.effects.text(end, `웨이브 클리어 +${reward}G`, '#8bd450', 1.6)
 
     if (this.waves.isFinalWave) {
-      this.phase = 'victory'
+      this.setPhase('victory')
       this.waves.running = false
       return
     }
     this.waves.completeWave()
-    this.phase = 'prep'
+    this.setPhase('prep')
   }
 
   // ────────────────────────────── 조회 헬퍼 ──────────────────────────────

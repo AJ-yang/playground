@@ -16,6 +16,7 @@ npm run dev        # http://localhost:5173
 npm run typecheck  # 타입 검사
 npm run build      # dist/ 로 프로덕션 빌드
 npm run preview    # 빌드 결과 확인
+npm run sim        # 헤드리스 밸런스 검증 (렌더링 없이 수백 판을 돌린다)
 ```
 
 ## 조작
@@ -47,7 +48,7 @@ npm run preview    # 빌드 결과 확인
 | 궁수탑 | 70G | 물리 | ○ | 골드 대비 DPS 1위. 장갑 앞에서 무력 |
 | 마법탑 | 110G | 마법 | ○ | 장갑 완전 무시. 느리고 비싸며 마법저항에 막힘 |
 | 대포탑 | 130G | 물리·광역 | **✕** | 지상 물량 정리. 발사가 매우 느림 |
-| 얼음탑 | 90G | 마법·광역 | ○ | 딜은 없고 범위 감속. 다른 타워의 DPS를 끌어올린다 |
+| 얼음탑 | 75G | 마법·광역 | ○ | 딜은 없고 범위 감속(−55~78%, 4~7초). 다른 타워의 DPS를 끌어올린다 |
 
 ## 구조
 
@@ -61,5 +62,22 @@ src/
 ```
 
 밸런스를 조정하려면 `src/data/` 아래 파일만 고치면 된다.
-설계 의도와 참고 게임 분석은 [`docs/GDD.md`](docs/GDD.md),
-다음 작업 계획은 [`docs/ROADMAP.md`](docs/ROADMAP.md).
+고친 뒤에는 `npm run sim -- --runs 30`으로 재검증하고 [`docs/BALANCE.md`](docs/BALANCE.md) 5장 표를 갱신할 것.
+
+- [`docs/GDD.md`](docs/GDD.md) — 설계 의도와 참고 게임 분석
+- [`docs/BALANCE.md`](docs/BALANCE.md) — 밸런스 검증 방법·결과·근거
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — 다음 작업 계획
+
+## 밸런스 검증
+
+`npm run sim`은 브라우저와 **같은 `Game` 클래스를 같은 고정 타임스텝**으로 렌더링 없이 돌린다.
+빌드 방침만 다른 대조군 AI 13종 × 30판을 약 50초에 끝낸다.
+
+```bash
+npm run sim -- --runs 50           # 시드 수 지정
+npm run sim -- --only balanced     # 특정 전략만
+npm run sim -- --audit             # 웨이브별 압박·수입 곡선
+npm run sim -- --income 1.3        # 수입 배율 스윕 (튜닝용)
+```
+
+현재 검증 결과: 몰빵 빌드 4종 전부 0% 클리어(W2~W14에서 저지), 조합 빌드 87~100% 클리어.

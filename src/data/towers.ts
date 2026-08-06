@@ -65,9 +65,9 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     tagline: '싸고 빠른 단일 물리',
     desc: '골드 대비 DPS가 가장 좋다. 다만 물리 데미지라 장갑 앞에서는 딜이 거의 사라진다.',
     levels: [
-      lvl({ cost: 70, damage: 13, range: 3.2, fireRate: 1.7, projectileSpeed: 18 }),
-      lvl({ cost: 60, damage: 22, range: 3.6, fireRate: 2.0, projectileSpeed: 18 }),
-      lvl({ cost: 115, damage: 36, range: 4.0, fireRate: 2.3, projectileSpeed: 20 }),
+      lvl({ cost: 70, damage: 10, range: 3.2, fireRate: 1.9, projectileSpeed: 18 }),
+      lvl({ cost: 60, damage: 16, range: 3.6, fireRate: 2.3, projectileSpeed: 18 }),
+      lvl({ cost: 115, damage: 24, range: 4.0, fireRate: 2.7, projectileSpeed: 20 }),
     ],
   },
   mage: {
@@ -113,9 +113,9 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     tagline: '광역 감속 서포터',
     desc: '딜은 거의 없지만 범위 안의 적을 느리게 만든다. 다른 타워의 유효 사거리 체류 시간을 늘려 전체 DPS를 올리는 핵심 축.',
     levels: [
-      lvl({ cost: 90, damage: 6, range: 2.8, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.0, slowAmount: 0.45, slowDuration: 1.6 }),
-      lvl({ cost: 85, damage: 11, range: 3.0, fireRate: 1.1, projectileSpeed: 16, splashRadius: 1.2, slowAmount: 0.55, slowDuration: 1.9 }),
-      lvl({ cost: 150, damage: 18, range: 3.3, fireRate: 1.2, projectileSpeed: 18, splashRadius: 1.45, slowAmount: 0.65, slowDuration: 2.2 }),
+      lvl({ cost: 75, damage: 3, range: 3.2, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.1, slowAmount: 0.55, slowDuration: 4.0 }),
+      lvl({ cost: 70, damage: 5, range: 3.5, fireRate: 1.1, projectileSpeed: 16, splashRadius: 1.3, slowAmount: 0.68, slowDuration: 5.5 }),
+      lvl({ cost: 125, damage: 8, range: 3.8, fireRate: 1.2, projectileSpeed: 18, splashRadius: 1.55, slowAmount: 0.78, slowDuration: 7.0 }),
     ],
   },
 }
