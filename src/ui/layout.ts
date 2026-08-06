@@ -1,5 +1,4 @@
 import { TILE_SIZE } from '../game/Game'
-import type { LevelDef } from '../data/levels'
 
 /** 화면 영역 정의. 렌더러와 입력 처리가 같은 좌표계를 쓰도록 한 곳에 모은다. */
 export interface Layout {
@@ -15,9 +14,9 @@ export const HUD_HEIGHT = 58
 export const PANEL_WIDTH = 250
 const BOARD_MARGIN = 10
 
-export function computeLayout(level: LevelDef): Layout {
-  const boardW = level.cols * TILE_SIZE
-  const boardH = level.rows * TILE_SIZE
+export function computeLayout(cols: number, rows: number): Layout {
+  const boardW = cols * TILE_SIZE
+  const boardH = rows * TILE_SIZE
   const width = boardW + PANEL_WIDTH + BOARD_MARGIN * 2
   const height = HUD_HEIGHT + boardH + BOARD_MARGIN * 2
 

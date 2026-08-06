@@ -28,13 +28,16 @@ const SAMPLE_STEP = 8
  * 수십 배 느려지고, 순위는 거의 바뀌지 않는다.
  */
 export function rankSpots(game: Game): Spot[] {
-  const { path, grid } = game
+  const { paths, grid } = game
   const rangeSq = (REFERENCE_RANGE * TILE_SIZE) ** 2
 
-  // 경로 샘플을 미리 뽑아둔다.
+  // 모든 경로의 샘플을 미리 뽑아둔다. 다중 경로 맵에서는 두 갈래를 동시에
+  // 덮는 자리가 가장 값진데, 경로별로 따로 재면 그 자리를 찾지 못한다.
   const samples: Array<{ pos: Vec2; d: number }> = []
-  for (let d = 0; d <= path.totalLength; d += SAMPLE_STEP) {
-    samples.push({ pos: path.positionAt(d), d })
+  for (const path of paths) {
+    for (let d = 0; d <= path.totalLength; d += SAMPLE_STEP) {
+      samples.push({ pos: path.positionAt(d), d })
+    }
   }
 
   const spots: Spot[] = []

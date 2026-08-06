@@ -15,6 +15,8 @@ export interface ProjectileSpec {
   splashRadius: number
   slowAmount: number
   slowDuration: number
+  poisonDps: number
+  poisonDuration: number
   color: string
   radius: number
 }

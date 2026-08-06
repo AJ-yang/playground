@@ -6,13 +6,17 @@ import type { Path } from './Path'
 /**
  * 적 개체.
  *
+ * 자기가 달리는 경로를 직접 들고 있다. 맵에 경로가 여러 개가 되면서 "이 적이
+ * 어느 길로 가는가"를 호출부마다 넘겨주는 방식은 인자만 늘고 실수하기 쉬웠다.
+ *
  * 위치는 경로 상의 진행도(distance) 하나로 관리하고, 픽셀 좌표는 매 스텝
- * Path에서 파생시킨다. 감속은 "가장 강한 감속 하나만 적용"하는 방식으로,
- * 얼음탑을 여러 개 겹쳐도 무한히 느려지지 않게 했다.
+ * Path에서 파생시킨다. 상태 이상(감속·중독)은 모두 "가장 강한 것 하나만 적용"
+ * 하는 방식이라, 같은 종류의 타워를 겹쳐 지어도 효과가 무한히 쌓이지 않는다.
  */
 export class Enemy {
   readonly id: number
   readonly def: EnemyDef
+  readonly path: Path
   hp: number
   /** 경로를 따라 진행한 거리 (픽셀) */
   distance: number
@@ -20,16 +24,26 @@ export class Enemy {
   alive = true
   /** 목표 지점에 도달해 생명을 깎았는가 */
   leaked = false
+  /** 중독으로 죽었는가 — 처치 보상 처리를 구분하기 위해 */
+  killedByPoison = false
 
   /** 현재 적용 중인 감속 배율 (1이면 감속 없음) */
   private slowFactor = 1
   private slowTimer = 0
+  /** 현재 적용 중인 중독 초당 피해 */
+  private poisonDps = 0
+  private poisonTimer = 0
+  /** 중독을 건 타워 ID. 지속 피해를 그 타워의 기여도로 정산하기 위해 필요하다. */
+  poisonSourceTowerId = -1
+  /** 이번 스텝에 중독으로 들어간 피해 — Game이 읽어 타워에 귀속시킨다. */
+  poisonTickDamage = 0
   /** 피격 시 잠깐 밝게 번쩍이는 연출용 타이머 */
   flashTimer = 0
 
   constructor(id: number, def: EnemyDef, path: Path, spawnOffset = 0) {
     this.id = id
     this.def = def
+    this.path = path
     this.hp = def.maxHp
     this.distance = -spawnOffset
     this.pos = path.positionAt(0)
@@ -45,6 +59,21 @@ export class Enemy {
 
   get isSlowed(): boolean {
     return this.slowTimer > 0
+  }
+
+  get isPoisoned(): boolean {
+    return this.poisonTimer > 0
+  }
+
+  /**
+   * 왕성까지 남은 거리.
+   *
+   * 선두/후미 타겟팅의 기준이다. 경로가 여러 개면 길이가 서로 다르므로
+   * 진행 거리(distance)를 그대로 비교하면 짧은 경로의 적이 항상 뒤처진
+   * 것처럼 보인다. "얼마나 남았는가"로 비교해야 맵이 몇 갈래든 의미가 같다.
+   */
+  get remaining(): number {
+    return this.path.totalLength - this.distance
   }
 
   /** 이 적이 해당 타워의 타겟팅 대상에서 제외되는가 (공중 유닛 판정). */
@@ -69,6 +98,18 @@ export class Enemy {
       this.slowTimer = duration
     } else {
       this.slowTimer = Math.max(this.slowTimer, duration)
+    }
+  }
+
+  /** 중독 적용. 감속과 같은 규칙 — 더 센 것만 덮어쓰고, 약한 것은 지속만 늘린다. */
+  applyPoison(dps: number, duration: number, sourceTowerId = -1): void {
+    if (dps <= 0 || duration <= 0) return
+    if (dps > this.poisonDps) {
+      this.poisonDps = dps
+      this.poisonTimer = duration
+      this.poisonSourceTowerId = sourceTowerId
+    } else {
+      this.poisonTimer = Math.max(this.poisonTimer, duration)
     }
   }
 
@@ -102,14 +143,29 @@ export class Enemy {
     return dealt
   }
 
-  update(dt: number, path: Path, tileSize: number): void {
+  update(dt: number, tileSize: number): void {
     if (this.slowTimer > 0) this.slowTimer -= dt
     if (this.flashTimer > 0) this.flashTimer -= dt
 
-    this.distance += this.currentSpeed(tileSize) * dt
-    this.pos = path.positionAt(this.distance)
+    // 중독은 순수 피해라 장갑·마법저항을 통과한다.
+    this.poisonTickDamage = 0
+    if (this.poisonTimer > 0) {
+      this.poisonTimer -= dt
+      const tick = Math.min(this.hp, this.poisonDps * dt)
+      this.poisonTickDamage = tick
+      this.hp -= this.poisonDps * dt
+      if (this.hp <= 0) {
+        this.hp = 0
+        this.alive = false
+        this.killedByPoison = true
+        return
+      }
+    }
 
-    if (this.distance >= path.totalLength) {
+    this.distance += this.currentSpeed(tileSize) * dt
+    this.pos = this.path.positionAt(this.distance)
+
+    if (this.distance >= this.path.totalLength) {
       this.leaked = true
       this.alive = false
     }
@@ -119,7 +175,7 @@ export class Enemy {
    * dt초 뒤 예상 위치. 대포탑처럼 투사체가 느린 타워의 예측 사격에 쓴다.
    * 감속 지속시간까지 고려하지는 않는다 — 그 정도 오차는 광역 폭발이 흡수한다.
    */
-  predictPosition(dt: number, path: Path, tileSize: number): Vec2 {
-    return path.positionAt(this.distance + this.currentSpeed(tileSize) * dt)
+  predictPosition(dt: number, tileSize: number): Vec2 {
+    return this.path.positionAt(this.distance + this.currentSpeed(tileSize) * dt)
   }
 }

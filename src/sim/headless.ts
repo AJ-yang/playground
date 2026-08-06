@@ -1,6 +1,5 @@
 import { FIXED_DT } from '../core/loop'
-import { LEVEL_ONE } from '../data/levels'
-import { TOTAL_WAVES } from '../data/waves'
+import type { StageDef } from '../data/stages'
 import { Game } from '../game/Game'
 import { rankSpots } from './coverage'
 import { act, type Strategy } from './strategies'
@@ -8,6 +7,7 @@ import { act, type Strategy } from './strategies'
 /** 한 판의 결과. */
 export interface SimResult {
   strategyId: string
+  stageId: string
   seed: number
   victory: boolean
   /** 클리어한 웨이브 수 (승리 시 20) */
@@ -44,8 +44,13 @@ const THINK_INTERVAL = 0.5
  * 여기서 나온 수치는 실제 플레이의 수치다. 시드가 같고 전략이 결정적이면
  * 결과도 항상 같다.
  */
-export function simulate(strategy: Strategy, seed: number): SimResult {
-  const game = new Game(LEVEL_ONE, seed)
+export function simulate(
+  strategy: Strategy,
+  seed: number,
+  stage: StageDef,
+  availableTowers: readonly string[],
+): SimResult {
+  const game = new Game(stage, { seed, availableTowers })
   const spots = rankSpots(game)
 
   let elapsed = 0
@@ -93,9 +98,10 @@ export function simulate(strategy: Strategy, seed: number): SimResult {
   const victory = game.phase === 'victory'
   return {
     strategyId: strategy.id,
+    stageId: stage.id,
     seed,
     victory,
-    wavesCleared: victory ? TOTAL_WAVES : Math.max(0, game.waves.waveNumber - 1),
+    wavesCleared: victory ? game.waves.totalWaves : Math.max(0, game.waves.waveNumber - 1),
     livesLeft: game.lives,
     totalKills: game.totalKills,
     totalLeaked: game.totalLeaked,

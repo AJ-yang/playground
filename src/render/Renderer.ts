@@ -66,7 +66,7 @@ export class Renderer {
     canvas.width = board.w
     canvas.height = board.h
     const ctx = canvas.getContext('2d')!
-    const { grid, path } = game
+    const { grid, paths } = game
 
     // 잔디 체크무늬
     for (let row = 0; row < grid.rows; row++) {
@@ -93,20 +93,24 @@ export class Renderer {
     }
 
     // 경로: 두꺼운 폴리라인 위에 밝은 안쪽 선을 겹쳐 흙길처럼 보이게 한다.
-    const stroke = (width: number, color: string) => {
+    // 경로가 여러 개면 겹치는 구간이 생기는데, 전부 먼저 어둡게 깐 뒤
+    // 밝은 안쪽 선을 얹어야 합류 지점이 하나의 길로 자연스럽게 이어진다.
+    const strokeAll = (width: number, color: string) => {
       ctx.strokeStyle = color
       ctx.lineWidth = width
       ctx.lineJoin = 'round'
       ctx.lineCap = 'round'
-      ctx.beginPath()
-      path.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
-      ctx.stroke()
+      for (const p of paths) {
+        ctx.beginPath()
+        p.points.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)))
+        ctx.stroke()
+      }
     }
-    stroke(TILE_SIZE, PALETTE.pathOuter)
-    stroke(TILE_SIZE - 10, PALETTE.pathInner)
+    strokeAll(TILE_SIZE, PALETTE.pathOuter)
+    strokeAll(TILE_SIZE - 10, PALETTE.pathInner)
 
     ctx.setLineDash([6, 12])
-    stroke(2, PALETTE.pathDash)
+    strokeAll(2, PALETTE.pathDash)
     ctx.setLineDash([])
 
     // 장애물 바위
@@ -130,14 +134,22 @@ export class Renderer {
       }
     }
 
-    // 출발지 / 목표 표식
-    const start = path.positionAt(0)
-    const end = path.positionAt(path.totalLength)
-    ctx.fillStyle = 'rgba(255,107,107,0.9)'
+    // 출발지 표식 — 경로마다 하나씩. 다중 경로 맵에서 어디를 막아야 하는지
+    // 준비 단계에 바로 보여야 한다.
     ctx.font = FONT.label
-    ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    ctx.fillText('▶ 적 출현', Math.max(6, start.x + 8), start.y - 26)
+    paths.forEach((p, i) => {
+      const start = p.positionAt(0)
+      ctx.fillStyle = 'rgba(255,107,107,0.9)'
+      ctx.textAlign = 'left'
+      const label = paths.length > 1 ? `▶ 출현 ${i + 1}` : '▶ 적 출현'
+      // 화면 밖에서 들어오는 경로는 라벨이 잘리지 않도록 안쪽으로 당긴다.
+      const lx = Math.min(Math.max(6, start.x + 8), board.w - 76)
+      const ly = Math.min(Math.max(16, start.y - 26), board.h - 10)
+      ctx.fillText(label, lx, ly)
+    })
+
+    const end = paths[0]!.positionAt(paths[0]!.totalLength)
     ctx.textAlign = 'right'
     ctx.fillStyle = 'rgba(90,169,230,0.95)'
     ctx.fillText('왕성 ◀', Math.min(board.w - 6, end.x - 6), end.y - 26)
@@ -278,6 +290,25 @@ export class Renderer {
         ctx.stroke()
         break
 
+      case 'flask': {
+        // 흔들리는 약병 — 던지는 무기라는 인상을 준다.
+        const wobble = Math.sin(time * 4) * 0.25
+        ctx.rotate(wobble)
+        ctx.beginPath()
+        ctx.moveTo(2, -5)
+        ctx.lineTo(11, -3.5)
+        ctx.lineTo(11, 3.5)
+        ctx.lineTo(2, 5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.rect(-3, -2.5, 5, 5)
+        ctx.fill()
+        ctx.stroke()
+        break
+      }
+
       case 'crystal': {
         const spin = time * 1.2
         ctx.rotate(spin)
@@ -298,7 +329,7 @@ export class Renderer {
     for (const enemy of game.enemies) {
       if (enemy.distance < 0) continue
       // 쐐기 실루엣과 날개는 진행 방향을 따라야 한다.
-      const dir = game.path.directionAt(enemy.distance)
+      const dir = enemy.path.directionAt(enemy.distance)
       this.drawEnemy(enemy, Math.atan2(dir.y, dir.x), time)
     }
   }
@@ -389,6 +420,16 @@ export class Renderer {
       ctx.beginPath()
       ctx.arc(pos.x, bodyY, r * 1.55, 0, Math.PI * 2)
       ctx.stroke()
+    }
+    // 중독 표식 — 방어를 무시하고 계속 깎이는 중이라는 신호
+    if (enemy.isPoisoned) {
+      ctx.strokeStyle = 'rgba(182,240,106,0.9)'
+      ctx.lineWidth = 2
+      ctx.setLineDash([2, 4])
+      ctx.beginPath()
+      ctx.arc(pos.x, bodyY, r * 1.75, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
     }
 
     // HP 바 — 만피일 때는 숨겨서 화면을 덜 어지럽게 한다
@@ -492,7 +533,7 @@ export class Renderer {
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted
     const lines = [
-      `도달 웨이브 ${Math.min(game.waves.waveNumber, 20)} / 20`,
+      `도달 웨이브 ${Math.min(game.waves.waveNumber, game.waves.totalWaves)} / ${game.waves.totalWaves}`,
       `처치 ${game.totalKills} · 유출 ${game.totalLeaked} · 누적 획득 ${game.goldEarned}G`,
       `남은 생명 ${game.lives} · 건설한 타워 ${game.towers.length}`,
     ]

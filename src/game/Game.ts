@@ -3,8 +3,8 @@ import type { Vec2 } from '../core/vec2'
 import { Rng } from '../core/rng'
 import { getEnemyDef } from '../data/enemies'
 import { getTowerDef, buildCost, TOWER_ORDER } from '../data/towers'
-import { EARLY_CALL_GOLD_PER_SECOND, TOTAL_WAVES } from '../data/waves'
-import type { LevelDef } from '../data/levels'
+import { EARLY_CALL_GOLD_PER_SECOND } from '../data/waves'
+import type { StageDef } from '../data/stages'
 import { Enemy } from './Enemy'
 import { Effects } from './Effects'
 import { Grid } from './Grid'
@@ -19,8 +19,14 @@ export const TILE_SIZE = 40
 /** 건설 시도 결과 — UI가 실패 사유를 그대로 보여줄 수 있게 문자열을 돌려준다. */
 export type BuildResult = { ok: true } | { ok: false; reason: string }
 
+export interface GameOptions {
+  seed?: number
+  /** 이번 판에 건설할 수 있는 타워. 생략하면 전부 허용한다. */
+  availableTowers?: readonly string[]
+}
+
 /**
- * 게임 상태 전체를 소유하는 오케스트레이터.
+ * 한 스테이지의 상태 전체를 소유하는 오케스트레이터.
  *
  * 규칙: 상태 변경은 반드시 이 클래스를 거친다. 렌더러와 UI는 여기를
  * 읽기만 하고, 입력은 명령 메서드(tryBuild/upgrade/sell/...)로만 들어온다.
@@ -28,11 +34,14 @@ export type BuildResult = { ok: true } | { ok: false; reason: string }
  * 손댈 곳이 이 파일 하나로 좁혀진다.
  */
 export class Game {
-  readonly level: LevelDef
+  readonly stage: StageDef
   readonly grid: Grid
-  readonly path: Path
-  readonly waves = new WaveManager()
+  /** 맵의 경로들. 적은 각자 하나를 배정받아 달린다. */
+  readonly paths: Path[]
+  readonly waves: WaveManager
   readonly effects = new Effects()
+  /** 이번 판에 건설 가능한 타워 ID */
+  readonly availableTowers: readonly string[]
   private readonly rng: Rng
 
   readonly enemies: Enemy[] = []
@@ -61,16 +70,23 @@ export class Game {
 
   private nextEntityId = 1
 
-  constructor(level: LevelDef, seed = 20240816) {
-    this.level = level
-    this.rng = new Rng(seed)
-    this.grid = new Grid(level.cols, level.rows, TILE_SIZE)
-    this.path = new Path(level.waypoints, TILE_SIZE)
-    this.gold = level.startGold
-    this.lives = level.startLives
+  constructor(stage: StageDef, options: GameOptions = {}) {
+    this.stage = stage
+    this.rng = new Rng(options.seed ?? 20240816)
+    this.availableTowers = options.availableTowers ?? TOWER_ORDER
+    this.waves = new WaveManager(stage.waves)
 
-    for (const tile of this.path.occupiedTiles(level.waypoints)) {
-      this.grid.setKind(tile.x, tile.y, 'path')
+    const level = stage.level
+    this.grid = new Grid(level.cols, level.rows, TILE_SIZE)
+    this.paths = level.routes.map((route) => new Path(route, TILE_SIZE))
+    this.gold = stage.startGold
+    this.lives = stage.startLives
+
+    // 모든 경로가 지나는 타일은 건설 불가. 경로끼리 겹쳐도 문제없다.
+    for (let i = 0; i < level.routes.length; i++) {
+      for (const tile of this.paths[i]!.occupiedTiles(level.routes[i]!)) {
+        this.grid.setKind(tile.x, tile.y, 'path')
+      }
     }
     for (const tile of level.blocked) {
       // 경로 타일을 실수로 덮어쓰지 않도록 확인한다.
@@ -84,10 +100,19 @@ export class Game {
     return this.phase === 'victory' || this.phase === 'defeat'
   }
 
+  /** 첫 번째 경로. 왕성 표식처럼 "대표 경로" 하나가 필요할 때 쓴다. */
+  get mainPath(): Path {
+    return this.paths[0]!
+  }
+
+  canUse(towerId: string): boolean {
+    return this.availableTowers.includes(towerId)
+  }
+
   // ────────────────────────────── 명령 (UI → 게임) ──────────────────────────────
 
   selectBuild(towerId: string | null): void {
-    if (towerId !== null && !TOWER_ORDER.includes(towerId)) return
+    if (towerId !== null && !this.canUse(towerId)) return
     this.selectedBuildId = towerId
     if (towerId !== null) this.selectedTower = null
   }
@@ -111,6 +136,7 @@ export class Game {
 
   tryBuild(towerId: string, col: number, row: number): BuildResult {
     if (this.isOver) return { ok: false, reason: '게임이 끝났습니다' }
+    if (!this.canUse(towerId)) return { ok: false, reason: '아직 해금되지 않은 타워입니다' }
     if (!this.grid.inBounds(col, row)) return { ok: false, reason: '맵 밖입니다' }
 
     const kind = this.grid.kindAt(col, row)
@@ -186,7 +212,7 @@ export class Game {
       this.gold += bonus
       this.goldEarned += bonus
       this.earlyCallBonus += bonus
-      const spawn = this.path.positionAt(0)
+      const spawn = this.mainPath.positionAt(0)
       this.effects.text({ x: spawn.x + 40, y: spawn.y }, `조기 소환 +${bonus}G`, '#f0c674', 1.4)
     }
     this.setPhase('wave')
@@ -225,23 +251,37 @@ export class Game {
     const due = this.waves.update(dt)
     this.setPhase(this.waves.running ? 'wave' : 'prep')
 
-    for (const enemyId of due) {
-      const def = getEnemyDef(enemyId)
+    for (const spawn of due) {
+      const def = getEnemyDef(spawn.enemy)
+      const path = this.paths[spawn.route] ?? this.mainPath
       // 같은 타이밍에 여러 마리가 겹쳐 보이지 않도록 살짝 흩뿌린다.
       const jitter = this.rng.range(0, TILE_SIZE * 0.6)
-      this.enemies.push(new Enemy(this.nextEntityId++, def, this.path, jitter))
+      this.enemies.push(new Enemy(this.nextEntityId++, def, path, jitter))
     }
   }
 
   private updateEnemies(dt: number): void {
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue
-      enemy.update(dt, this.path, TILE_SIZE)
+      enemy.update(dt, TILE_SIZE)
+
+      // 중독 피해도 건 타워의 기여도로 잡는다. 그러지 않으면 지속 피해 타워의
+      // 딜 점유율이 실제보다 훨씬 낮게 보여 밸런스 판단을 그르친다.
+      if (enemy.poisonTickDamage > 0 && enemy.poisonSourceTowerId >= 0) {
+        const source = this.towers.find((t) => t.id === enemy.poisonSourceTowerId)
+        if (source) source.damageDealt += enemy.poisonTickDamage
+      }
+
+      // 중독으로 죽은 적은 쏜 타워가 없으므로 여기서 보상을 정산한다.
+      if (!enemy.alive && enemy.killedByPoison) {
+        this.rewardKill(enemy, undefined)
+        continue
+      }
 
       if (enemy.leaked) {
         this.lives -= enemy.def.leak
         this.totalLeaked++
-        const end = this.path.positionAt(this.path.totalLength)
+        const end = enemy.path.positionAt(enemy.path.totalLength)
         this.effects.text(end, `-${enemy.def.leak}`, '#ff6b6b', 1.2)
         if (this.lives <= 0) {
           this.lives = 0
@@ -253,7 +293,7 @@ export class Game {
 
   private updateTowers(dt: number): void {
     for (const tower of this.towers) {
-      const shot = tower.update(dt, this.enemies, this.path, TILE_SIZE)
+      const shot = tower.update(dt, this.enemies, TILE_SIZE)
       if (shot) {
         shot.sourceTowerId = tower.id
         this.projectiles.push(shot)
@@ -269,7 +309,7 @@ export class Game {
     }
   }
 
-  /** 착탄 판정. 데미지·감속·보상이 전부 여기서 결정된다. */
+  /** 착탄 판정. 데미지·감속·중독·보상이 전부 여기서 결정된다. */
   private resolveImpact(projectile: Projectile): void {
     projectile.dead = true
     const spec = projectile.spec
@@ -279,6 +319,7 @@ export class Game {
       const dealt = enemy.takeDamage(spec.damage, spec.damageType)
       if (source) source.damageDealt += dealt
       enemy.applySlow(spec.slowAmount, spec.slowDuration)
+      enemy.applyPoison(spec.poisonDps, spec.poisonDuration, projectile.sourceTowerId)
       if (!enemy.alive && !enemy.leaked) this.rewardKill(enemy, source)
     }
 
@@ -324,8 +365,8 @@ export class Game {
     const reward = this.waves.currentWave.reward
     this.gold += reward
     this.goldEarned += reward
-    const end = this.path.positionAt(this.path.totalLength * 0.5)
-    this.effects.text(end, `웨이브 클리어 +${reward}G`, '#8bd450', 1.6)
+    const mid = this.mainPath.positionAt(this.mainPath.totalLength * 0.5)
+    this.effects.text(mid, `웨이브 클리어 +${reward}G`, '#8bd450', 1.6)
 
     if (this.waves.isFinalWave) {
       this.setPhase('victory')
@@ -337,11 +378,6 @@ export class Game {
   }
 
   // ────────────────────────────── 조회 헬퍼 ──────────────────────────────
-
-  /** HUD 표시용 진행률 (0~1). */
-  get campaignProgress(): number {
-    return Math.min(1, (this.waves.waveNumber - 1) / TOTAL_WAVES)
-  }
 
   /** 현재 건설 모드에서 hoverTile에 지을 수 있는지 여부. */
   get hoverBuildable(): boolean {

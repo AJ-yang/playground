@@ -3,7 +3,6 @@ import { dist2 } from '../core/vec2'
 import { getTowerDef, SELL_REFUND_RATIO, type TowerDef, type TowerLevelDef } from '../data/towers'
 import type { TargetPriority } from './types'
 import type { Enemy } from './Enemy'
-import type { Path } from './Path'
 import { Projectile, type ProjectileSpec } from './Projectile'
 
 export const MAX_TOWER_LEVEL = 3
@@ -89,7 +88,7 @@ export class Tower {
   /**
    * 한 스텝 진행. 사거리 안에 적이 있고 쿨다운이 끝났으면 투사체를 반환한다.
    */
-  update(dt: number, enemies: readonly Enemy[], path: Path, tileSize: number): Projectile | null {
+  update(dt: number, enemies: readonly Enemy[], tileSize: number): Projectile | null {
     if (this.cooldown > 0) this.cooldown -= dt
     if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 6)
 
@@ -102,10 +101,10 @@ export class Tower {
     if (this.cooldown > 0) return null
     this.cooldown = 1 / this.stats.fireRate
     this.recoil = 1
-    return this.fire(target, path, tileSize)
+    return this.fire(target, tileSize)
   }
 
-  private fire(target: Enemy, path: Path, tileSize: number): Projectile {
+  private fire(target: Enemy, tileSize: number): Projectile {
     const stats = this.stats
     const speedPx = stats.projectileSpeed * tileSize
     const isSplash = stats.splashRadius > 0
@@ -114,7 +113,7 @@ export class Tower {
     let destination = { ...target.pos }
     if (isSplash) {
       const flightTime = Math.hypot(target.pos.x - this.pos.x, target.pos.y - this.pos.y) / speedPx
-      destination = target.predictPosition(flightTime, path, tileSize)
+      destination = target.predictPosition(flightTime, tileSize)
     }
 
     const spec: ProjectileSpec = {
@@ -127,6 +126,8 @@ export class Tower {
       splashRadius: stats.splashRadius * tileSize,
       slowAmount: stats.slowAmount,
       slowDuration: stats.slowDuration,
+      poisonDps: stats.poisonDps,
+      poisonDuration: stats.poisonDuration,
       color: this.def.accent,
       radius: isSplash ? 5 : 3.5,
     }
@@ -151,10 +152,12 @@ export class Tower {
       let score: number
       switch (this.targetPriority) {
         case 'first':
-          score = enemy.distance
+          // 왕성에 가까운 적 = 남은 거리가 작은 적. 경로 길이가 서로 달라도
+          // 이 기준이면 다중 경로 맵에서 의미가 흔들리지 않는다.
+          score = -enemy.remaining
           break
         case 'last':
-          score = -enemy.distance
+          score = enemy.remaining
           break
         case 'strongest':
           score = enemy.hp

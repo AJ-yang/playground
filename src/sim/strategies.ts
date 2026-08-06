@@ -92,9 +92,20 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
       // 기반 화력이 없으면 상성을 따질 여유가 없다. 가장 싼 궁수탑부터 깐다.
       if (game.towers.length < 3) return 'archer'
 
+      // 양면 저항이 두꺼우면 순수 피해(중독)가 유일한 답이다.
+      if (
+        game.canUse('venom') &&
+        game.towers.length >= 6 &&
+        avgArmor >= 5 &&
+        avgResist >= 0.3 &&
+        have('venom') < 2
+      ) {
+        return 'venom'
+      }
+
       // 감속은 고속 적이나 물량 웨이브에서 다른 타워의 체류 시간을 벌어준다.
       // 몇 기가 적정인지는 이 상한만 바꿔가며 대조 실험으로 확인한다.
-      if (maxFrost > 0 && (fastShare > 0.25 || game.waves.waveNumber >= 5)) {
+      if (game.canUse('frost') && maxFrost > 0 && (fastShare > 0.25 || game.waves.waveNumber >= 5)) {
         const wantFrost = Math.min(maxFrost, 1 + Math.floor(game.waves.waveNumber / 8))
         if (have('frost') < wantFrost) return 'frost'
       }
@@ -185,8 +196,15 @@ export function act(game: Game, strategy: Strategy, spots: readonly Spot[]): boo
 function tryBuild(game: Game, strategy: Strategy, spots: readonly Spot[]): boolean {
   if (game.towers.length >= strategy.buildUntil) return false
 
-  const towerId = strategy.nextTower(game)
+  let towerId = strategy.nextTower(game)
   if (!towerId || !TOWER_ORDER.includes(towerId)) return false
+  // 아직 해금되지 않은 타워를 고르면 쓸 수 있는 것 중 가장 싼 것으로 대체한다.
+  // 전략을 스테이지마다 새로 쓰는 대신 이렇게 눌러야 대조 실험이 성립한다.
+  if (!game.canUse(towerId)) {
+    const fallback = [...game.availableTowers].sort((a, b) => buildCost(a) - buildCost(b))[0]
+    if (!fallback) return false
+    towerId = fallback
+  }
   if (game.gold < buildCost(towerId)) return false
 
   // 얼음탑은 감속이 뒤쪽 타워 전부에 이득이 되므로 경로 앞쪽에 놓는다.

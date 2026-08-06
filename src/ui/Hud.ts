@@ -1,7 +1,6 @@
 import type { Game } from '../game/Game'
 import { TOWER_ORDER, getTowerDef } from '../data/towers'
 import { getEnemyDef } from '../data/enemies'
-import { TOTAL_WAVES } from '../data/waves'
 import { TARGET_PRIORITY_LABEL } from '../game/types'
 import { FONT, PALETTE, roundRect } from '../render/palette'
 import { enemySilhouettePath } from '../render/shapes'
@@ -60,7 +59,7 @@ export class Hud {
       x,
       h / 2,
       '⚑',
-      `${Math.min(game.waves.waveNumber, TOTAL_WAVES)} / ${TOTAL_WAVES}`,
+      `${Math.min(game.waves.waveNumber, game.waves.totalWaves)} / ${game.waves.totalWaves}`,
       PALETTE.accent,
     )
 
@@ -240,7 +239,12 @@ export class Hud {
     let y = startY + 20
     const cardH = 52
 
-    TOWER_ORDER.forEach((towerId, i) => {
+    // 해금된 타워만 노출한다. 잠긴 타워를 흐리게 남겨두면 "언젠가 열린다"는
+    // 정보는 주지만 준비 단계의 판단을 방해한다 — 스테이지 선택 화면이
+    // 이미 해금 현황을 보여주므로 여기서는 쓸 수 있는 것만 보여준다.
+    const menu = TOWER_ORDER.filter((id) => game.canUse(id))
+
+    menu.forEach((towerId, i) => {
       const def = getTowerDef(towerId)
       const cost = def.levels[0].cost
       const affordable = game.gold >= cost
@@ -326,6 +330,13 @@ export class Hud {
         '감속',
         `-${Math.round(stats.slowAmount * 100)}% / ${stats.slowDuration.toFixed(1)}s`,
         next ? `-${Math.round(next.slowAmount * 100)}%` : null,
+      ])
+    }
+    if (stats.poisonDps > 0) {
+      rows.push([
+        '중독',
+        `${stats.poisonDps}/s × ${stats.poisonDuration.toFixed(1)}s`,
+        next ? `${next.poisonDps}/s` : null,
       ])
     }
 

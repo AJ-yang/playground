@@ -1,7 +1,6 @@
-import { TOTAL_WAVES, WAVES } from '../data/waves'
 import { TOWER_DEFS } from '../data/towers'
 import { ENEMY_DEFS, getEnemyDef } from '../data/enemies'
-import { LEVEL_ONE } from '../data/levels'
+import { STAGES, STARTING_TOWERS, type StageDef } from '../data/stages'
 import { aggregate, simulate, type Aggregate, type SimResult } from './headless'
 import { STRATEGIES, findStrategy, type Strategy } from './strategies'
 
@@ -9,93 +8,64 @@ import { STRATEGIES, findStrategy, type Strategy } from './strategies'
  * 밸런스 검증 러너.
  *
  * 사용법:
- *   npm run sim                 전략 전체를 기본 시드 수만큼 돌린다
- *   npm run sim -- --runs 50    시드 수 지정
- *   npm run sim -- --only balanced,adaptive
- *   npm run sim -- --markdown   docs/BALANCE.md에 붙일 수 있는 표로 출력
+ *   npm run sim                      전체 스테이지 × 전체 전략
+ *   npm run sim -- --stage fork      특정 스테이지만
+ *   npm run sim -- --runs 50         시드 수 지정
+ *   npm run sim -- --only balanced,adaptive-frost1
+ *   npm run sim -- --markdown        docs/BALANCE.md에 붙일 표로 출력
+ *   npm run sim -- --audit           스테이지별 압박·수입 곡선 (시뮬레이션 없이)
+ *   npm run sim -- --income 1.3      수입 전역 배율 스윕 (튜닝용)
  */
 
 interface Options {
   runs: number
   only: string[] | null
+  stages: string[] | null
   markdown: boolean
   audit: boolean
   /** 수입(현상금·클리어 보상) 전역 배율. 경제 곡선을 스윕할 때 쓰는 튜닝 노브. */
   income: number
+  /** 적 HP 전역 배율. 압박 곡선을 스윕할 때 쓰는 튜닝 노브. */
+  hp: number
 }
 
 function parseArgs(argv: string[]): Options {
-  const opts: Options = { runs: 30, only: null, markdown: false, audit: false, income: 1 }
+  const opts: Options = {
+    runs: 20,
+    only: null,
+    stages: null,
+    markdown: false,
+    audit: false,
+    income: 1,
+    hp: 1,
+  }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--runs' && argv[i + 1]) opts.runs = Number(argv[++i])
     else if (arg === '--only' && argv[i + 1]) opts.only = argv[++i]!.split(',')
+    else if (arg === '--stage' && argv[i + 1]) opts.stages = argv[++i]!.split(',')
     else if (arg === '--markdown') opts.markdown = true
     else if (arg === '--audit') opts.audit = true
     else if (arg === '--income' && argv[i + 1]) opts.income = Number(argv[++i])
+    else if (arg === '--hp' && argv[i + 1]) opts.hp = Number(argv[++i])
   }
   return opts
 }
 
 /**
- * 시뮬레이션 없이 데이터 파일만 읽어 웨이브별 압박과 수입을 뽑는다.
- * "적이 얼마나 세지는가"와 "골드가 얼마나 들어오는가"를 나란히 놓고 봐야
- * 경제 곡선이 난이도 곡선을 따라가는지 판단할 수 있다.
+ * 스테이지에 진입하는 시점에 플레이어가 가진 타워.
+ *
+ * 선형 해금이므로 "앞선 스테이지를 전부 깬 상태"가 곧 정상 진행이다.
+ * 이 함수가 곧 진행 설계의 검증 대상이기도 하다 — 여기서 주어지는 기물만으로
+ * 해당 스테이지가 풀리지 않으면 해금 순서가 잘못된 것이다.
  */
-function audit(): void {
-  console.log('| W | 적 수 | 총 HP | 현상금 | 클리어 보상 | 누적 수입 | 최대 장갑 | 최대 마저 | 공중 비율 |')
-  console.log('|---|---|---|---|---|---|---|---|---|')
-
-  let cumulative = 0
-  let totalHp = 0
-  let totalBounty = 0
-  let totalReward = 0
-
-  for (const wave of WAVES) {
-    let count = 0
-    let hp = 0
-    let bounty = 0
-    let maxArmor = 0
-    let maxResist = 0
-    let flyingHp = 0
-
-    for (const group of wave.groups) {
-      const def = getEnemyDef(group.enemy)
-      count += group.count
-      hp += def.maxHp * group.count
-      bounty += def.bounty * group.count
-      maxArmor = Math.max(maxArmor, def.armor)
-      maxResist = Math.max(maxResist, def.magicResist)
-      if (def.flying) flyingHp += def.maxHp * group.count
-    }
-
-    cumulative += bounty + wave.reward
-    totalHp += hp
-    totalBounty += bounty
-    totalReward += wave.reward
-
-    console.log(
-      `| ${wave.id} | ${count} | ${hp.toLocaleString()} | ${bounty} | ${wave.reward} | ` +
-        `${cumulative.toLocaleString()} | ${maxArmor} | ${pct(maxResist)} | ${pct(hp === 0 ? 0 : flyingHp / hp)} |`,
-    )
+function towersAtStage(stage: StageDef): string[] {
+  const towers = [...STARTING_TOWERS]
+  for (const s of STAGES) {
+    if (s.index >= stage.index) break
+    if (s.unlocksTower) towers.push(s.unlocksTower)
   }
-
-  console.log(
-    `\n총 적 HP ${totalHp.toLocaleString()} · 현상금 합 ${totalBounty.toLocaleString()}G · ` +
-      `클리어 보상 합 ${totalReward.toLocaleString()}G · 시작 골드 ${LEVEL_ONE.startGold}G`,
-  )
-  console.log(`이론상 최대 수입 ${(totalBounty + totalReward + LEVEL_ONE.startGold).toLocaleString()}G (조기 소환 보너스 제외)`)
-
-  console.log('\n── 타워 만렙까지의 총 투자 ──')
-  for (const id of Object.keys(TOWER_DEFS)) {
-    const def = TOWER_DEFS[id]!
-    const total = def.levels.reduce((sum, l) => sum + l.cost, 0)
-    const l3 = def.levels[2]!
-    console.log(
-      `${def.name.padEnd(6)} ${String(total).padStart(4)}G · 만렙 DPS ${(l3.damage * l3.fireRate).toFixed(1)}` +
-        `${l3.splashRadius > 0 ? ` (광역 ${l3.splashRadius}칸)` : ''}`,
-    )
-  }
+  return towers
 }
 
 /**
@@ -110,12 +80,22 @@ function applyIncomeMultiplier(mult: number): void {
   for (const def of Object.values(ENEMY_DEFS)) {
     def.bounty = Math.max(1, Math.round(def.bounty * mult))
   }
-  for (const wave of WAVES) {
-    wave.reward = Math.max(5, Math.round((wave.reward * mult) / 5) * 5)
+  for (const stage of STAGES) {
+    for (const wave of stage.waves) {
+      wave.reward = Math.max(5, Math.round((wave.reward * mult) / 5) * 5)
+    }
   }
 }
 
-/** 시드는 고정 규칙으로 만든다 — 같은 명령이면 항상 같은 결과가 나오도록. */
+/** 적 HP 배율. 수입과 짝을 이루는 반대쪽 튜닝 축이다. */
+function applyHpMultiplier(mult: number): void {
+  if (mult === 1) return
+  for (const def of Object.values(ENEMY_DEFS)) {
+    def.maxHp = Math.max(1, Math.round(def.maxHp * mult))
+  }
+}
+
+/** 시드는 고정 규칙으로 만든다 — 같은 명령이면 항상 같은 결과가 나온다. */
 function seedFor(index: number): number {
   return 0x1000 + index * 7919
 }
@@ -124,96 +104,151 @@ function pct(x: number): string {
   return `${(x * 100).toFixed(0)}%`
 }
 
+/** 시뮬레이션 없이 데이터만 읽어 스테이지별 압박과 수입을 뽑는다. */
+function audit(): void {
+  for (const stage of STAGES) {
+    const towers = towersAtStage(stage)
+    console.log(`\n## S${stage.index} ${stage.name}`)
+    console.log(
+      `맵 ${stage.level.name} · 경로 ${stage.level.routes.length}갈래 · ` +
+        `시작 ${stage.startGold}G / 생명 ${stage.startLives} · ` +
+        `사용 가능 ${towers.map((t) => TOWER_DEFS[t]!.name).join('·')}` +
+        `${stage.unlocksTower ? ` → 클리어 시 ${TOWER_DEFS[stage.unlocksTower]!.name} 해금` : ''}`,
+    )
+    console.log('| W | 적 수 | 총 HP | 현상금 | 보상 | 누적 수입 | 최대 장갑 | 최대 마저 | 공중 |')
+    console.log('|---|---|---|---|---|---|---|---|---|')
+
+    let cumulative = stage.startGold
+    let totalHp = 0
+    for (const wave of stage.waves) {
+      let count = 0
+      let hp = 0
+      let bounty = 0
+      let maxArmor = 0
+      let maxResist = 0
+      let flyingHp = 0
+      for (const group of wave.groups) {
+        const def = getEnemyDef(group.enemy)
+        count += group.count
+        hp += def.maxHp * group.count
+        bounty += def.bounty * group.count
+        maxArmor = Math.max(maxArmor, def.armor)
+        maxResist = Math.max(maxResist, def.magicResist)
+        if (def.flying) flyingHp += def.maxHp * group.count
+      }
+      cumulative += bounty + wave.reward
+      totalHp += hp
+      console.log(
+        `| ${wave.id} | ${count} | ${hp.toLocaleString()} | ${bounty} | ${wave.reward} | ` +
+          `${cumulative.toLocaleString()} | ${maxArmor} | ${pct(maxResist)} | ` +
+          `${pct(hp === 0 ? 0 : flyingHp / hp)} |`,
+      )
+    }
+    console.log(`총 적 HP ${totalHp.toLocaleString()} · 이론상 최대 수입 ${cumulative.toLocaleString()}G`)
+  }
+
+  console.log('\n## 타워 만렙까지의 총 투자')
+  for (const id of Object.keys(TOWER_DEFS)) {
+    const def = TOWER_DEFS[id]!
+    const total = def.levels.reduce((sum, l) => sum + l.cost, 0)
+    const l3 = def.levels[2]!
+    const extras = [
+      l3.splashRadius > 0 ? `광역 ${l3.splashRadius}칸` : null,
+      l3.slowAmount > 0 ? `감속 ${pct(l3.slowAmount)}/${l3.slowDuration}s` : null,
+      l3.poisonDps > 0 ? `중독 ${l3.poisonDps}/s × ${l3.poisonDuration}s` : null,
+    ].filter(Boolean)
+    console.log(
+      `${def.name.padEnd(7)} ${String(total).padStart(4)}G · 만렙 직접 DPS ${(l3.damage * l3.fireRate).toFixed(1)}` +
+        `${extras.length ? ` (${extras.join(' · ')})` : ''}`,
+    )
+  }
+}
+
 function main(): void {
   const opts = parseArgs(process.argv.slice(2))
   applyIncomeMultiplier(opts.income)
+  applyHpMultiplier(opts.hp)
   if (opts.audit) {
     audit()
     return
   }
-  const targets = opts.only
+
+  const stages = opts.stages
+    ? STAGES.filter((s) => opts.stages!.includes(s.id))
+    : STAGES
+  const strategies = opts.only
     ? opts.only.map((id) => findStrategy(id)).filter((s): s is Strategy => Boolean(s))
     : STRATEGIES
 
-  if (targets.length === 0) {
-    console.error('실행할 전략이 없습니다. --only 값을 확인하세요.')
+  if (stages.length === 0 || strategies.length === 0) {
+    console.error('실행할 스테이지 또는 전략이 없습니다. --stage / --only 값을 확인하세요.')
     process.exit(1)
   }
 
   const started = Date.now()
-  const aggregates: Aggregate[] = []
-  const allResults: SimResult[] = []
+  const all: SimResult[] = []
 
-  for (const strategy of targets) {
-    const results: SimResult[] = []
-    for (let i = 0; i < opts.runs; i++) results.push(simulate(strategy, seedFor(i)))
-    allResults.push(...results)
-    const agg = aggregate(strategy, results)
-    aggregates.push(agg)
-    if (!opts.markdown) {
+  for (const stage of stages) {
+    const towers = towersAtStage(stage)
+    const aggregates: Aggregate[] = []
+
+    for (const strategy of strategies) {
+      const results: SimResult[] = []
+      for (let i = 0; i < opts.runs; i++) {
+        results.push(simulate(strategy, seedFor(i), stage, towers))
+      }
+      all.push(...results)
+      aggregates.push(aggregate(strategy, results))
+    }
+
+    printStage(stage, towers, aggregates, opts)
+  }
+
+  const timeouts = all.filter((r) => r.timedOut).length
+  if (timeouts > 0) console.error(`\n⚠ 시간 초과로 중단된 판 ${timeouts}개 — 시뮬레이터 버그 가능성`)
+  console.error(
+    `\n${stages.length}개 스테이지 × ${strategies.length}개 전략 × ${opts.runs}판 = ${all.length}판, ` +
+      `${((Date.now() - started) / 1000).toFixed(1)}초`,
+  )
+}
+
+function printStage(
+  stage: StageDef,
+  towers: readonly string[],
+  aggregates: readonly Aggregate[],
+  opts: Options,
+): void {
+  const towerNames = towers.map((t) => TOWER_DEFS[t]!.name).join('·')
+  const waveCount = stage.waves.length
+
+  if (opts.markdown) {
+    console.log(`\n### S${stage.index} ${stage.name} — ${waveCount}웨이브 · 사용 가능 ${towerNames}\n`)
+    console.log('| 전략 | 클리어율 | 평균 클리어 웨이브 | 최소~최대 | 남은 생명 | 첫 유출 |')
+    console.log('|---|---|---|---|---|---|')
+    for (const a of aggregates) {
       console.log(
-        `${agg.label.padEnd(24)} 클리어율 ${pct(agg.victoryRate).padStart(4)} · ` +
-          `평균 ${agg.avgWavesCleared.toFixed(1)}웨이브 (±${agg.stdWavesCleared.toFixed(1)}, ` +
-          `${agg.minWavesCleared}~${agg.maxWavesCleared}) · 남은 생명 ${agg.avgLivesLeft.toFixed(1)}`,
+        `| ${a.label} | ${pct(a.victoryRate)} | ${a.avgWavesCleared.toFixed(1)} ± ${a.stdWavesCleared.toFixed(1)} | ` +
+          `${a.minWavesCleared}~${a.maxWavesCleared} | ${a.avgLivesLeft.toFixed(1)} | ` +
+          `${a.medianFirstLeakWave === null ? '없음' : `W${a.medianFirstLeakWave}`} |`,
       )
     }
+    return
   }
 
-  if (opts.markdown) printMarkdown(aggregates, opts.runs)
-  else printDetail(aggregates)
-
-  const timeouts = allResults.filter((r) => r.timedOut).length
-  if (timeouts > 0) console.error(`\n⚠ 시간 초과로 중단된 판 ${timeouts}개 — 시뮬레이터 버그 가능성`)
-  console.error(`\n${targets.length}개 전략 × ${opts.runs}판 = ${allResults.length}판, ${((Date.now() - started) / 1000).toFixed(1)}초`)
-}
-
-function printDetail(aggregates: readonly Aggregate[]): void {
-  console.log('\n── 타워 종류별 누적 딜 점유율 ──')
-  const ids = Object.keys(TOWER_DEFS)
-  for (const agg of aggregates) {
-    const parts = ids
-      .map((id) => {
-        const share = agg.avgDamageShare[id] ?? 0
-        const count = agg.avgTowerMix[id] ?? 0
-        return count > 0 ? `${TOWER_DEFS[id]!.name} ${pct(share)}(${count.toFixed(1)}기)` : null
-      })
-      .filter(Boolean)
-    console.log(`${agg.label.padEnd(24)} ${parts.join(' · ')}`)
-  }
-
-  console.log('\n── 경제 · 첫 유출 ──')
-  for (const agg of aggregates) {
-    console.log(
-      `${agg.label.padEnd(24)} 누적 획득 ${Math.round(agg.avgGoldEarned).toString().padStart(5)}G · ` +
-        `타워 ${agg.avgTowers.toFixed(1)}기 · ` +
-        `첫 유출 ${agg.medianFirstLeakWave === null ? '없음' : `W${agg.medianFirstLeakWave}`}`,
-    )
-  }
-}
-
-function printMarkdown(aggregates: readonly Aggregate[], runs: number): void {
-  console.log(`\n각 전략 ${runs}판 (고정 시드), 총 ${TOTAL_WAVES}웨이브\n`)
-  console.log('| 전략 | 클리어율 | 평균 클리어 웨이브 | 최소~최대 | 남은 생명 | 첫 유출 |')
-  console.log('|---|---|---|---|---|---|')
+  console.log(`\n━━ S${stage.index} ${stage.name} (${waveCount}웨이브 · ${towerNames}) ━━`)
   for (const a of aggregates) {
     console.log(
-      `| ${a.label} | ${pct(a.victoryRate)} | ${a.avgWavesCleared.toFixed(1)} ± ${a.stdWavesCleared.toFixed(1)} | ` +
-        `${a.minWavesCleared}~${a.maxWavesCleared} | ${a.avgLivesLeft.toFixed(1)} | ` +
-        `${a.medianFirstLeakWave === null ? '없음' : `W${a.medianFirstLeakWave}`} |`,
+      `${a.label.padEnd(24)} 클리어율 ${pct(a.victoryRate).padStart(4)} · ` +
+        `평균 ${a.avgWavesCleared.toFixed(1)}웨이브 (±${a.stdWavesCleared.toFixed(1)}, ` +
+        `${a.minWavesCleared}~${a.maxWavesCleared}) · 생명 ${a.avgLivesLeft.toFixed(1)} · ` +
+        `타워 ${a.avgTowers.toFixed(1)}기 · 획득 ${Math.round(a.avgGoldEarned)}G`,
     )
+    const mix = Object.keys(TOWER_DEFS)
+      .filter((id) => (a.avgTowerMix[id] ?? 0) > 0)
+      .map((id) => `${TOWER_DEFS[id]!.name} ${pct(a.avgDamageShare[id] ?? 0)}(${a.avgTowerMix[id]!.toFixed(1)})`)
+      .join(' · ')
+    if (mix) console.log(`${''.padEnd(24)}   ${mix}`)
   }
-
-  console.log('\n| 전략 | 궁수 | 마법 | 대포 | 얼음 |')
-  console.log('|---|---|---|---|---|')
-  for (const a of aggregates) {
-    const cell = (id: string) => {
-      const count = a.avgTowerMix[id] ?? 0
-      if (count === 0) return '—'
-      return `${pct(a.avgDamageShare[id] ?? 0)} / ${count.toFixed(1)}기`
-    }
-    console.log(`| ${a.label} | ${cell('archer')} | ${cell('mage')} | ${cell('cannon')} | ${cell('frost')} |`)
-  }
-  console.log('\n> 각 칸은 `누적 딜 점유율 / 평균 건설 수`')
 }
 
 main()

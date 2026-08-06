@@ -26,6 +26,10 @@ export interface TowerLevelDef {
   slowAmount: number
   /** 감속 지속 시간 (초) */
   slowDuration: number
+  /** 중독 초당 피해 (순수 데미지). 0이면 중독 없음 */
+  poisonDps: number
+  /** 중독 지속 시간 (초) */
+  poisonDuration: number
 }
 
 export interface TowerDef {
@@ -37,7 +41,7 @@ export interface TowerDef {
   color: string
   accent: string
   /** 아이콘 형태 — 렌더러가 절차적으로 그린다 */
-  shape: 'arrow' | 'orb' | 'cannon' | 'crystal'
+  shape: 'arrow' | 'orb' | 'cannon' | 'crystal' | 'flask'
   tagline: string
   desc: string
   levels: [TowerLevelDef, TowerLevelDef, TowerLevelDef]
@@ -49,6 +53,8 @@ function lvl(partial: Partial<TowerLevelDef> & Pick<TowerLevelDef, 'cost' | 'dam
     splashRadius: 0,
     slowAmount: 0,
     slowDuration: 0,
+    poisonDps: 0,
+    poisonDuration: 0,
     ...partial,
   }
 }
@@ -118,10 +124,26 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
       lvl({ cost: 125, damage: 8, range: 3.8, fireRate: 1.2, projectileSpeed: 18, splashRadius: 1.55, slowAmount: 0.78, slowDuration: 7.0 }),
     ],
   },
+  venom: {
+    id: 'venom',
+    name: '독 분사탑',
+    damageType: 'pure',
+    targetsAir: true,
+    color: '#4a7a3f',
+    accent: '#b6f06a',
+    shape: 'flask',
+    tagline: '방어를 무시하는 지속 피해',
+    desc: '직접 딜은 거의 없지만 중독은 순수 피해라 장갑도 마법저항도 통하지 않는다. 양면 저항 탱커와 보스의 해답. 다만 중독은 중첩되지 않아 여러 기를 지어도 소용없다.',
+    levels: [
+      lvl({ cost: 100, damage: 4, range: 3.0, fireRate: 0.9, projectileSpeed: 12, poisonDps: 9, poisonDuration: 3.0 }),
+      lvl({ cost: 95, damage: 6, range: 3.2, fireRate: 0.95, projectileSpeed: 12, poisonDps: 16, poisonDuration: 3.5 }),
+      lvl({ cost: 170, damage: 9, range: 3.5, fireRate: 1.0, projectileSpeed: 14, poisonDps: 28, poisonDuration: 4.0 }),
+    ],
+  },
 }
 
-/** 건설 메뉴에 노출되는 순서. 단축키 1~4와 대응한다. */
-export const TOWER_ORDER: readonly string[] = ['archer', 'mage', 'cannon', 'frost']
+/** 건설 메뉴에 노출되는 순서. 단축키 1~5와 대응한다. */
+export const TOWER_ORDER: readonly string[] = ['archer', 'mage', 'cannon', 'frost', 'venom']
 
 /** 타워 판매 시 지금까지 투자한 골드의 몇 %를 돌려받는가. */
 export const SELL_REFUND_RATIO = 0.7
