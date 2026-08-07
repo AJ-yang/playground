@@ -152,7 +152,7 @@ export class Tower {
       let score: number
       switch (this.targetPriority) {
         case 'first':
-          // 왕성에 가까운 적 = 남은 거리가 작은 적. 경로 길이가 서로 달라도
+          // 마을에 가까운 적 = 남은 거리가 작은 적. 경로 길이가 서로 달라도
           // 이 기준이면 다중 경로 맵에서 의미가 흔들리지 않는다.
           score = -enemy.remaining
           break

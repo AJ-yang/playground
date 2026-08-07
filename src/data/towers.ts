@@ -4,10 +4,10 @@ import type { DamageType } from '../game/types'
  * 타워 정의 (밸런스 데이터).
  *
  * 설계 의도 — 4개 타워는 각자 명확한 "못 하는 것"을 갖는다.
- *   궁수탑: 싸고 빠르지만 장갑 앞에서 무력
- *   마법탑: 장갑을 무시하지만 느리고 비싸며 마법 저항에 막힘
- *   대포탑: 광역 최강이지만 공중을 못 때리고 발사가 매우 느림
- *   얼음탑: 딜은 거의 없지만 광역 감속으로 다른 타워의 DPS를 끌어올림
+ *   장승: 싸고 빠르지만 장갑 앞에서 무력
+ *   서낭당: 장갑을 무시하지만 느리고 비싸며 마법 저항에 막힘
+ *   굿청 징: 광역 최강이지만 공중을 못 때리고 발사가 매우 느림
+ *   금줄 솟대: 딜은 거의 없지만 광역 감속으로 다른 타워의 DPS를 끌어올림
  * 어느 하나만 도배해서는 20웨이브를 넘길 수 없도록 수치를 잡았다.
  */
 export interface TowerLevelDef {
@@ -62,13 +62,13 @@ function lvl(partial: Partial<TowerLevelDef> & Pick<TowerLevelDef, 'cost' | 'dam
 export const TOWER_DEFS: Record<string, TowerDef> = {
   archer: {
     id: 'archer',
-    name: '궁수탑',
+    name: '장승',
     damageType: 'physical',
     targetsAir: true,
-    color: '#3f8f4f',
-    accent: '#a8e6a3',
+    color: '#c05a3e',
+    accent: '#e8b45c',
     shape: 'arrow',
-    tagline: '싸고 빠른 단일 물리',
+    tagline: '마을 어귀의 기본 수호',
     desc: '골드 대비 DPS가 가장 좋다. 다만 물리 데미지라 장갑 앞에서는 딜이 거의 사라진다.',
     levels: [
       lvl({ cost: 70, damage: 10, range: 3.2, fireRate: 1.9, projectileSpeed: 18 }),
@@ -78,14 +78,14 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   mage: {
     id: 'mage',
-    name: '마법탑',
+    name: '서낭당',
     damageType: 'magic',
     targetsAir: true,
-    color: '#5b4bb5',
-    accent: '#c3b6ff',
+    color: '#33705c',
+    accent: '#59a183',
     shape: 'orb',
-    tagline: '장갑을 무시하는 고데미지',
-    desc: '장갑 수치를 완전히 무시한다. 강철 병사·수정 감시자의 해답이지만 마법 저항 앞에서는 반대로 무력하다.',
+    tagline: '부적 — 갑옷이 소용없다',
+    desc: '장갑 수치를 완전히 무시한다. 귀졸·석장승의 넋의 해답이지만 마법 저항 앞에서는 반대로 무력하다.',
     levels: [
       lvl({ cost: 110, damage: 32, range: 3.0, fireRate: 0.85, projectileSpeed: 13 }),
       lvl({ cost: 100, damage: 55, range: 3.3, fireRate: 0.95, projectileSpeed: 13 }),
@@ -94,13 +94,13 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   cannon: {
     id: 'cannon',
-    name: '대포탑',
+    name: '굿청 징',
     damageType: 'physical',
     targetsAir: false,
-    color: '#8a6a3a',
-    accent: '#f0c674',
+    color: '#c9a227',
+    accent: '#ecd06a',
     shape: 'cannon',
-    tagline: '지상 전용 광역 폭격',
+    tagline: '소리가 땅을 울린다 (지상 전용)',
     desc: '뭉친 지상 물량을 한 번에 정리한다. 발사가 매우 느려 감속과 함께 써야 제값을 하고, 공중은 조준조차 못 한다.',
     levels: [
       lvl({ cost: 130, damage: 28, range: 3.4, fireRate: 0.55, projectileSpeed: 9, splashRadius: 1.1 }),
@@ -110,13 +110,13 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   frost: {
     id: 'frost',
-    name: '얼음탑',
+    name: '금줄 솟대',
     damageType: 'magic',
     targetsAir: true,
-    color: '#2f7f96',
-    accent: '#a8ecff',
+    color: '#cdd6de',
+    accent: '#8fa4b6',
     shape: 'crystal',
-    tagline: '광역 감속 서포터',
+    tagline: '금줄로 붙잡는다',
     desc: '딜은 거의 없지만 범위 안의 적을 느리게 만든다. 다른 타워의 유효 사거리 체류 시간을 늘려 전체 DPS를 올리는 핵심 축.',
     levels: [
       lvl({ cost: 75, damage: 3, range: 3.2, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.1, slowAmount: 0.55, slowDuration: 4.0 }),
@@ -126,13 +126,13 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   venom: {
     id: 'venom',
-    name: '독 분사탑',
+    name: '팥 항아리',
     damageType: 'pure',
     targetsAir: true,
-    color: '#4a7a3f',
-    accent: '#b6f06a',
+    color: '#a8322e',
+    accent: '#d95a4a',
     shape: 'flask',
-    tagline: '방어를 무시하는 지속 피해',
+    tagline: '붉은 팥 — 무엇에게든 통한다',
     desc: '직접 딜은 거의 없지만 중독은 순수 피해라 장갑도 마법저항도 통하지 않는다. 양면 저항 탱커와 보스의 해답. 다만 중독은 중첩되지 않아 여러 기를 지어도 소용없다.',
     levels: [
       lvl({ cost: 100, damage: 4, range: 3.0, fireRate: 0.9, projectileSpeed: 12, poisonDps: 9, poisonDuration: 3.0 }),

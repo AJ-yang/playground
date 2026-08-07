@@ -121,7 +121,7 @@ export class Game {
     return this.phase === 'victory' || this.phase === 'defeat'
   }
 
-  /** 첫 번째 경로. 왕성 표식처럼 "대표 경로" 하나가 필요할 때 쓴다. */
+  /** 첫 번째 경로. 마을 표식처럼 "대표 경로" 하나가 필요할 때 쓴다. */
   get mainPath(): Path {
     return this.paths[0]!
   }

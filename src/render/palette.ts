@@ -1,53 +1,60 @@
-/** 전역 색상 팔레트. 색을 여기 한 곳에 모아두면 테마 교체가 쉬워진다. */
+/**
+ * 전역 색상 팔레트. 색을 여기 한 곳에 모아두면 테마 교체가 쉬워진다.
+ *
+ * 세계관은 **달밤의 마을**이다. 밤이라 초록이 죽고 푸른기가 돌며, 따뜻한 색은
+ * 마을의 창불·청사초롱·부적의 주사색에만 남긴다. 화면에서 따뜻한 것이 곧
+ * 지켜야 하는 것이 되도록 색을 배분했다.
+ */
 export const PALETTE = {
-  bg: '#0e1117',
-  boardEdge: '#1b2230',
+  bg: '#080a11',
+  boardEdge: '#161c28',
 
-  // 잔디 — 한 색이 아니라 밝기가 다른 세 톤을 섞어 평평해 보이지 않게 한다
-  grassA: '#243322',
-  grassB: '#1f2c1e',
-  grassDeep: '#1a2519',
-  grassLight: '#2c3d29',
-  grassBlade: 'rgba(150,200,120,0.16)',
-  grassLine: 'rgba(255,255,255,0.03)',
+  // 밤 들판 — 달빛 아래라 초록이 죽고 푸른기가 돈다. 한 색이 아니라 밝기가
+  // 다른 세 톤을 섞어 평평해 보이지 않게 한다.
+  grassA: '#1e2a2b',
+  grassB: '#182223',
+  grassDeep: '#131b1d',
+  grassLight: '#263436',
+  grassBlade: 'rgba(160,200,205,0.13)',
+  grassLine: 'rgba(255,255,255,0.028)',
 
-  // 흙길 — 둑(가장 어두움) → 흙 → 밝은 자국 순으로 세 겹
-  pathBank: '#2b2118',
-  pathOuter: '#453626',
-  pathInner: '#5c4834',
-  pathLight: '#6b5540',
+  // 달빛 받은 흙길 — 둑(가장 어두움) → 흙 → 밝은 자국 순으로 세 겹
+  pathBank: '#241f1a',
+  pathOuter: '#3b342a',
+  pathInner: '#524839',
+  pathLight: '#665946',
   pathGravel: 'rgba(0,0,0,0.22)',
   pathRut: 'rgba(255,255,255,0.05)',
 
-  blockedFill: '#2a3040',
-  blockedEdge: '#3b4457',
-  rockFill: '#3a4152',
-  rockLight: '#4c5568',
-  rockShade: '#232a38',
-  treeTrunk: '#3b2d20',
-  treeCanopy: '#2c4526',
-  treeCanopyLight: '#3a5931',
+  blockedFill: '#232936',
+  blockedEdge: '#333c4d',
+  rockFill: '#333a4a',
+  rockLight: '#454e61',
+  rockShade: '#1e242f',
+  treeTrunk: '#5a3a26',
+  treeCanopy: '#2b4436',
+  treeCanopyLight: '#3a5b45',
 
   // 타워 석재 받침 — 색은 타워마다 다르지만 받침은 공통 재질
   stoneBase: '#4a4f5c',
   stoneBaseLight: '#5c6272',
   stoneBaseShade: '#2e323c',
 
-  hudBg: '#131a24',
-  hudEdge: '#222c3a',
-  panelBg: '#131a24',
-  panelEdge: '#222c3a',
+  hudBg: '#0f141d',
+  hudEdge: '#1e2634',
+  panelBg: '#0f141d',
+  panelEdge: '#1e2634',
 
   text: '#e6edf3',
   textMuted: '#8b949e',
   textDim: '#5c6773',
 
-  gold: '#f0c674',
+  gold: '#ecd06a',
   life: '#ff6b6b',
   good: '#8bd450',
   warn: '#e0b341',
   danger: '#ff5c5c',
-  accent: '#5aa9e6',
+  accent: '#5a9fd6',
 
   rangeFill: 'rgba(90,169,230,0.10)',
   rangeEdge: 'rgba(90,169,230,0.55)',

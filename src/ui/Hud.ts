@@ -341,7 +341,7 @@ export class Hud {
       // 타워 배지 — 보드에 서는 건물 그림을 그대로 축소해 넣는다.
       // 색 사각형만 있던 시절에는 메뉴와 보드가 별개의 언어였다.
       //
-      // 배경에 타워 색을 옅게 깐다. 대포탑·얼음탑은 몸체가 회색 석재라
+      // 배경에 타워 색을 옅게 깐다. 굿청 징·금줄 솟대는 몸체가 회색 석재라
       // 그림만으로는 작은 크기에서 서로 비슷해 보였다.
       ctx.fillStyle = `${def.color}22`
       roundRect(ctx, x + 8, y + 10, 32, 32, 6)
@@ -527,7 +527,7 @@ export class Hud {
       enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 7)
       ctx.fill()
       if (art) {
-        drawArt(ctx, art, p.x + 22, y + 8, 17, { color: def.color, accent: def.color }, false)
+        drawArt(ctx, art, p.x + 22, y + 8, 17, { color: def.color, accent: def.accent }, false)
       } else {
         ctx.fillStyle = def.color
         enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 6.5)

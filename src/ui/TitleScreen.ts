@@ -16,7 +16,7 @@ import type { Layout, UiButton } from './layout'
  * 난이도가 다를 수 있다는 인상을 주는데, 실제로는 판 전체에 걸리는 설정이다.
  *
  * 게임을 처음 켠 사람에게 "이건 무엇인가"를 그림 한 장으로 말하는 자리이기도
- * 하다 — 성문에서 나온 적이 길을 따라 왕성으로 향하고 타워가 그 길을 지킨다는
+ * 하다 — 무덤에서 나온 것이 밤길을 따라 마을로 향하고 기물이 그 길을 지킨다는
  * 구도를 배경에 그린다. 규칙 설명 문장보다 이 그림 하나가 빠르다.
  */
 export class TitleScreen {
@@ -53,11 +53,11 @@ export class TitleScreen {
 
     ctx.font = '800 62px system-ui, sans-serif'
     ctx.fillStyle = PALETTE.text
-    ctx.fillText('왕국 방어전', cx, 138)
+    ctx.fillText('밤길 방어전', cx, 138)
 
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted
-    ctx.fillText('길을 따라 밀려오는 군세를 조합으로 막아낸다', cx, 180)
+    ctx.fillText('무덤에서 마을로 내려오는 것들을 장승과 부적으로 막는다', cx, 180)
 
     // ── 난이도
     ctx.font = FONT.label
@@ -135,7 +135,7 @@ export class TitleScreen {
   }
 
   /**
-   * 배경 — 성문에서 왕성으로 이어지는 길과 그 옆을 지키는 타워.
+   * 배경 — 무덤에서 마을로 이어지는 밤길과 그 위를 지나는 것들.
    *
    * 게임의 한 줄 규칙을 그림으로 말한다. 아주 옅게 깔아 글자를 방해하지 않는다.
    */
@@ -189,7 +189,7 @@ export class TitleScreen {
       enemySilhouettePath(ctx, def.silhouette, mx, roadY, r * 1.1, 0)
       ctx.fill()
       const art = ENEMY_ART[id]
-      if (art) drawArt(ctx, art, mx, roadY, r * 2.5, { color: def.color, accent: def.color }, false)
+      if (art) drawArt(ctx, art, mx, roadY, r * 2.5, { color: def.color, accent: def.accent }, false)
     })
 
     ctx.restore()

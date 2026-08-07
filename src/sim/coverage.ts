@@ -64,7 +64,7 @@ export function rankSpots(game: Game): Spot[] {
 
 /**
  * 아직 비어 있는 자리 중 하나를 고른다.
- * @param preferEarly true면 커버리지가 준수한 자리 중 경로 앞쪽을 우선한다 (얼음탑용)
+ * @param preferEarly true면 커버리지가 준수한 자리 중 경로 앞쪽을 우선한다 (금줄 솟대용)
  */
 export function pickSpot(game: Game, spots: readonly Spot[], preferEarly: boolean): Spot | null {
   const free = spots.filter((s) => game.grid.canBuild(s.col, s.row))

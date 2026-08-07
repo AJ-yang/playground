@@ -9,7 +9,7 @@ import { pickSpot, type Spot } from './coverage'
  *
  * 사람의 손맛을 흉내 내려는 것이 아니라, **빌드 방침 하나만 다르게 두고
  * 나머지 조건을 똑같이 맞춘 대조 실험**을 하기 위한 것이다. 그래야
- * "궁수 몰빵은 막히고 조합은 통한다"는 설계 의도가 실제로 성립하는지
+ * "장승 몰빵은 막히고 조합은 통한다"는 설계 의도가 실제로 성립하는지
  * 수치로 확인할 수 있다.
  */
 export interface Strategy {
@@ -56,7 +56,7 @@ function cycleStrategy(opts: {
 function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
   return {
     id: maxFrost === 0 ? 'adaptive-frost0' : `adaptive-frost${maxFrost}`,
-    label: `적응형 · 얼음탑 ${maxFrost}기`,
+    label: `적응형 · 금줄 솟대 ${maxFrost}기`,
     buildUntil: 14,
     upgradeFirst: false,
     earlyCall,
@@ -89,7 +89,7 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
       for (const t of game.towers) counts.set(t.def.id, (counts.get(t.def.id) ?? 0) + 1)
       const have = (id: string) => counts.get(id) ?? 0
 
-      // 기반 화력이 없으면 상성을 따질 여유가 없다. 가장 싼 궁수탑부터 깐다.
+      // 기반 화력이 없으면 상성을 따질 여유가 없다. 가장 싼 장승부터 깐다.
       if (game.towers.length < 3) return 'archer'
 
       // 양면 저항이 두꺼우면 순수 피해(중독)가 유일한 답이다.
@@ -110,16 +110,16 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
         if (have('frost') < wantFrost) return 'frost'
       }
 
-      // 장갑이 두꺼우면 물리가 죽는다 → 마법탑
+      // 장갑이 두꺼우면 물리가 죽는다 → 서낭당
       if (avgArmor >= 6 && have('mage') < have('archer') + 2) return 'mage'
-      // 마법 저항이 높으면 마법이 죽는다 → 물리탑 (공중이 없으면 대포가 효율적)
+      // 마법 저항이 높으면 마법이 죽는다 → 물리 기물 (공중이 없으면 징이 효율적)
       if (avgResist >= 0.4) {
         if (flyShare < 0.2 && have('cannon') < 3 && game.towers.length >= 5) return 'cannon'
         return 'archer'
       }
-      // 공중이 많으면 대포는 의미가 없다
+      // 공중이 많으면 징은 의미가 없다
       if (flyShare > 0.35) return have('mage') <= have('archer') ? 'mage' : 'archer'
-      // 특이사항 없으면 지상 물량 정리용 대포를 섞는다
+      // 특이사항 없으면 지상 물량 정리용 징을 섞는다
       if (have('cannon') < 2 && flyShare < 0.15 && game.towers.length >= 5) return 'cannon'
       return have('archer') <= have('mage') ? 'archer' : 'mage'
     },
@@ -127,21 +127,21 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
 }
 
 export const STRATEGIES: Strategy[] = [
-  cycleStrategy({ id: 'archer-only', label: '궁수탑 몰빵', cycle: ['archer'] }),
-  cycleStrategy({ id: 'mage-only', label: '마법탑 몰빵', cycle: ['mage'] }),
-  cycleStrategy({ id: 'cannon-only', label: '대포탑 몰빵', cycle: ['cannon'] }),
-  cycleStrategy({ id: 'frost-only', label: '얼음탑 몰빵 (대조군)', cycle: ['frost'] }),
+  cycleStrategy({ id: 'archer-only', label: '장승 몰빵', cycle: ['archer'] }),
+  cycleStrategy({ id: 'mage-only', label: '서낭당 몰빵', cycle: ['mage'] }),
+  cycleStrategy({ id: 'cannon-only', label: '굿청 징 몰빵', cycle: ['cannon'] }),
+  cycleStrategy({ id: 'frost-only', label: '금줄 솟대 몰빵 (대조군)', cycle: ['frost'] }),
   cycleStrategy({
     id: 'balanced-no-frost',
-    label: '균형 (궁수·마법·대포)',
+    label: '균형 (장승·서낭당·징)',
     cycle: ['archer', 'mage', 'cannon'],
   }),
   cycleStrategy({
     id: 'balanced',
-    label: '균형 + 얼음탑',
+    label: '균형 + 금줄 솟대',
     cycle: ['archer', 'mage', 'cannon', 'archer', 'mage', 'frost'],
   }),
-  // 얼음탑 투자량 대조군 — "서포터가 실제로 값을 하는가, 몇 기가 적정인가"
+  // 금줄 솟대 투자량 대조군 — "서포터가 실제로 값을 하는가, 몇 기가 적정인가"
   adaptiveStrategy(0, false),
   adaptiveStrategy(1, false),
   adaptiveStrategy(2, false),
@@ -161,7 +161,7 @@ export const STRATEGIES: Strategy[] = [
     upgradeFirst: true,
   }),
   // 조기 소환 보너스 대조군
-  { ...adaptiveStrategy(2, true), id: 'adaptive-early', label: '적응형 · 얼음 2기 + 조기 소환' },
+  { ...adaptiveStrategy(2, true), id: 'adaptive-early', label: '적응형 · 솟대 2기 + 조기 소환' },
 ]
 
 export function findStrategy(id: string): Strategy | undefined {
@@ -207,7 +207,7 @@ function tryBuild(game: Game, strategy: Strategy, spots: readonly Spot[]): boole
   }
   if (game.gold < buildCost(towerId)) return false
 
-  // 얼음탑은 감속이 뒤쪽 타워 전부에 이득이 되므로 경로 앞쪽에 놓는다.
+  // 금줄 솟대는 감속이 뒤쪽 타워 전부에 이득이 되므로 경로 앞쪽에 놓는다.
   const preferEarly = getTowerDef(towerId).levels[0].slowAmount > 0
   const spot = pickSpot(game, spots, preferEarly)
   if (!spot) return false

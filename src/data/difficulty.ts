@@ -45,7 +45,7 @@ export const DIFFICULTIES: readonly DifficultyDef[] = [
     id: 'hard',
     name: '어려움',
     hpScale: 1.25,
-    desc: '적 체력 125%. 조기 소환으로 경제를 굴려야 버틴다',
+    desc: '적 체력 125%. 조기 소환이 사실상 필수',
     color: '#e0b341',
   },
 ] as const

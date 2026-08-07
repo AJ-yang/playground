@@ -10,7 +10,7 @@ import type { Layout, UiButton } from './layout'
  * 스테이지 선택 화면.
  *
  * 여기서 보여줘야 하는 것은 세 가지다 — **어디까지 왔는가, 다음은 어떤 맵인가,
- * 무엇이 열렸는가.** 특히 맵 축소도를 카드에 직접 그리는데, "두 갈래 길"이나
+ * 무엇이 열렸는가.** 특히 맵 축소도를 카드에 직접 그리는데, "갈림길 서낭"이나
  * "세 방향" 같은 지형 차이는 글로 읽는 것보다 형태로 보는 편이 훨씬 빠르다.
  */
 export class StageSelect {
@@ -48,7 +48,7 @@ export class StageSelect {
 
     ctx.font = FONT.huge
     ctx.fillStyle = PALETTE.text
-    ctx.fillText('왕국 방어전', 40, 88)
+    ctx.fillText('밤길 방어전', 40, 88)
 
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted
@@ -322,7 +322,7 @@ export class StageSelect {
       ctx.arc(sx, sy, dot, 0, Math.PI * 2)
       ctx.fill()
     }
-    // 목표는 왕성이라 점이 아니라 작은 탑 실루엣으로 — 출발점과 역할이 다르다.
+    // 목표는 마을이라 점이 아니라 작은 지붕 실루엣으로 — 출발점과 역할이 다르다.
     const goal = routes[0]![routes[0]!.length - 1]!
     const [gx, gy] = inset(ox + toPx(goal.x), oy + toPx(goal.y))
     const kw = dot * 1.7

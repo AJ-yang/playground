@@ -23,10 +23,12 @@ interface ArtFootprint {
   down: number
 }
 
-/** 왕성 — 깃발이 위로 튀어나와 있어 up이 크다. */
-const CASTLE_FOOTPRINT: ArtFootprint = { size: 54, halfWidth: 15.5, up: 30, down: 1 }
-/** 무너진 성문 — 찢긴 깃발이 위로 뻗는다. */
-const GATE_FOOTPRINT: ArtFootprint = { size: 46, halfWidth: 14, up: 30, down: 1 }
+// 아래 값은 아트의 실제 경로 범위에서 뽑은 것이다. 눈대중으로 잡아 두었다가
+// 마을과 무덤이 보드 가장자리에서 잘렸다 — 아트를 고칠 때 여기도 같이 봐야 한다.
+/** 마을 — 초가와 기와가 좌우로 벌어져 32 칸을 꽉 채운다. 당산나무 때문에 up이 크다. */
+const CASTLE_FOOTPRINT: ArtFootprint = { size: 54, halfWidth: 17.5, up: 31.5, down: 1 }
+/** 무덤 — 만장이 위로 뻗는다. */
+const GATE_FOOTPRINT: ArtFootprint = { size: 46, halfWidth: 15.5, up: 27, down: 1 }
 
 /** 라벨과 그림 꼭대기 사이 간격(px). */
 const LABEL_GAP = 13
@@ -156,7 +158,7 @@ export class Renderer {
       const br = rng.range(28, 82)
       const light = rng.next() < 0.5
       const grad = ctx.createRadialGradient(bx, by, 0, bx, by, br)
-      grad.addColorStop(0, light ? 'rgba(58,80,50,0.34)' : 'rgba(18,26,17,0.34)')
+      grad.addColorStop(0, light ? 'rgba(56,76,78,0.34)' : 'rgba(14,20,22,0.34)')
       grad.addColorStop(1, 'rgba(0,0,0,0)')
       ctx.fillStyle = grad
       ctx.fillRect(bx - br, by - br, br * 2, br * 2)
@@ -179,7 +181,7 @@ export class Renderer {
       const gx = rng.range(4, w - 4)
       const gy = rng.range(8, h - 4)
       const blades = rng.int(2, 4)
-      ctx.strokeStyle = `rgba(150,200,120,${rng.range(0.05, 0.13).toFixed(3)})`
+      ctx.strokeStyle = `rgba(160,200,205,${rng.range(0.04, 0.11).toFixed(3)})`
       ctx.lineWidth = rng.range(0.9, 1.5)
       ctx.beginPath()
       for (let b = 0; b < blades; b++) {
@@ -315,7 +317,7 @@ export class Renderer {
   }
 
   /**
-   * 출발지·왕성 표식.
+   * 출발지·마을 표식.
    *
    * 경로는 보드 가장자리에서 시작하고 끝나므로, 좌표를 그대로 쓰면 건물이
    * 절반쯤 잘려 나간다. 그래서 그림이 실제로 차지하는 폭·높이를 계산해
@@ -329,7 +331,7 @@ export class Renderer {
     ctx.font = FONT.label
     ctx.textBaseline = 'middle'
 
-    // 출발지 — 무너진 성문. 그림이 있으면 "여기서 나온다"가 글자보다 빨리 읽힌다.
+    // 출발지 — 봉분 무덤. 그림이 있으면 "여기서 나온다"가 글자보다 빨리 읽힌다.
     paths.forEach((p, i) => {
       const start = p.positionAt(0)
       const spot = fitArt(start, GATE_FOOTPRINT, board)
@@ -337,16 +339,16 @@ export class Renderer {
 
       ctx.fillStyle = 'rgba(255,120,120,0.95)'
       ctx.textAlign = 'center'
-      ctx.fillText(paths.length > 1 ? `출현 ${i + 1}` : '적 출현', spot.x, spot.labelY)
+      ctx.fillText(paths.length > 1 ? `무덤 ${i + 1}` : '무덤', spot.x, spot.labelY)
     })
 
-    // 왕성 — 지켜야 하는 곳
+    // 마을 — 지켜야 하는 곳
     const end = paths[0]!.positionAt(paths[0]!.totalLength)
     const spot = fitArt(end, CASTLE_FOOTPRINT, board)
     drawArt(ctx, CASTLE_ART, spot.x, spot.baseline, CASTLE_FOOTPRINT.size)
     ctx.textAlign = 'center'
     ctx.fillStyle = 'rgba(120,180,240,0.95)'
-    ctx.fillText('왕성', spot.x, spot.labelY)
+    ctx.fillText('마을', spot.x, spot.labelY)
   }
 
   /** 건설 모드일 때 커서 아래 타일의 가/불가를 표시. */
@@ -417,7 +419,7 @@ export class Renderer {
   /**
    * 타워 1기.
    *
-   * 몸체는 `render/art.ts`의 중세 건물 벡터 아트다. 무기 부분만 따로 그려
+   * 몸체는 `render/art.ts`의 벡터 아트다. 무기 부분만 따로 그려
    * 목표를 향해 회전시킨다 — 건물이 통째로 도는 것은 어색하고, 지금 어느
    * 타워가 무엇을 겨누는지는 여전히 보여야 하기 때문이다.
    */
@@ -486,7 +488,7 @@ export class Renderer {
   /**
    * 무기.
    *
-   * 예전에는 삼각형·사각형 같은 도형이었다. 지금은 활·봄바드·플라스크 같은
+   * 예전에는 삼각형·사각형 같은 도형이었다. 지금은 화살·징채·표주박 같은
    * 실제 물건이라 무엇을 하는 타워인지가 아이콘 없이도 읽힌다. 시간 기반
    * 움직임(맥동·회전·흔들림)은 아트가 아니라 여기서 준다 — 같은 그림을
    * 패널에서 정지 상태로도 써야 하기 때문이다.
@@ -526,7 +528,7 @@ export class Renderer {
 
     // 공중 유닛은 그림자를 아래에 깔고 본체를 띄운다. 형태(날개)와 함께
     // 세 겹으로 표시하는 이유는 정지 화면·고배속·색각 이상 어디서도
-    // "이건 대포탑이 못 때린다"가 읽혀야 하기 때문이다.
+    // "이건 굿청 징이 못 때린다"가 읽혀야 하기 때문이다.
     // 그림자는 공중일 때 더 작고 진하게 — 본체와의 거리를 만든다.
     const lift = def.flying ? 13 : 0
     ctx.fillStyle = def.flying ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.35)'
@@ -548,7 +550,7 @@ export class Renderer {
     // 날개 (본체 뒤).
     //
     // 본체와 같은 색·같은 명도로 그리면 실루엣이 하나로 뭉쳐서 "날고 있다"가
-    // 안 읽힌다 — 늑대 기수(지상 쐐기)와 와이번(공중 쐐기)이 색으로만 구분되는
+    // 안 읽힌다 — 장산범(지상 쐐기)와 도깨비불(공중 쐐기)이 색으로만 구분되는
     // 상태가 된다. 그래서 밝은 테두리로 본체와 값을 분리하고 폭을 키웠다.
     if (def.flying) {
       const flap = (Math.sin(time * 9 + enemy.id) + 1) / 2
@@ -592,7 +594,7 @@ export class Renderer {
     // 본체 — 손으로 그린 벡터 아트. 진행 방향을 보도록 좌우를 뒤집는다.
     const art = ENEMY_ART[def.id]
     if (art) {
-      drawArt(ctx, art, pos.x, bodyY, r * 2.45, { color: def.color, accent: def.color }, false, facing)
+      drawArt(ctx, art, pos.x, bodyY, r * 2.45, { color: def.color, accent: def.accent }, false, facing)
     } else {
       ctx.fillStyle = def.color
       enemySilhouettePath(ctx, sil, pos.x, bodyY, r, angle)
@@ -615,7 +617,7 @@ export class Renderer {
 
     // 표식 반지름은 서로 겹치지 않게 층을 나눈다. 예전에는 마저 오라가
     // 실루엣보다 훨씬 커서(1.32r) **옆 적까지 침범해** 몇 마리인지 안 읽혔고,
-    // 장갑·마저가 둘 다 켜지는 트롤·보스는 링이 두 겹으로 보였다.
+    // 장갑·마저가 둘 다 켜지는 불가사리·보스는 링이 두 겹으로 보였다.
     //
     // 장갑 — 같은 실루엣을 몸에 딱 붙여 한 겹 더. 예전에는 안쪽에 그렸는데
     // 그림으로 바뀐 뒤로는 본체를 덮어 버려서 테두리로 옮겼다.
@@ -645,7 +647,7 @@ export class Renderer {
     }
     // 중독 표식 — 방어를 무시하고 계속 깎이는 중이라는 신호
     if (enemy.isPoisoned) {
-      ctx.strokeStyle = 'rgba(182,240,106,0.9)'
+      ctx.strokeStyle = 'rgba(226,120,90,0.95)'
       ctx.lineWidth = 2
       ctx.setLineDash([2, 4])
       ctx.beginPath()
@@ -822,7 +824,7 @@ export class Renderer {
 
     ctx.font = FONT.huge
     ctx.fillStyle = win ? PALETTE.text : PALETTE.danger
-    ctx.fillText(win ? game.stage.name : '왕성이 함락되었다', cx, y)
+    ctx.fillText(win ? game.stage.name : '마을이 무너졌다', cx, y)
     y += 32
 
     // 배너 밑줄 — 제목과 통계를 시각적으로 분리한다.
