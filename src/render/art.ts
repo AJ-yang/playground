@@ -45,6 +45,8 @@
  *   석장승의 넋 / 허깨비 / 원귀는 특정 전승이 아니라 계열에서 뽑은 형상이다.
  */
 
+import { Rng } from '../core/rng'
+
 export interface ArtLayer {
   /** SVG path 데이터 (viewBox 0 0 32 32) */
   d: string
@@ -889,12 +891,23 @@ export function drawArt(
   anchorBottom = true,
   flipX = false,
 ): void {
-  const scale = size / 32
+  const img = shaded(art, size, tint)
+  const unit = img.unit
   ctx.save()
   ctx.translate(cx, cy)
-  ctx.scale(flipX ? -scale : scale, scale)
-  ctx.translate(-16, anchorBottom ? -29 : -16)
+  if (flipX) ctx.scale(-1, 1)
+  ctx.drawImage(
+    img.canvas,
+    (-16 - PAD) * unit,
+    (anchorBottom ? -29 - PAD : -16 - PAD) * unit,
+    img.canvas.width / img.dpr,
+    img.canvas.height / img.dpr,
+  )
+  ctx.restore()
+}
 
+/** 색만 평평하게 칠하는 원본 패스. 명암은 이 위에 따로 얹는다. */
+function paintFlat(ctx: CanvasRenderingContext2D, art: Art, tint?: Tint): void {
   for (const layer of art) {
     const path = new Path2D(layer.d)
     if (layer.fill) {
@@ -908,7 +921,162 @@ export function drawArt(
       ctx.stroke(path)
     }
   }
-  ctx.restore()
+}
+
+/**
+ * 32 좌표계 밖으로 삐져나오는 그림을 담을 여유(32 좌표계 단위).
+ *
+ * 두억시니의 불꽃은 y = −5.4까지 올라가고 구미호의 꼬리는 x < 0까지 뻗는다.
+ * 여유 없이 잘라내면 그 부분이 사라진다.
+ */
+const PAD = 8
+
+interface ShadedArt {
+  canvas: HTMLCanvasElement
+  unit: number
+  dpr: number
+}
+
+const shadeCache = new WeakMap<Art, Map<string, ShadedArt>>()
+
+/**
+ * 그림에 **입체감을 입힌다.**
+ *
+ * 원래는 평평한 단색 면만 칠했다. 형태는 읽혔지만 전부 종이를 오려 붙인 것
+ * 같았다 — 나무도 돌도 천도 같은 재질로 보였다. 그렇다고 40개 가까운 그림에
+ * 일일이 명암 레이어를 손으로 그려 넣으면, 그림 하나 고칠 때마다 명암도 같이
+ * 고쳐야 해서 유지가 안 된다.
+ *
+ * 그래서 **그리는 쪽이 아니라 렌더러가** 빛을 준다. 완성된 그림 위에
+ *   1. 위에서 내려오는 빛 — 위는 밝고 아래로 갈수록 어두워지는 세로 그라디언트
+ *   2. 빗면 — 왼쪽 위 모서리에 하이라이트, 오른쪽 아래 모서리에 그늘
+ * 두 겹을 얹는다. 광원은 **왼쪽 위 하나로 고정**했다. 그림마다 빛이 다르면
+ * 한 화면에 있는 것들이 같은 공간에 있는 것처럼 안 보인다.
+ *
+ * 모서리 띠는 `원본 − (원본을 한 칸 민 것)`으로 뽑는다. 채운 도형뿐 아니라
+ * 선으로 그린 부분(팔·꼬리)에도 똑같이 걸린다는 게 이 방식의 장점이다.
+ * 패스를 직접 다뤘다면 선은 명암에서 빠져 혼자 평평해졌을 것이다.
+ *
+ * 결과는 (그림 × 크기 × 색) 단위로 캐시한다. 적 한 마리를 매 프레임마다
+ * 오프스크린 세 장으로 합성할 수는 없다. 아트는 정적이라 무효화가 필요 없다.
+ */
+function shaded(art: Art, size: number, tint?: Tint): ShadedArt {
+  const dpr = Math.min(3, typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1)
+  // 바위·나무는 크기를 난수로 흔들어 뽑으므로 그대로 캐시하면 항목이 무한히
+  // 늘어난다. 0.5 단위로 묶는다 — 이 정도 차이는 화면에서 안 보인다.
+  const q = Math.max(1, Math.round(size * 2) / 2)
+  const key = `${q}|${tint?.color ?? ''}|${tint?.accent ?? ''}|${dpr}`
+
+  let per = shadeCache.get(art)
+  if (!per) {
+    per = new Map()
+    shadeCache.set(art, per)
+  }
+  const hit = per.get(key)
+  if (hit) return hit
+
+  const built = buildShaded(art, q, tint, dpr)
+  per.set(key, built)
+  return built
+}
+
+function buildShaded(art: Art, size: number, tint: Tint | undefined, dpr: number): ShadedArt {
+  const unit = size / 32
+  const box = 32 + PAD * 2
+  const px = Math.max(1, Math.round(box * unit * dpr))
+
+  const blank = (): [HTMLCanvasElement, CanvasRenderingContext2D] => {
+    const c = document.createElement('canvas')
+    c.width = px
+    c.height = px
+    return [c, c.getContext('2d')!]
+  }
+
+  const [flat, fx] = blank()
+  fx.setTransform(unit * dpr, 0, 0, unit * dpr, PAD * unit * dpr, PAD * unit * dpr)
+  paintFlat(fx, art, tint)
+
+  // `원본 − (dx,dy)만큼 민 원본` = 반대편 모서리에 남는 띠
+  const edge = (dx: number, dy: number, color: string): HTMLCanvasElement => {
+    const [c, x] = blank()
+    x.drawImage(flat, 0, 0)
+    x.globalCompositeOperation = 'destination-out'
+    x.drawImage(flat, dx * unit * dpr, dy * unit * dpr)
+    x.globalCompositeOperation = 'source-in'
+    x.fillStyle = color
+    x.fillRect(0, 0, px, px)
+    return c
+  }
+
+  const [out, ox] = blank()
+  ox.drawImage(flat, 0, 0)
+
+  // 1. 위에서 내려오는 빛. 그림 바깥은 건드리지 않도록 source-atop.
+  ox.globalCompositeOperation = 'source-atop'
+  const lit = ox.createLinearGradient(0, PAD * unit * dpr, 0, (PAD + 30) * unit * dpr)
+  lit.addColorStop(0, 'rgba(255,246,226,0.17)')
+  lit.addColorStop(0.42, 'rgba(255,255,255,0)')
+  lit.addColorStop(1, 'rgba(4,7,14,0.32)')
+  ox.fillStyle = lit
+  ox.fillRect(0, 0, px, px)
+
+  // 2. 빗면. 오른쪽 아래로 민 것을 빼면 **왼쪽 위** 띠가 남는다 → 하이라이트.
+  ox.drawImage(edge(1.1, 1.1, 'rgba(255,249,235,0.34)'), 0, 0)
+  ox.drawImage(edge(-1.1, -1.1, 'rgba(0,0,0,0.30)'), 0, 0)
+
+  // 3. 표면 결.
+  //
+  // 명암만 넣으면 입체감은 생기지만 표면이 전부 **매끈한 플라스틱**이 된다.
+  // 나무도 돌도 천도 똑같이 반들거려서 재질이 구분되지 않는다. 미세한 얼룩을
+  // 한 겹 얹으면 큰 면이 깨지면서 "칠한 것"이 아니라 "물건"으로 보인다.
+  //
+  // 실루엣으로 먼저 오려낸 뒤 overlay로 얹는 순서가 중요하다. 그냥 overlay로
+  // 깔면 그림 바깥의 빈 화면까지 지저분해진다.
+  const [grain, gx] = blank()
+  const pattern = ox.createPattern(grainTile(), 'repeat')!
+  gx.fillStyle = pattern
+  gx.fillRect(0, 0, px, px)
+  gx.globalCompositeOperation = 'destination-in'
+  gx.drawImage(flat, 0, 0)
+
+  ox.globalCompositeOperation = 'overlay'
+  ox.globalAlpha = 0.5
+  ox.drawImage(grain, 0, 0)
+
+  ox.globalAlpha = 1
+  ox.globalCompositeOperation = 'source-over'
+  return { canvas: out, unit, dpr }
+}
+
+let grainCache: HTMLCanvasElement | null = null
+
+/**
+ * 표면 결로 쓸 잡음 타일.
+ *
+ * 중간 회색(128) 기준으로 흩어 두면 overlay 합성에서 정확히 상쇄된다 —
+ * 밝은 점은 밝히고 어두운 점은 어둡게 하되 전체 밝기는 그대로다.
+ * Math.random이 아니라 시드 난수를 쓰는 이유는 다른 곳과 같다: 다시 그릴
+ * 때마다 결이 달라지면 스크린샷 비교가 불가능해진다.
+ */
+export function grainTile(): HTMLCanvasElement {
+  if (grainCache) return grainCache
+  const n = 96
+  const c = document.createElement('canvas')
+  c.width = n
+  c.height = n
+  const x = c.getContext('2d')!
+  const img = x.createImageData(n, n)
+  const rng = new Rng(0x9d2c5681)
+  for (let i = 0; i < n * n; i++) {
+    const v = 128 + Math.round((rng.next() - 0.5) * 78)
+    img.data[i * 4] = v
+    img.data[i * 4 + 1] = v
+    img.data[i * 4 + 2] = v
+    img.data[i * 4 + 3] = 255
+  }
+  x.putImageData(img, 0, 0)
+  grainCache = c
+  return c
 }
 
 function resolve(value: string, tint?: Tint): string {

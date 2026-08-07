@@ -8,7 +8,7 @@ import type { TowerDef } from '../data/towers'
 import type { Layout } from '../ui/layout'
 import { FONT, PALETTE, roundRect } from './palette'
 import { enemySilhouettePath, enemyWingsPath } from './shapes'
-import { CASTLE_ART, ENEMY_ART, GATE_ART, ROCK_ART, TOWER_ART, TREE_ART, WEAPON_ART, drawArt } from './art'
+import { CASTLE_ART, ENEMY_ART, GATE_ART, ROCK_ART, TOWER_ART, TREE_ART, WEAPON_ART, drawArt, grainTile } from './art'
 
 /**
  * 아트가 화면에서 실제로 차지하는 범위.
@@ -284,6 +284,24 @@ export class Renderer {
         }
       }
     })
+
+    // 흙 결. 바위·나무에 재질감을 넣고 나니 길만 매끈해서 **길 위에 물건을
+    // 올려놓은 게 아니라 물건을 오려 붙인 것**처럼 보였다. 같은 잡음 타일을
+    // 길에도 얹어 바닥과 물건이 같은 세계에 있게 한다.
+    const dirt = document.createElement('canvas')
+    dirt.width = ctx.canvas.width
+    dirt.height = ctx.canvas.height
+    const dc = dirt.getContext('2d')!
+    dc.fillStyle = dc.createPattern(grainTile(), 'repeat')!
+    dc.fillRect(0, 0, dirt.width, dirt.height)
+    dc.globalCompositeOperation = 'destination-in'
+    strokeAll(dc, TILE_SIZE + 6, '#fff')
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'overlay'
+    ctx.globalAlpha = 0.4
+    ctx.drawImage(dirt, 0, 0)
+    ctx.restore()
   }
 
   /** 장애물 — 바위와 나무 두 종류를 섞어 지형에 리듬을 준다. */
