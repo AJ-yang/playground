@@ -50,22 +50,33 @@ export class Enemy {
    */
   readonly lateral: number
 
-  constructor(id: number, def: EnemyDef, path: Path, spawnOffset = 0, lateral = 0) {
+  /**
+   * 난이도 체력 배율. 정의값(`def.maxHp`)이 아니라 **이 값을 곱한 것**이
+   * 실제 최대 체력이다. 데이터는 그대로 두고 판마다 스케일만 바꾸는 구조라,
+   * 밸런스 표를 난이도별로 복제하지 않아도 된다.
+   */
+  readonly maxHp: number
+
+  constructor(
+    id: number,
+    def: EnemyDef,
+    path: Path,
+    spawnOffset = 0,
+    lateral = 0,
+    hpScale = 1,
+  ) {
     this.id = id
     this.def = def
     this.path = path
-    this.hp = def.maxHp
+    this.maxHp = def.maxHp * hpScale
+    this.hp = this.maxHp
     this.distance = -spawnOffset
     this.lateral = lateral
     this.pos = path.positionAt(0)
   }
 
-  get maxHp(): number {
-    return this.def.maxHp
-  }
-
   get hpRatio(): number {
-    return Math.max(0, this.hp / this.def.maxHp)
+    return Math.max(0, this.hp / this.maxHp)
   }
 
   get isSlowed(): boolean {

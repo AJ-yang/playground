@@ -89,10 +89,10 @@ const WAVES_S1: WaveDef[] = [
   },
   {
     id: 8,
-    prepTime: 24,
-    reward: 105,
-    warning: '마지막 돌격',
-    groups: [g('grunt', 66, 0.53), g('runner', 83, 0.42, 8)],
+    prepTime: 26,
+    reward: 130,
+    warning: '보스 — 고블린 대왕 우르그',
+    groups: [g('grunt', 40, 0.6), g('runner', 50, 0.5, 8), g('goblinking', 1, 1, 14)],
   },
 ]
 
@@ -157,10 +157,10 @@ const WAVES_S2: WaveDef[] = [
   },
   {
     id: 10,
-    prepTime: 24,
-    reward: 255,
-    warning: '성벽 붕괴 — 총력전',
-    groups: [g('armored', 32, 0.7), g('runner', 51, 0.69, 8), g('grunt', 33, 0.7, 12)],
+    prepTime: 26,
+    reward: 300,
+    warning: '보스 — 공성 골렘 카르낙 (장갑 22)',
+    groups: [g('armored', 20, 0.75), g('runner', 32, 0.7, 8), g('grunt', 20, 0.75, 12), g('golem', 1, 1, 16)],
   },
 ]
 
@@ -208,9 +208,10 @@ const WAVES_S3: WaveDef[] = [
   },
   {
     id: 7,
-    prepTime: 17,
-    reward: 45,
-    groups: [g('shaman', 4, 0.85), g('armored', 3, 0.85, 8, 1), g('wyvern', 4, 0.85, 12), g('runner', 7, 0.85, 16, 1)],
+    prepTime: 22,
+    reward: 90,
+    warning: '중간 보스 — 쌍두 와이번 니드호그 (공중)',
+    groups: [g('shaman', 3, 0.85), g('armored', 2, 0.85, 8, 1), g('runner', 5, 0.85, 12, 1), g('twinwyvern', 1, 1, 15)],
   },
   {
     id: 8,
@@ -238,10 +239,10 @@ const WAVES_S3: WaveDef[] = [
   },
   {
     id: 12,
-    prepTime: 24,
-    reward: 225,
-    warning: '양쪽에서 동시에 밀려옵니다',
-    groups: [g('shaman', 19, 0.6), g('wyvern', 22, 0.6, 8, 1), g('armored', 13, 0.6, 12), g('runner', 27, 0.6, 16, 1)],
+    prepTime: 26,
+    reward: 280,
+    warning: '보스 — 주술 대모 모르가 (마법 저항 78%)',
+    groups: [g('shaman', 11, 0.65), g('wyvern', 13, 0.65, 8, 1), g('armored', 8, 0.65, 12), g('runner', 16, 0.65, 16, 1), g('hexmother', 1, 1, 20)],
   },
 ]
 
@@ -295,9 +296,10 @@ const WAVES_S4: WaveDef[] = [
   },
   {
     id: 8,
-    prepTime: 17,
-    reward: 110,
-    groups: [g('brute', 2, 0.8), g('wyvern', 9, 0.8, 8), g('sentinel', 2, 0.8, 12), g('shaman', 6, 0.8, 16)],
+    prepTime: 22,
+    reward: 190,
+    warning: '중간 보스 — 공성 골렘 카르낙',
+    groups: [g('brute', 2, 0.8), g('wyvern', 9, 0.8, 8), g('sentinel', 2, 0.8, 12), g('shaman', 6, 0.8, 16), g('golem', 1, 1, 18)],
   },
   {
     id: 9,
@@ -332,10 +334,10 @@ const WAVES_S4: WaveDef[] = [
   },
   {
     id: 14,
-    prepTime: 24,
-    reward: 620,
-    warning: '서리 군단 총진격',
-    groups: [g('brute', 13, 0.5), g('sentinel', 14, 0.5, 8), g('runner', 100, 0.35, 12), g('wyvern', 40, 0.5, 16)],
+    prepTime: 26,
+    reward: 700,
+    warning: '보스 — 서리 거인 요툰 (장갑 + 마법 저항)',
+    groups: [g('brute', 12, 0.52), g('sentinel', 13, 0.52, 8), g('runner', 95, 0.36, 12), g('wyvern', 37, 0.52, 16), g('frostgiant', 1, 1, 22)],
   },
 ]
 
@@ -389,10 +391,10 @@ const WAVES_S5: WaveDef[] = [
   },
   {
     id: 8,
-    prepTime: 17,
-    reward: 60,
-    warning: '수정 감시자 — 중장갑 공중',
-    groups: [g('brute', 1, 0.8), g('sentinel', 1, 0.8, 8, 1), g('warlock', 1, 0.8, 12, 2), g('wyvern', 2, 0.8, 16)],
+    prepTime: 22,
+    reward: 130,
+    warning: '중간 보스 — 쌍두 와이번 니드호그',
+    groups: [g('sentinel', 1, 0.8, 0, 1), g('warlock', 1, 0.8, 6, 2), g('wyvern', 2, 0.8, 10), g('twinwyvern', 1, 1, 14)],
   },
   {
     id: 9,
@@ -426,9 +428,10 @@ const WAVES_S5: WaveDef[] = [
   },
   {
     id: 14,
-    prepTime: 19,
-    reward: 115,
-    groups: [g('warlock', 1, 0.5), g('brute', 1, 0.5, 8, 1), g('sentinel', 1, 0.5, 12, 2), g('runner', 7, 0.5, 16)],
+    prepTime: 24,
+    reward: 230,
+    warning: '중간 보스 — 공성 골렘 카르낙',
+    groups: [g('warlock', 1, 0.5), g('sentinel', 1, 0.5, 8, 2), g('runner', 5, 0.5, 12), g('golem', 1, 1, 16, 1)],
   },
   {
     id: 15,

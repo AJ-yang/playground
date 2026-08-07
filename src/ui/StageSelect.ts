@@ -3,6 +3,7 @@ import { TOWER_ORDER, getTowerDef } from '../data/towers'
 import type { Progress } from '../game/Progress'
 import { FONT, PALETTE, roundRect } from '../render/palette'
 import { TOWER_ART, drawArt } from '../render/art'
+import { getDifficulty } from '../data/difficulty'
 import type { Layout, UiButton } from './layout'
 
 /**
@@ -51,7 +52,27 @@ export class StageSelect {
 
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted
+    const introW = ctx.measureText('스테이지를 깰 때마다 새 기물이 열립니다').width
     ctx.fillText('스테이지를 깰 때마다 새 기물이 열립니다', 40, 112)
+
+    // 난이도 배지 — 판마다 걸리는 설정이라 어느 화면에서도 지금 값이 보여야 한다.
+    const diff = getDifficulty(progress.difficulty)
+    const badgeX = 40 + introW + 16
+    ctx.font = FONT.tiny
+    const label = `난이도 ${diff.name} · 적 체력 ${Math.round(diff.hpScale * 100)}%`
+    const badgeW = ctx.measureText(label).width + 20
+    ctx.fillStyle = `${diff.color}22`
+    roundRect(ctx, badgeX, 100, badgeW, 20, 10)
+    ctx.fill()
+    ctx.strokeStyle = `${diff.color}66`
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = diff.color
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, badgeX + badgeW / 2, 110)
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
 
     // 진행도
     ctx.textAlign = 'right'
@@ -62,6 +83,17 @@ export class StageSelect {
     ctx.fillStyle = PALETTE.gold
     ctx.fillText(`${progress.clearedCount} / ${TOTAL_STAGES}`, layout.width - 40, 88)
     ctx.textAlign = 'left'
+
+    this.button({
+      id: 'toTitle',
+      x: layout.width - 320,
+      y: 100,
+      w: 130,
+      h: 26,
+      label: '◀ 타이틀 · 난이도',
+      enabled: true,
+      subtle: true,
+    })
 
     if (progress.clearedCount > 0) {
       this.button({

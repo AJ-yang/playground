@@ -1,6 +1,7 @@
 import { TOWER_DEFS } from '../data/towers'
 import { ENEMY_DEFS, getEnemyDef } from '../data/enemies'
 import { STAGES, STARTING_TOWERS, type StageDef } from '../data/stages'
+import { getDifficulty } from '../data/difficulty'
 import { aggregate, simulate, type Aggregate, type SimResult } from './headless'
 import { STRATEGIES, findStrategy, type Strategy } from './strategies'
 
@@ -12,6 +13,7 @@ import { STRATEGIES, findStrategy, type Strategy } from './strategies'
  *   npm run sim -- --stage fork      특정 스테이지만
  *   npm run sim -- --runs 50         시드 수 지정
  *   npm run sim -- --only balanced,adaptive-frost1
+ *   npm run sim -- --difficulty hard   난이도별 검증 (적 HP 배율의 별칭)
  *   npm run sim -- --markdown        docs/BALANCE.md에 붙일 표로 출력
  *   npm run sim -- --audit           스테이지별 압박·수입 곡선 (시뮬레이션 없이)
  *   npm run sim -- --income 1.3      수입 전역 배율 스윕 (튜닝용)
@@ -48,6 +50,10 @@ function parseArgs(argv: string[]): Options {
     else if (arg === '--audit') opts.audit = true
     else if (arg === '--income' && argv[i + 1]) opts.income = Number(argv[++i])
     else if (arg === '--hp' && argv[i + 1]) opts.hp = Number(argv[++i])
+    // 난이도는 결국 적 HP 배율 하나이므로 --hp의 별칭으로 둔다.
+    // 이름으로 부를 수 있으면 "어려움에서도 조합 빌드가 클리어되는가"를
+    // 게임과 같은 어휘로 물어볼 수 있다.
+    else if (arg === '--difficulty' && argv[i + 1]) opts.hp = getDifficulty(argv[++i]!).hpScale
   }
   return opts
 }

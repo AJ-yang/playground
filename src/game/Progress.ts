@@ -1,4 +1,5 @@
 import { STAGES, STARTING_TOWERS, type StageDef } from '../data/stages'
+import { DEFAULT_DIFFICULTY, DIFFICULTIES, getDifficulty } from '../data/difficulty'
 
 /**
  * 진행도 — 어떤 스테이지를 깼고 어떤 기물이 열렸는가.
@@ -40,13 +41,23 @@ export function browserStorage(): ProgressStorage {
 
 interface Saved {
   cleared: string[]
-  /** 스테이지별 최고 기록 (클리어 시 남은 생명) */
+  /**
+   * 최고 기록 (클리어 시 남은 생명). 키는 `스테이지ID@난이도ID`.
+   *
+   * 난이도를 키에 넣는 이유: 쉬움에서 20을 남긴 것과 어려움에서 3을 남긴 것을
+   * 같은 칸에 적으면 기록이 아무 의미가 없어진다. 반면 **해금(cleared)은
+   * 난이도와 무관하게 공유한다** — 난이도는 진입 장벽이지 콘텐츠 잠금이 아니다.
+   */
   bestLives: Record<string, number>
+  /** 마지막으로 고른 난이도 */
+  difficulty: string
 }
 
 export class Progress {
   private cleared = new Set<string>()
   private bestLives: Record<string, number> = {}
+  /** 현재 선택된 난이도 ID. 판을 시작할 때 체력 배율로 쓰인다. */
+  difficulty: string = DEFAULT_DIFFICULTY
 
   constructor(private readonly storage: ProgressStorage = memoryStorage()) {
     this.load()
@@ -61,8 +72,13 @@ export class Progress {
       // 이름을 바꿨을 때 유령 진행도가 남지 않게.
       const valid = new Set(STAGES.map((s) => s.id))
       for (const id of parsed.cleared ?? []) if (valid.has(id)) this.cleared.add(id)
-      for (const [id, lives] of Object.entries(parsed.bestLives ?? {})) {
-        if (valid.has(id) && typeof lives === 'number') this.bestLives[id] = lives
+      for (const [key, lives] of Object.entries(parsed.bestLives ?? {})) {
+        // 키는 `스테이지ID@난이도ID`. 스테이지 부분만 검증한다.
+        const stageId = key.split('@')[0]!
+        if (valid.has(stageId) && typeof lives === 'number') this.bestLives[key] = lives
+      }
+      if (parsed.difficulty && DIFFICULTIES.some((d) => d.id === parsed.difficulty)) {
+        this.difficulty = parsed.difficulty
       }
     } catch {
       // 손상된 저장 데이터는 무시하고 처음부터 시작한다.
@@ -70,7 +86,11 @@ export class Progress {
   }
 
   private save(): void {
-    const data: Saved = { cleared: [...this.cleared], bestLives: this.bestLives }
+    const data: Saved = {
+      cleared: [...this.cleared],
+      bestLives: this.bestLives,
+      difficulty: this.difficulty,
+    }
     this.storage.write(STORAGE_KEY, JSON.stringify(data))
   }
 
@@ -78,8 +98,20 @@ export class Progress {
     return this.cleared.has(stageId)
   }
 
+  /** 현재 난이도의 체력 배율. */
+  get hpScale(): number {
+    return getDifficulty(this.difficulty).hpScale
+  }
+
+  setDifficulty(id: string): void {
+    if (!DIFFICULTIES.some((d) => d.id === id)) return
+    this.difficulty = id
+    this.save()
+  }
+
+  /** 지금 난이도에서의 최고 기록. 다른 난이도의 기록은 보여주지 않는다. */
   bestLivesFor(stageId: string): number | null {
-    return this.bestLives[stageId] ?? null
+    return this.bestLives[`${stageId}@${this.difficulty}`] ?? null
   }
 
   /**
@@ -107,8 +139,9 @@ export class Progress {
   completeStage(stage: StageDef, livesLeft: number): string | null {
     const first = !this.cleared.has(stage.id)
     this.cleared.add(stage.id)
-    const prev = this.bestLives[stage.id] ?? -1
-    if (livesLeft > prev) this.bestLives[stage.id] = livesLeft
+    const key = `${stage.id}@${this.difficulty}`
+    const prev = this.bestLives[key] ?? -1
+    if (livesLeft > prev) this.bestLives[key] = livesLeft
     this.save()
     return first ? stage.unlocksTower : null
   }

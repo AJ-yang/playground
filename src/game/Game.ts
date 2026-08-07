@@ -23,6 +23,8 @@ export interface GameOptions {
   seed?: number
   /** 이번 판에 건설할 수 있는 타워. 생략하면 전부 허용한다. */
   availableTowers?: readonly string[]
+  /** 난이도 체력 배율. 1이 기준. */
+  hpScale?: number
 }
 
 /**
@@ -42,6 +44,8 @@ export class Game {
   readonly effects = new Effects()
   /** 이번 판에 건설 가능한 타워 ID */
   readonly availableTowers: readonly string[]
+  /** 난이도 체력 배율. 적을 만들 때만 쓴다. */
+  readonly hpScale: number
   private readonly rng: Rng
   /**
    * 연출 전용 난수. **시뮬레이션 난수와 반드시 분리한다.**
@@ -90,6 +94,7 @@ export class Game {
     this.rng = new Rng(options.seed ?? 20240816)
     this.cosmeticRng = new Rng((options.seed ?? 20240816) ^ 0x5f3759df)
     this.availableTowers = options.availableTowers ?? TOWER_ORDER
+    this.hpScale = options.hpScale ?? 1
     this.waves = new WaveManager(stage.waves)
 
     const level = stage.level
@@ -283,7 +288,9 @@ export class Game {
       // 이쪽은 렌더링 전용이라 사거리 판정에는 영향이 없다.
       const jitter = this.rng.range(0, TILE_SIZE * 0.6)
       const lateral = this.cosmeticRng.range(-TILE_SIZE * 0.22, TILE_SIZE * 0.22)
-      this.enemies.push(new Enemy(this.nextEntityId++, def, path, jitter, lateral))
+      this.enemies.push(
+        new Enemy(this.nextEntityId++, def, path, jitter, lateral, this.hpScale),
+      )
     }
   }
 

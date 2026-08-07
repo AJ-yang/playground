@@ -1,5 +1,6 @@
 import { GameLoop } from './core/loop'
 import { STAGES, getStage, type StageDef } from './data/stages'
+import { DIFFICULTIES } from './data/difficulty'
 import { TOWER_ORDER, getTowerDef } from './data/towers'
 import { Game, TILE_SIZE } from './game/Game'
 import { Progress, browserStorage } from './game/Progress'
@@ -7,6 +8,7 @@ import { Renderer } from './render/Renderer'
 import { PALETTE, FONT } from './render/palette'
 import { Hud } from './ui/Hud'
 import { StageSelect } from './ui/StageSelect'
+import { TitleScreen } from './ui/TitleScreen'
 import { computeLayout, hitTest } from './ui/layout'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement | null
@@ -30,11 +32,15 @@ const progress = new Progress(browserStorage())
 const renderer = new Renderer(ctx, layout)
 const hud = new Hud(ctx, layout)
 const stageSelect = new StageSelect(ctx, layout)
+const titleScreen = new TitleScreen(ctx, layout)
 
-type Screen = 'select' | 'play'
-let screen: Screen = 'select'
+type Screen = 'title' | 'select' | 'play'
+let screen: Screen = 'title'
 let stage: StageDef = progress.nextStage() ?? STAGES[0]!
-let game = new Game(stage, { availableTowers: progress.unlockedTowers() })
+let game = new Game(stage, {
+  availableTowers: progress.unlockedTowers(),
+  hpScale: progress.hpScale,
+})
 
 let paused = false
 let speed: 1 | 2 | 3 = 1
@@ -46,8 +52,9 @@ let resultRecorded = false
 
 const loop = new GameLoop({
   update(dt) {
-    if (screen !== 'play') return
+    // 타이틀 배경의 행진 연출도 시간이 필요하므로 elapsed는 항상 돈다.
     elapsed += dt
+    if (screen !== 'play') return
     game.update(dt)
     if (game.phase === 'victory' && !resultRecorded) {
       resultRecorded = true
@@ -57,6 +64,10 @@ const loop = new GameLoop({
     }
   },
   render() {
+    if (screen === 'title') {
+      titleScreen.draw(progress, elapsed)
+      return
+    }
     if (screen === 'select') {
       stageSelect.draw(progress)
       return
@@ -105,7 +116,10 @@ function applyTimeScale(): void {
 
 function startStage(target: StageDef): void {
   stage = target
-  game = new Game(target, { availableTowers: progress.unlockedTowers() })
+  game = new Game(target, {
+    availableTowers: progress.unlockedTowers(),
+    hpScale: progress.hpScale,
+  })
   renderer.invalidateTerrain()
   screen = 'play'
   paused = false
@@ -161,11 +175,23 @@ canvas.addEventListener('mousedown', (event) => {
   if (event.button !== 0) return
   const { x, y } = toCanvasSpace(event)
 
+  if (screen === 'title') {
+    const button = hitTest(titleScreen.hitAreas, x, y)
+    if (!button?.enabled) return
+    if (button.id.startsWith('difficulty:')) {
+      progress.setDifficulty(button.id.slice('difficulty:'.length))
+    } else if (button.id === 'start') {
+      screen = 'select'
+    }
+    return
+  }
+
   if (screen === 'select') {
     const button = hitTest(stageSelect.hitAreas, x, y)
     if (!button?.enabled) return
     if (button.id.startsWith('stage:')) startStage(getStage(button.id.slice('stage:'.length)))
     else if (button.id === 'resetProgress') progress.reset()
+    else if (button.id === 'toTitle') screen = 'title'
     return
   }
 
@@ -224,6 +250,14 @@ function handleUiButton(id: string, payload?: string): void {
 }
 
 window.addEventListener('keydown', (event) => {
+  if (screen === 'title') {
+    if (event.key === 'Enter' || event.key === ' ') screen = 'select'
+    // 1~3으로 난이도를 바로 고를 수 있게 — 반복 플레이가 잦은 화면이다.
+    const n = Number(event.key)
+    if (n >= 1 && n <= DIFFICULTIES.length) progress.setDifficulty(DIFFICULTIES[n - 1]!.id)
+    return
+  }
+
   if (screen === 'select') {
     // 숫자키로 스테이지를 바로 고를 수 있게 — 반복 플레이가 잦은 화면이다.
     const n = Number(event.key)

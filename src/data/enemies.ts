@@ -161,6 +161,89 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
     flying: true,
     desc: '중장갑 공중 유닛. 대포는 못 때리고 궁수는 긁히지도 않는다.',
   }),
+  /**
+   * 보스는 스테이지 중간중간에 등장한다.
+   *
+   * 웨이브 하나를 통째로 "물량"이 아니라 "한 덩어리"로 바꿔 리듬을 끊는 장치다.
+   * 그래서 전부 leak이 크고(뚫리면 판이 기운다) 속도가 느리다 — 대응할 시간은
+   * 주되 대응하지 못하면 크게 아프도록.
+   *
+   * **보스도 실루엣 규칙을 따른다.** 전부 'boss'(가시 다각)를 쓰되 방어 표식이
+   * 스탯에서 파생되므로, 장갑 보스에는 흰 테두리가 마법저항 보스에는 보라 오라가
+   * 자동으로 뜬다. 형태만 보고 "무엇으로 때려야 하는가"가 여전히 읽힌다.
+   */
+  goblinking: def({
+    id: 'goblinking',
+    silhouette: 'boss',
+    name: '고블린 대왕 우르그',
+    maxHp: 1250,
+    speed: 1.5,
+    bounty: 55,
+    leak: 3,
+    radius: 19,
+    color: '#6fae52',
+    boss: true,
+    desc: '첫 보스. 방어는 없지만 덩치가 크다 — 화력이 부족하면 그냥 지나간다.',
+  }),
+  golem: def({
+    id: 'golem',
+    silhouette: 'boss',
+    name: '공성 골렘 카르낙',
+    maxHp: 2300,
+    speed: 1.25,
+    armor: 22,
+    bounty: 95,
+    leak: 2,
+    radius: 20,
+    color: '#8b93a6',
+    boss: true,
+    desc: '장갑 22. 물리 타워는 긁히지도 않는다 — 마법탑 없이는 절대 못 잡는다.',
+  }),
+  twinwyvern: def({
+    id: 'twinwyvern',
+    silhouette: 'boss',
+    name: '쌍두 와이번 니드호그',
+    maxHp: 1900,
+    speed: 2.3,
+    armor: 5,
+    magicResist: 0.25,
+    bounty: 90,
+    leak: 2,
+    radius: 19,
+    color: '#4fb6c9',
+    flying: true,
+    boss: true,
+    desc: '공중 보스. 대포탑은 조준조차 못 하고, 빨라서 감속 없이는 사거리에 오래 머물지 않는다.',
+  }),
+  hexmother: def({
+    id: 'hexmother',
+    silhouette: 'boss',
+    name: '주술 대모 모르가',
+    maxHp: 2100,
+    speed: 1.8,
+    magicResist: 0.78,
+    bounty: 88,
+    leak: 3,
+    radius: 19,
+    color: '#c46fd8',
+    boss: true,
+    desc: '마법 저항 78%. 마법탑 몰빵을 응징한다 — 궁수탑·대포탑의 물리 화력이 필요하다.',
+  }),
+  frostgiant: def({
+    id: 'frostgiant',
+    silhouette: 'boss',
+    name: '서리 거인 요툰',
+    maxHp: 4400,
+    speed: 1.1,
+    armor: 18,
+    magicResist: 0.52,
+    bounty: 135,
+    leak: 4,
+    radius: 21,
+    color: '#5f86a8',
+    boss: true,
+    desc: '장갑과 마법 저항을 동시에 갖췄다. 한쪽 화력만으로는 시간 안에 못 녹인다 — 독의 순수 피해가 답이다.',
+  }),
   overlord: def({
     id: 'overlord',
     silhouette: 'boss',
