@@ -3,8 +3,9 @@ import { TILE_SIZE } from '../game/Game'
 import type { Game } from '../game/Game'
 import type { Enemy } from '../game/Enemy'
 import type { Tower } from '../game/Tower'
-import { getTowerDef } from '../data/towers'
+import { getTowerDef, MAX_SLOW } from '../data/towers'
 import type { TowerDef } from '../data/towers'
+import { DAMAGE_TYPE_LABEL } from '../game/types'
 import type { Layout } from '../ui/layout'
 import { FONT, PALETTE, roundRect } from './palette'
 import { cavalryDustPath, enemySilhouettePath } from './shapes'
@@ -943,13 +944,12 @@ export class Renderer {
 
     // 핵심 수치 — 1레벨 기준. 다음 판에서 바로 쓸 정보만.
     const l1 = def.levels[0]
-    const typeLabel =
-      def.damageType === 'physical' ? '관통' : def.damageType === 'magic' ? '화약' : '순수'
+    const typeLabel = DAMAGE_TYPE_LABEL[def.damageType]
     const chips: string[] = [`${l1.cost}G`, typeLabel, def.targetsAir ? '보병·기병' : '보병 전용']
     if (l1.splashRadius > 0) chips.push('광역')
     if (l1.slowAmount > 0) chips.push(`감속 −${Math.round(l1.slowAmount * 100)}%`)
     if (l1.cavalrySlow > 0) {
-      chips.push(`기마 −${Math.round(Math.min(0.95, l1.slowAmount + l1.cavalrySlow) * 100)}%`)
+      chips.push(`기마 −${Math.round(Math.min(MAX_SLOW, l1.slowAmount + l1.cavalrySlow) * 100)}%`)
     }
     if (l1.poisonDps > 0) chips.push(`중독 ${l1.poisonDps}/s`)
     if (l1.damage >= 10) chips.push(`딜 ${l1.damage}`)

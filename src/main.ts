@@ -165,7 +165,7 @@ canvas.addEventListener('mouseleave', () => {
 })
 
 canvas.addEventListener('contextmenu', (event) => {
-  // 우클릭은 건설 취소 / 선택 해제로 쓴다.
+  // 우클릭은 배치 취소 / 선택 해제로 쓴다.
   event.preventDefault()
   game.selectBuild(null)
   game.selectedTower = null
@@ -275,7 +275,9 @@ window.addEventListener('keydown', (event) => {
     case '4':
     case '5':
     case '6':
-    case '7': {
+    case '7':
+    case '8':
+    case '9': {
       // 메뉴에 보이는 순서(해금된 것만)와 숫자키를 맞춘다.
       const menu = TOWER_ORDER.filter((id) => game.canUse(id))
       const towerId = menu[Number(event.key) - 1]

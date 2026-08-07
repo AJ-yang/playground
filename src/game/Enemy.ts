@@ -154,6 +154,11 @@ export class Enemy {
       case 'pure':
         dealt = amount
         break
+      case 'melee':
+        // 산개를 먼저 걸고 갑주를 뺀다. 순서가 반대면 갑주가 산개 비율만큼
+        // 희석되어 "갑옷이 칼을 막는다"가 흐려진다.
+        dealt = Math.max(1, amount * (1 - this.def.magicResist) - this.def.armor)
+        break
     }
 
     this.hp -= dealt

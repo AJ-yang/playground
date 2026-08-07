@@ -50,8 +50,14 @@ export interface StageDef {
   unlocksTowers: string[]
 }
 
-/** 게임 시작 시점부터 쓸 수 있는 타워. */
-export const STARTING_TOWERS: readonly string[] = ['archer']
+/**
+ * 게임 시작 시점부터 쓸 수 있는 기물 — **삼수병 중 둘**.
+ *
+ * 사수(멀리서 얇게)와 살수(붙어서 두껍게)가 정반대 축이라, 첫 판부터
+ * 선택이 생긴다. 예전에 궁수 하나만 주었을 때는 열일곱 전략이 전부 똑같은
+ * 판을 돌려 튜토리얼이 아무것도 가르치지 않았다.
+ */
+export const STARTING_TOWERS: readonly string[] = ['archer', 'sword']
 
 // ────────────────────────────── S1 남해 포구 ──────────────────────────────
 // 궁수대 하나로 풀 수 있어야 한다. 방어 스탯이 있는 적은 넣지 않는다.
@@ -320,7 +326,7 @@ const WAVES_S4: WaveDef[] = [
     id: 9,
     prepTime: 20,
     reward: 69,
-    groups: [g('ladder', 2, 1.2), g('brute', 2, 0.85, 6), g('runner', 17, 0.55, 10), g('zealot', 7, 0.5, 14)],
+    groups: [g('ladder', 2, 1.2), g('brute', 2, 0.85, 6), g('runner', 17, 0.55, 10), g('zealot', 7, 0.5, 14), g('warlock', 4, 0.9, 17)],
   },
   {
     id: 10,
@@ -344,8 +350,8 @@ const WAVES_S4: WaveDef[] = [
     id: 13,
     prepTime: 22,
     reward: 98,
-    warning: '고속 물량 — 거마작이 없으면 그대로 지나갑니다',
-    groups: [g('runner', 32, 0.34), g('zealot', 10, 0.42, 5), g('brute', 3, 0.75, 10), g('ladder', 2, 1.0, 14)],
+    warning: '고속 물량에 간자가 섞였습니다 — 화약만으로는 안 됩니다',
+    groups: [g('runner', 32, 0.34), g('zealot', 10, 0.42, 5), g('brute', 3, 0.75, 10), g('ladder', 2, 1.0, 14), g('warlock', 6, 0.85, 17)],
   },
   {
     id: 14,
@@ -371,97 +377,97 @@ const WAVES_S4: WaveDef[] = [
 //
 // 두 갈래가 합류하는 맵이라 앞쪽은 커버리지가, 뒤쪽은 화력 총량이 시험된다.
 const WAVES_S5: WaveDef[] = [
-  { id: 1, prepTime: 24, reward: 52, groups: [g('grunt', 6, 0.7), g('runner', 5, 0.7, 3, 1)] },
-  { id: 2, prepTime: 18, reward: 52, groups: [g('grunt', 7, 0.65), g('runner', 6, 0.7, 4, 1)] },
+  { id: 1, prepTime: 24, reward: 56, groups: [g('grunt', 6, 0.7), g('runner', 5, 0.7, 3, 1)] },
+  { id: 2, prepTime: 18, reward: 56, groups: [g('grunt', 7, 0.65), g('runner', 6, 0.7, 4, 1)] },
   {
     id: 3,
     prepTime: 18,
-    reward: 58,
+    reward: 62,
     warning: '방패병 — 갑주 22. 화살은 아예 안 통합니다',
     groups: [g('grunt', 7, 0.7), g('shieldman', 3, 1.2, 4, 1), g('runner', 3, 0.8, 8)],
   },
   {
     id: 4,
     prepTime: 18,
-    reward: 65,
+    reward: 70,
     groups: [g('armored', 5, 0.9), g('shieldman', 3, 1.1, 4, 1), g('zealot', 3, 0.8, 9, 1)],
   },
   {
     id: 5,
     prepTime: 19,
-    reward: 72,
+    reward: 77,
     groups: [g('grunt', 8, 0.65), g('armored', 6, 0.85, 4, 1), g('runner', 6, 0.7, 8)],
   },
   {
     id: 6,
     prepTime: 19,
-    reward: 78,
+    reward: 84,
     warning: '궁기병 — 화차도 화약도 안 통합니다. 활이 답입니다',
     groups: [g('horsearcher', 5, 0.9), g('armored', 6, 0.8, 4, 1), g('runner', 8, 0.6, 8)],
   },
   {
     id: 7,
     prepTime: 20,
-    reward: 85,
+    reward: 91,
     warning: '철기 — 갑주 두른 기마. 화차는 못 닿고 화살은 튕깁니다',
     groups: [g('sentinel', 3, 1.4), g('shieldman', 5, 1.0, 4, 1), g('grunt', 13, 0.55, 8)],
   },
   {
     id: 8,
     prepTime: 26,
-    reward: 163,
+    reward: 174,
     warning: '중간 보스 — 철갑 장수 (갑주 22)',
     groups: [g('grunt', 14, 0.5), g('armored', 7, 0.75, 5, 1), g('golem', 1, 1, 12)],
   },
   {
     id: 9,
     prepTime: 20,
-    reward: 94,
+    reward: 100,
     groups: [g('sentinel', 3, 1.2), g('horsearcher', 6, 0.8, 4, 1), g('zealot', 8, 0.5, 8)],
   },
   {
     id: 10,
     prepTime: 20,
-    reward: 102,
+    reward: 109,
     warning: '충차 — 양면 저항. 비격진천뢰가 답입니다',
     groups: [g('brute', 3, 1.4), g('shaman', 8, 0.6, 4, 1), g('runner', 21, 0.4, 8)],
   },
   {
     id: 11,
     prepTime: 21,
-    reward: 110,
+    reward: 117,
     groups: [g('armored', 9, 0.6), g('sentinel', 3, 1.1, 4, 1), g('horsearcher', 6, 0.75, 9, 1)],
   },
   {
     id: 12,
     prepTime: 21,
-    reward: 117,
+    reward: 126,
     warning: '기병 돌격 — 거마작이 없으면 그대로 지나갑니다',
     groups: [g('horsearcher', 9, 0.5), g('runner', 28, 0.32, 3, 1), g('sentinel', 3, 1.1, 9)],
   },
   {
     id: 13,
     prepTime: 22,
-    reward: 125,
+    reward: 134,
     groups: [g('brute', 5, 1.2), g('shieldman', 8, 0.7, 4, 1), g('shaman', 11, 0.5, 8)],
   },
   {
     id: 14,
     prepTime: 22,
-    reward: 133,
+    reward: 142,
     warning: '중간 보스 — 선봉 기병 (기마·고속)',
     groups: [g('grunt', 21, 0.36), g('horsearcher', 9, 0.5, 4, 1), g('twinwyvern', 1, 1, 11)],
   },
   {
     id: 15,
     prepTime: 23,
-    reward: 146,
+    reward: 156,
     groups: [g('sentinel', 6, 0.9), g('brute', 5, 1.1, 4, 1), g('armored', 9, 0.5, 8)],
   },
   {
     id: 16,
     prepTime: 30,
-    reward: 326,
+    reward: 349,
     warning: '보스 — 팔기 중군 (갑주 18 · 산개 52%)',
     groups: [
       g('shieldman', 9, 0.55),
@@ -479,126 +485,126 @@ const WAVES_S6: WaveDef[] = [
   {
     id: 1,
     prepTime: 22,
-    reward: 68,
+    reward: 75,
     groups: [g('grunt', 5, 1.15), g('runner', 5, 1.15, 8, 1)],
   },
   {
     id: 2,
     prepTime: 16,
-    reward: 68,
+    reward: 75,
     groups: [g('grunt', 5, 1.1), g('runner', 7, 1.1, 8, 1)],
   },
   {
     id: 3,
     prepTime: 16,
-    reward: 79,
+    reward: 87,
     groups: [g('armored', 2, 1.05), g('grunt', 3, 1.05, 8, 1), g('shaman', 2, 1.05, 12, 2), g('wyvern', 2, 1.05, 16)],
   },
   {
     id: 4,
     prepTime: 17,
-    reward: 92,
+    reward: 101,
     warning: '간자 — 화약 저항 80%',
     groups: [g('armored', 2, 1.0), g('grunt', 3, 1.0, 8, 1), g('shaman', 2, 1.0, 12, 2), g('wyvern', 2, 1.0, 16)],
   },
   {
     id: 5,
     prepTime: 17,
-    reward: 104,
+    reward: 114,
     warning: '충차 — 양면 저항. 비격진천뢰가 답입니다',
     groups: [g('armored', 2, 0.95), g('shaman', 2, 0.95, 8, 1), g('wyvern', 2, 0.95, 12, 2), g('brute', 2, 0.95, 16), g('warlock', 2, 0.95, 16, 1)],
   },
   {
     id: 6,
     prepTime: 17,
-    reward: 116,
+    reward: 128,
     groups: [g('shieldman', 3, 0.8), g('shaman', 2, 0.9, 8, 1), g('wyvern', 2, 0.9, 12, 2), g('brute', 2, 0.9, 16), g('warlock', 2, 0.9, 16, 1)],
   },
   {
     id: 7,
     prepTime: 17,
-    reward: 127,
+    reward: 140,
     groups: [g('armored', 2, 0.85), g('shaman', 2, 0.85, 8, 1), g('wyvern', 2, 0.85, 12, 2), g('brute', 2, 0.85, 16), g('warlock', 2, 0.85, 16, 1)],
   },
   {
     id: 8,
     prepTime: 22,
-    reward: 300,
+    reward: 330,
     warning: '중간 보스 — 선봉 기병',
     groups: [g('sentinel', 2, 0.8, 0, 1), g('warlock', 2, 0.8, 6, 2), g('wyvern', 3, 0.8, 10), g('twinwyvern', 1, 1, 14)],
   },
   {
     id: 9,
     prepTime: 18,
-    reward: 151,
+    reward: 166,
     groups: [g('brute', 2, 0.75), g('sentinel', 2, 0.75, 8, 1), g('warlock', 2, 0.75, 12, 2), g('wyvern', 3, 0.75, 16)],
   },
   {
     id: 10,
     prepTime: 18,
-    reward: 173,
+    reward: 190,
     groups: [g('brute', 2, 0.7), g('sentinel', 2, 0.7, 8, 1), g('warlock', 2, 0.7, 12, 2), g('wyvern', 3, 0.7, 16)],
   },
   {
     id: 11,
     prepTime: 18,
-    reward: 197,
+    reward: 217,
     groups: [g('brute', 2, 0.65), g('sentinel', 2, 0.65, 8, 1), g('warlock', 2, 0.65, 12, 2), g('wyvern', 3, 0.65, 16)],
   },
   {
     id: 12,
     prepTime: 18,
-    reward: 208,
+    reward: 229,
     groups: [g('warlock', 2, 0.6), g('brute', 2, 0.6, 8, 1), g('sentinel', 2, 0.6, 12, 2), g('runner', 8, 0.6, 16)],
   },
   {
     id: 13,
     prepTime: 18,
-    reward: 230,
+    reward: 253,
     groups: [g('warlock', 2, 0.55), g('brute', 2, 0.55, 8, 1), g('sentinel', 2, 0.55, 12, 2), g('runner', 8, 0.55, 16)],
   },
   {
     id: 14,
     prepTime: 24,
-    reward: 531,
+    reward: 584,
     warning: '중간 보스 — 철갑 장수',
     groups: [g('warlock', 2, 0.5), g('sentinel', 2, 0.5, 8, 2), g('runner', 7, 0.5, 12), g('golem', 1, 1, 16, 1)],
   },
   {
     id: 15,
     prepTime: 19,
-    reward: 289,
+    reward: 318,
     groups: [g('warlock', 3, 0.45), g('brute', 2, 0.45, 8, 1), g('sentinel', 2, 0.45, 12, 2), g('runner', 10, 0.45, 16)],
   },
   {
     id: 16,
     prepTime: 19,
-    reward: 322,
+    reward: 354,
     groups: [g('brute', 2, 0.4), g('sentinel', 2, 0.4, 8, 1), g('warlock', 3, 0.4, 12, 2), g('runner', 5, 0.4, 16)],
   },
   {
     id: 17,
     prepTime: 19,
-    reward: 358,
+    reward: 394,
     groups: [g('brute', 2, 0.35), g('sentinel', 2, 0.35, 8, 1), g('warlock', 3, 0.35, 12, 2), g('runner', 7, 0.35, 16)],
   },
   {
     id: 18,
     prepTime: 19,
-    reward: 392,
+    reward: 431,
     groups: [g('brute', 2, 0.3), g('sentinel', 2, 0.3, 8, 1), g('warlock', 3, 0.3, 12, 2), g('runner', 7, 0.3, 16)],
   },
   {
     id: 19,
     prepTime: 20,
-    reward: 439,
+    reward: 483,
     warning: '총공세 — 마지막 정비 기회입니다',
     groups: [g('brute', 3, 0.25), g('sentinel', 3, 0.25, 8, 1), g('warlock', 3, 0.25, 12, 2), g('runner', 8, 0.25, 16)],
   },
   {
     id: 20,
     prepTime: 24,
-    reward: 785,
+    reward: 864,
     warning: '팔기 대장 출진 — 최종 웨이브',
     groups: [g('brute', 3, 0.2), g('sentinel', 3, 0.2, 8, 1), g('warlock', 5, 0.2, 12, 2), g('runner', 13, 0.2, 16), g('overlord', 1, 1, 22)],
   },
@@ -650,7 +656,7 @@ export const STAGES: StageDef[] = [
     waves: WAVES_S4,
     startGold: 360,
     startLives: 20,
-    unlocksTowers: ['venom'],
+    unlocksTowers: ['venom', 'banner'],
   },
   {
     id: 'anju',

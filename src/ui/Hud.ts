@@ -1,7 +1,7 @@
 import type { Game } from '../game/Game'
-import { TOWER_ORDER, getTowerDef, type TowerLevelDef } from '../data/towers'
+import { MAX_SLOW, TOWER_ORDER, getTowerDef, type TowerLevelDef } from '../data/towers'
 import { getEnemyDef } from '../data/enemies'
-import { TARGET_PRIORITY_LABEL } from '../game/types'
+import { TARGET_PRIORITY_LABEL, DAMAGE_TYPE_LABEL } from '../game/types'
 import { FONT, PALETTE, roundRect } from '../render/palette'
 import { enemySilhouettePath } from '../render/shapes'
 import { ENEMY_ART, TOWER_ART, drawArt } from '../render/art'
@@ -241,7 +241,7 @@ export class Hud {
     ctx.stroke()
 
     let y = p.y + 14
-    // 기물이 일곱 종으로 늘면서 건설 목록만으로 패널 대부분이 찬다. 타워를 고른
+    // 기물이 아홉 종으로 늘면서 배치 목록만으로 패널 대부분이 찬다. 기물을 고른
     // 상태에서는 목록을 접어 상세 수치가 잘리지 않게 한다 — 어차피 그 순간에
     // 필요한 것은 "이걸 올릴까 팔까"지 "무엇을 새로 지을까"가 아니다.
     if (!game.selectedTower) {
@@ -313,20 +313,25 @@ export class Hud {
     ctx.fillStyle = PALETTE.textMuted
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
-    ctx.fillText('건설', p.x + 14, startY)
+    ctx.fillText('배치', p.x + 14, startY)
     ctx.textBaseline = 'middle'
 
     let y = startY + 20
-    const cardH = 52
+
+    // 해금된 기물만 노출한다. 잠긴 것을 흐리게 남겨두면 "언젠가 열린다"는
+    // 정보는 주지만 준비 단계의 판단을 방해한다 — 스테이지 선택 화면이
+    // 이미 해금 현황을 보여주므로 여기서는 쓸 수 있는 것만 보여준다.
+    const menu = TOWER_ORDER.filter((id) => game.canUse(id))
+
+    // 아홉 종이 전부 열리면 52px짜리 카드로는 목록만으로 패널이 넘쳐
+    // 다음 웨이브 미리보기가 잘린다. 일곱 종을 넘으면 한 줄 소개를 접고
+    // 카드를 낮춘다 — 소개는 어차피 기물을 고르면 상세 패널에 다시 나온다.
+    const compact = menu.length > 7
+    const cardH = compact ? 38 : 52
 
     // 게임이 끝나면 메뉴 전체를 죽인다. 예전에는 패배 화면에서도 초록색
     // 업그레이드 버튼이 그대로 살아 있어 눌릴 것처럼 보였다.
     ctx.globalAlpha = game.isOver ? 0.4 : 1
-
-    // 해금된 타워만 노출한다. 잠긴 타워를 흐리게 남겨두면 "언젠가 열린다"는
-    // 정보는 주지만 준비 단계의 판단을 방해한다 — 스테이지 선택 화면이
-    // 이미 해금 현황을 보여주므로 여기서는 쓸 수 있는 것만 보여준다.
-    const menu = TOWER_ORDER.filter((id) => game.canUse(id))
 
     menu.forEach((towerId, i) => {
       const def = getTowerDef(towerId)
@@ -348,26 +353,34 @@ export class Hud {
       //
       // 배경에 타워 색을 옅게 깐다. 굿청 징·금줄 솟대는 몸체가 회색 석재라
       // 그림만으로는 작은 크기에서 서로 비슷해 보였다.
+      const badge = compact ? 24 : 32
       ctx.fillStyle = `${def.color}22`
-      roundRect(ctx, x + 8, y + 10, 32, 32, 6)
+      roundRect(ctx, x + 8, y + (cardH - badge) / 2, badge, badge, 6)
       ctx.fill()
       const towerArt = TOWER_ART[def.id]
       // 배지 안에 정확히 들어가도록 바닥 기준선을 상자 안쪽에 둔다.
-      if (towerArt) drawArt(ctx, towerArt, x + 24, y + 39, 30, { color: def.color, accent: def.accent })
+      if (towerArt) {
+        drawArt(ctx, towerArt, x + 8 + badge / 2, y + (cardH + badge) / 2 - 1, badge - 2, {
+          color: def.color,
+          accent: def.accent,
+        })
+      }
 
       ctx.globalAlpha = affordable ? 1 : 0.45
       ctx.font = FONT.bodyBold
       ctx.fillStyle = PALETTE.text
       ctx.textAlign = 'left'
-      ctx.fillText(`${i + 1}. ${def.name}`, x + 48, y + 17)
-      ctx.font = FONT.tiny
-      ctx.fillStyle = PALETTE.textDim
-      ctx.fillText(def.tagline, x + 48, y + 33)
+      ctx.fillText(`${i + 1}. ${def.name}`, x + 16 + badge, compact ? y + cardH / 2 : y + 17)
+      if (!compact) {
+        ctx.font = FONT.tiny
+        ctx.fillStyle = PALETTE.textDim
+        ctx.fillText(def.tagline, x + 48, y + 33)
+      }
 
       ctx.font = FONT.bodyBold
       ctx.fillStyle = affordable ? PALETTE.gold : PALETTE.danger
       ctx.textAlign = 'right'
-      ctx.fillText(`${cost}G`, x + w - 10, y + 17)
+      ctx.fillText(`${cost}G`, x + w - 10, compact ? y + cardH / 2 : y + 17)
       ctx.globalAlpha = 1
       ctx.textAlign = 'left'
 
@@ -401,8 +414,7 @@ export class Hud {
     ctx.fillText(`${tower.def.name} Lv.${tower.level}`, p.x + 14, y + 8)
     y += 26
 
-    const typeLabel =
-      tower.def.damageType === 'physical' ? '관통' : tower.def.damageType === 'magic' ? '화약' : '순수'
+    const typeLabel = DAMAGE_TYPE_LABEL[tower.def.damageType]
     ctx.font = FONT.small
     ctx.fillStyle = PALETTE.textDim
     ctx.fillText(`${typeLabel} · ${tower.def.targetsAir ? '보병·기병' : '보병 전용'}`, p.x + 14, y + 6)
@@ -429,7 +441,7 @@ export class Hud {
       ])
       // 기마 감속은 이 기물을 언제 짓느냐를 가르는 수치라 따로 보여준다.
       if (stats.cavalrySlow > 0) {
-        const cav = (s: TowerLevelDef) => Math.round(Math.min(0.95, s.slowAmount + s.cavalrySlow) * 100)
+        const cav = (s: TowerLevelDef) => Math.round(Math.min(MAX_SLOW, s.slowAmount + s.cavalrySlow) * 100)
         rows.push(['└ 기마에는', `-${cav(stats)}%`, next ? `-${cav(next)}%` : null])
       }
     }
@@ -490,20 +502,20 @@ export class Hud {
       y,
       w: p.w - 24,
       h: 34,
-      label: upgradeCost === null ? '최대 레벨' : `업그레이드  ${upgradeCost}G`,
+      label: upgradeCost === null ? '최대 레벨' : `강화  ${upgradeCost}G`,
       enabled: !game.isOver && upgradeCost !== null && game.gold >= upgradeCost,
       primary: !game.isOver && upgradeCost !== null && game.gold >= upgradeCost,
     })
     y += 40
 
-    // 판매
+    // 철수
     this.button({
       id: 'sell',
       x: p.x + 12,
       y,
       w: p.w - 24,
       h: 28,
-      label: `판매  +${tower.sellValue()}G`,
+      label: `철수  +${tower.sellValue()}G`,
       enabled: !game.isOver,
       danger: true,
     })
@@ -595,8 +607,8 @@ export class Hud {
     y += 22
 
     const hint = game.selectedBuildId
-      ? '빈 땅을 클릭해 건설 · Esc 로 취소'
-      : '타워를 클릭하면 업그레이드·판매'
+      ? '빈 땅을 클릭해 배치 · Esc 로 취소'
+      : '기물을 클릭하면 강화·철수'
     ctx.fillStyle = PALETTE.textDim
     ctx.font = FONT.tiny
     ctx.fillText(hint, p.x + 14, y + 8)

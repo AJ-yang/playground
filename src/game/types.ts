@@ -1,11 +1,26 @@
 /** 데미지 타입. 적의 방어 스탯과 짝을 이뤄 타워 조합을 강제하는 핵심 축이다. */
 export type DamageType =
-  /** 물리: 적의 armor 만큼 고정 감소 */
+  /** 관통: 적의 armor 만큼 고정 감소 */
   | 'physical'
-  /** 마법: 적의 magicResist 비율만큼 감소 */
+  /** 화약: 적의 magicResist 비율만큼 감소 */
   | 'magic'
   /** 순수: 감소 없음 */
   | 'pure'
+  /**
+   * 백병(白兵): **갑주와 산개 둘 다** 적용된다 — 이 게임에서 유일하게 양쪽에 깎이는 유형.
+   *
+   * 칼을 든 병사가 상대에게 실제로 지는 방식이 둘이라서다. 갑옷은 칼을 튕겨 내고,
+   * 흩어져 달리는 적은 애초에 붙잡히지 않는다. 다른 유형은 하나씩만 지므로
+   * "무엇을 못 하는가"가 하나뿐인데, 백병은 둘이다 — 값싼 광역에 붙는 대가다.
+   */
+  | 'melee'
+
+export const DAMAGE_TYPE_LABEL: Record<DamageType, string> = {
+  physical: '관통',
+  magic: '화약',
+  pure: '순수',
+  melee: '백병',
+}
 
 /** 타워가 사거리 안의 여러 적 중 누구를 쏠지 정하는 규칙. */
 export type TargetPriority = 'first' | 'last' | 'strongest' | 'closest'

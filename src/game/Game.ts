@@ -2,7 +2,7 @@ import { dist2 } from '../core/vec2'
 import type { Vec2 } from '../core/vec2'
 import { Rng } from '../core/rng'
 import { getEnemyDef } from '../data/enemies'
-import { getTowerDef, buildCost, TOWER_ORDER } from '../data/towers'
+import { getTowerDef, buildCost, MAX_SLOW, TOWER_ORDER } from '../data/towers'
 import { EARLY_CALL_GOLD_PER_SECOND } from '../data/waves'
 import type { StageDef } from '../data/stages'
 import { Enemy } from './Enemy'
@@ -177,6 +177,7 @@ export class Game {
 
     this.effects.blast(center, TILE_SIZE * 0.7, getTowerDef(towerId).accent, 0.28)
     this.selectedTower = tower
+    this.refreshCommandAuras()
     return { ok: true }
   }
 
@@ -190,6 +191,7 @@ export class Game {
     this.gold -= cost
     this.goldSpent += cost
     tower.upgrade()
+    this.refreshCommandAuras()
     this.effects.blast(tower.pos, TILE_SIZE * 0.9, tower.def.accent, 0.3)
     // 건물 위로 띄운다. 타워 좌표에 그대로 띄우면 글자가 지붕을 가려
     // 무엇을 올렸는지가 안 보인다.
@@ -209,9 +211,35 @@ export class Game {
     if (index >= 0) this.towers.splice(index, 1)
     if (this.selectedTower === tower) this.selectedTower = null
 
+    this.refreshCommandAuras()
     this.effects.burst(tower.pos, '#c9a227', 8, 70)
     this.effects.text(tower.pos, `+${refund}G`, '#f0c674')
     return { ok: true }
+  }
+
+  /**
+   * 기고(旗鼓)의 지휘 범위를 다시 계산해 각 타워에 박아 둔다.
+   *
+   * 타워 집합이 바뀔 때만 부른다 — 매 프레임 돌면 O(타워²)가 시뮬레이션
+   * 핫 패스에 들어간다. 타워는 웨이브 중에 늘지 않으므로 이걸로 충분하다.
+   *
+   * **중첩되지 않는다.** 감속·중독과 같은 규칙으로, 겹쳐도 가장 강한 하나만
+   * 적용한다 — 서포터를 도배해 곱셈을 쌓는 퇴화 전략을 막기 위함이다.
+   * 기고끼리는 서로를 지휘하지 않는다(자기 증폭 고리를 만들지 않는다).
+   */
+  private refreshCommandAuras(): void {
+    const banners = this.towers.filter((t) => t.stats.auraFireRate > 0)
+    for (const tower of this.towers) {
+      let best = 0
+      if (tower.stats.auraFireRate === 0) {
+        for (const banner of banners) {
+          const reach = banner.stats.auraRange * TILE_SIZE
+          if (dist2(tower.pos, banner.pos) > reach ** 2) continue
+          if (banner.stats.auraFireRate > best) best = banner.stats.auraFireRate
+        }
+      }
+      tower.fireRateBonus = best
+    }
   }
 
   upgradeSelected(): BuildResult {
@@ -354,11 +382,11 @@ export class Game {
     const hit = (enemy: Enemy): void => {
       const dealt = enemy.takeDamage(spec.damage, spec.damageType)
       if (source) source.damageDealt += dealt
-      // 거마작은 말을 막는 물건이라 기마에게 더 깊게 걸린다. 상한 0.95 —
-      // 완전 정지는 적을 사거리 밖에서 영원히 세워두는 퇴행 전략을 만든다.
+      // 거마작은 말을 막는 물건이라 기마에게 더 깊게 걸린다. 상한을 두는 이유는
+      // 완전 정지가 적을 사거리 밖에서 영원히 세워두는 퇴행 전략을 만들기 때문이다.
       const slow =
         enemy.def.flying && spec.cavalrySlow > 0
-          ? Math.min(0.95, spec.slowAmount + spec.cavalrySlow)
+          ? Math.min(MAX_SLOW, spec.slowAmount + spec.cavalrySlow)
           : spec.slowAmount
       enemy.applySlow(slow, spec.slowDuration)
       enemy.applyPoison(spec.poisonDps, spec.poisonDuration, projectile.sourceTowerId)

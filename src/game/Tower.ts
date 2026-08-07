@@ -36,6 +36,13 @@ export class Tower {
   kills = 0
   /** 누적 입힌 데미지 */
   damageDealt = 0
+  /**
+   * 기고(旗鼓)의 지휘를 받아 올라간 공격속도 비율. 0.18이면 +18%.
+   *
+   * 매 프레임 주변 타워를 훑으면 시뮬레이션 핫 패스가 무거워지므로, 타워 집합이
+   * 바뀔 때(건설·판매·업그레이드)만 Game이 다시 계산해 여기에 박아 둔다.
+   */
+  fireRateBonus = 0
 
   constructor(id: number, towerId: string, col: number, row: number, pos: Vec2) {
     this.id = id
@@ -61,6 +68,11 @@ export class Tower {
 
   get nextStats(): TowerLevelDef | null {
     return this.isMaxLevel ? null : this.def.levels[this.level]!
+  }
+
+  /** 지휘 보정까지 반영된 실제 초당 발사 횟수. */
+  get effectiveFireRate(): number {
+    return this.stats.fireRate * (1 + this.fireRateBonus)
   }
 
   /** 사거리 (픽셀) */
@@ -89,6 +101,10 @@ export class Tower {
    * 한 스텝 진행. 사거리 안에 적이 있고 쿨다운이 끝났으면 투사체를 반환한다.
    */
   update(dt: number, enemies: readonly Enemy[], tileSize: number): Projectile | null {
+    // 지휘 기물(기고)은 적을 겨누지 않는다. 사거리 0으로 눌러 두는 것보다
+    // 여기서 끊는 편이 의도가 분명하고, 타겟 탐색 비용도 아낀다.
+    if (this.stats.auraFireRate > 0) return null
+
     if (this.cooldown > 0) this.cooldown -= dt
     if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 6)
 
@@ -99,7 +115,7 @@ export class Tower {
     this.turretAngle = Math.atan2(target.pos.y - this.pos.y, target.pos.x - this.pos.x)
 
     if (this.cooldown > 0) return null
-    this.cooldown = 1 / this.stats.fireRate
+    this.cooldown = 1 / this.effectiveFireRate
     this.recoil = 1
     return this.fire(target, tileSize)
   }
