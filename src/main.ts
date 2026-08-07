@@ -276,8 +276,7 @@ window.addEventListener('keydown', (event) => {
     case '5':
     case '6':
     case '7':
-    case '8':
-    case '9': {
+    case '8': {
       // 메뉴에 보이는 순서(해금된 것만)와 숫자키를 맞춘다.
       const menu = TOWER_ORDER.filter((id) => game.canUse(id))
       const towerId = menu[Number(event.key) - 1]

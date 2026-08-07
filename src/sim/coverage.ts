@@ -10,8 +10,6 @@ export interface Spot {
   center: Vec2
   /** 기준 사거리 안에 들어오는 경로 길이 (픽셀). 클수록 적이 오래 머문다. */
   coverage: number
-  /** 사거리 안에 들어오는 가장 이른 경로 진행도. 작을수록 앞쪽(감속 배치에 유리). */
-  earliest: number
 }
 
 /** 경로를 이 간격(픽셀)으로 샘플링해 커버리지를 근사한다. */
@@ -38,10 +36,10 @@ export function rankSpots(game: Game): SpotIndex {
 
   // 모든 경로의 샘플을 미리 뽑아둔다. 다중 경로 맵에서는 두 갈래를 동시에
   // 덮는 자리가 가장 값진데, 경로별로 따로 재면 그 자리를 찾지 못한다.
-  const samples: Array<{ pos: Vec2; d: number }> = []
+  const samples: Vec2[] = []
   for (const path of paths) {
     for (let d = 0; d <= path.totalLength; d += SAMPLE_STEP) {
-      samples.push({ pos: path.positionAt(d), d })
+      samples.push(path.positionAt(d))
     }
   }
 
@@ -67,14 +65,12 @@ export function rankSpots(game: Game): SpotIndex {
       const spots: Spot[] = []
       for (const tile of buildable) {
         let coverage = 0
-        let earliest = Infinity
         for (const sample of samples) {
-          if (dist2(tile.center, sample.pos) > rangeSq) continue
+          if (dist2(tile.center, sample) > rangeSq) continue
           coverage += SAMPLE_STEP
-          if (sample.d < earliest) earliest = sample.d
         }
         if (coverage === 0) continue
-        spots.push({ ...tile, coverage, earliest })
+        spots.push({ ...tile, coverage })
       }
       spots.sort((a, b) => b.coverage - a.coverage)
       cache.set(bucket, spots)
@@ -84,19 +80,16 @@ export function rankSpots(game: Game): SpotIndex {
 }
 
 /**
- * 아직 비어 있는 자리 중 하나를 고른다.
- * @param preferEarly true면 커버리지가 준수한 자리 중 경로 앞쪽을 우선한다 (거마작용)
+ * 아직 비어 있는 자리 중 커버리지가 가장 높은 곳을 고른다.
+ *
+ * 예전에는 거마작에만 "커버리지 상위 40% 중 경로 앞쪽"을 따로 적용했다.
+ * 감속이 뒤쪽 기물에 이득이 되니 앞에 두자는 논리였는데, 실제로는 경로 앞쪽이
+ * **적도 덜 지나가고 기물도 없는 곳**이라 곱할 것이 없었다. 그 규칙을 지우자
+ * 거마작이 들어간 빌드가 0% → 100%로 뒤집혔다.
  */
-export function pickSpot(game: Game, spots: readonly Spot[], preferEarly: boolean): Spot | null {
+export function pickSpot(game: Game, spots: readonly Spot[]): Spot | null {
   const free = spots.filter((s) => game.grid.canBuild(s.col, s.row))
-  if (free.length === 0) return null
-  if (!preferEarly) return free[0]!
-
-  // 상위 40% 커버리지 안에서 가장 앞쪽 자리를 고른다.
-  const cutoff = free[Math.floor(free.length * 0.4)]?.coverage ?? 0
-  const candidates = free.filter((s) => s.coverage >= cutoff)
-  candidates.sort((a, b) => a.earliest - b.earliest)
-  return candidates[0] ?? free[0]!
+  return free[0] ?? null
 }
 
 /**
@@ -104,7 +97,7 @@ export function pickSpot(game: Game, spots: readonly Spot[], preferEarly: boolea
  *
  * 기고는 경로를 덮을 필요가 **전혀 없다.** 적을 겨누지 않으므로 커버리지 순위는
  * 무의미하고, 대신 **이미 깔린 기물이 가장 많이 들어오는 자리**가 정답이다.
- * 이게 거마작(경로 앞쪽)과 배치 판단이 정반대라는 설계 의도 그 자체다.
+ * 거마작이 "적이 오래 머무는 곳"을 보는 것과 달리, 기고는 "아군이 모인 곳"을 본다.
  */
 export function pickCommandSpot(game: Game, index: SpotIndex, auraRange: number): Spot | null {
   // 경로에 닿지 않는 칸도 후보가 되어야 하므로 넉넉한 사거리로 목록을 받는다.

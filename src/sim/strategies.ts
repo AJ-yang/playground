@@ -145,12 +145,10 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
         return 'archer'
       }
 
-      // 기병이 많으면 화차는 의미가 없다. 불랑기포는 기병에도 닿는 광역이라
-      // 여기서만 값을 한다 — 화차와 자리가 겹치지 않는지 확인하는 갈래.
+      // 기병이 많으면 화차는 조준조차 못 한다. 광역을 포기하고 단일로 간다 —
+      // 불랑기를 지웠으므로 기마 광역은 살수(사거리 2.3)뿐이고, 그건 위쪽
+      // 맨몸 갈래에서만 값을 한다.
       if (flyShare > 0.35) {
-        if (game.canUse('culverin') && have('culverin') < 2 && game.towers.length >= 8) {
-          return 'culverin'
-        }
         return have('mage') <= have('archer') ? 'mage' : 'archer'
       }
 
@@ -168,7 +166,6 @@ export const STRATEGIES: Strategy[] = [
   cycleStrategy({ id: 'cannon-only', label: '화차 몰빵', cycle: ['cannon'] }),
   cycleStrategy({ id: 'frost-only', label: '거마작 몰빵 (대조군)', cycle: ['frost'] }),
   cycleStrategy({ id: 'musket-only', label: '포수 몰빵', cycle: ['musket'] }),
-  cycleStrategy({ id: 'culverin-only', label: '불랑기 몰빵', cycle: ['culverin'] }),
   cycleStrategy({ id: 'sword-only', label: '살수 몰빵', cycle: ['sword'] }),
   cycleStrategy({ id: 'banner-only', label: '기고 몰빵 (대조군)', cycle: ['banner'] }),
   cycleStrategy({
@@ -185,13 +182,13 @@ export const STRATEGIES: Strategy[] = [
   // 빌드와 비교해 "굳이 필요한가"에 수치로 답해야 한다.
   cycleStrategy({
     id: 'balanced-old5',
-    label: '균형 · 옛 일곱 종만',
+    label: '균형 · 옛 다섯 종만',
     cycle: ['archer', 'mage', 'cannon', 'frost', 'archer', 'mage', 'venom'],
   }),
   cycleStrategy({
     id: 'balanced-all7',
-    label: '균형 · 아홉 종 전부',
-    cycle: ['archer', 'sword', 'musket', 'mage', 'cannon', 'culverin', 'frost', 'venom', 'banner'],
+    label: '균형 · 여덟 종 전부',
+    cycle: ['archer', 'sword', 'musket', 'mage', 'cannon', 'frost', 'venom', 'banner'],
   }),
   // 신규 두 종이 실제로 자리를 갖는지 보는 대조군 — 같은 조합에서 이것만
   // 빼고 넣어 비교해야 "굳이 필요한가"에 수치로 답할 수 있다.
@@ -273,13 +270,22 @@ function tryBuild(game: Game, strategy: Strategy, spots: SpotIndex): boolean {
 
   // 자리 고르는 규칙이 기물 성격마다 다르다.
   //  - 기고: 경로가 아니라 **이미 깔린 기물**이 많이 들어오는 곳
-  //  - 거마작: 감속이 뒤쪽 기물 전부에 이득이 되므로 경로 앞쪽
-  //  - 나머지: 자기 사거리 기준 커버리지 1위
+  //  - 나머지(거마작 포함): 자기 사거리 기준 커버리지 1위
+  //
+  // **거마작에 「경로 앞쪽 우선」을 걸었던 것이 오래된 버그였다.** "감속이
+  // 뒤쪽 기물 전부에 이득이 되니 앞에 두자"는 논리는 그럴듯했지만, 2갈래
+  // 맵에서 경로 앞쪽은 **적도 덜 지나가고 기물도 없는 곳**이라 곱할 것이
+  // 없었다. 이 규칙을 끄자 정묘호란의 `균형 + 거마작`이 0% → 100%(생명 15.4)로
+  // 뒤집혔다 — 여러 판에 걸쳐 "거마작은 지을수록 진다"고 재고 있던 것이
+  // 전부 자리를 잘못 잡은 결과였다는 뜻이다.
+  //
+  // 감속은 **적이 가장 오래 머무는 곳**에 걸어야 한다. 그건 다른 기물이
+  // 노리는 자리와 같고, 그래서 기물이 모이는 곳이기도 하다.
   const first = getTowerDef(towerId).levels[0]
   const spot =
     first.auraFireRate > 0
       ? pickCommandSpot(game, spots, first.auraRange)
-      : pickSpot(game, spots.forRange(first.range), first.slowAmount > 0)
+      : pickSpot(game, spots.forRange(first.range))
   if (!spot) return false
 
   return game.tryBuild(towerId, spot.col, spot.row).ok

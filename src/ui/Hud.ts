@@ -1,5 +1,12 @@
 import type { Game } from '../game/Game'
-import { MAX_SLOW, TOWER_ORDER, getTowerDef, type TowerLevelDef } from '../data/towers'
+import {
+  MAX_SLOW,
+  TOWER_KIND_DESC,
+  TOWER_KIND_LABEL,
+  TOWER_ORDER,
+  getTowerDef,
+  type TowerLevelDef,
+} from '../data/towers'
 import { getEnemyDef } from '../data/enemies'
 import { TARGET_PRIORITY_LABEL, DAMAGE_TYPE_LABEL } from '../game/types'
 import { FONT, PALETTE, roundRect } from '../render/palette'
@@ -241,7 +248,7 @@ export class Hud {
     ctx.stroke()
 
     let y = p.y + 14
-    // 기물이 아홉 종으로 늘면서 배치 목록만으로 패널 대부분이 찬다. 기물을 고른
+    // 기물이 여덟 종으로 늘면서 배치 목록만으로 패널 대부분이 찬다. 기물을 고른
     // 상태에서는 목록을 접어 상세 수치가 잘리지 않게 한다 — 어차피 그 순간에
     // 필요한 것은 "이걸 올릴까 팔까"지 "무엇을 새로 지을까"가 아니다.
     if (!game.selectedTower) {
@@ -323,11 +330,16 @@ export class Hud {
     // 이미 해금 현황을 보여주므로 여기서는 쓸 수 있는 것만 보여준다.
     const menu = TOWER_ORDER.filter((id) => game.canUse(id))
 
-    // 아홉 종이 전부 열리면 52px짜리 카드로는 목록만으로 패널이 넘쳐
-    // 다음 웨이브 미리보기가 잘린다. 일곱 종을 넘으면 한 줄 소개를 접고
+    // 여덟 종이 전부 열리면 52px짜리 카드로는 목록만으로 패널이 넘쳐
+    // 다음 웨이브 미리보기가 잘린다. 여섯 종을 넘으면 한 줄 소개를 접고
     // 카드를 낮춘다 — 소개는 어차피 기물을 고르면 상세 패널에 다시 나온다.
-    const compact = menu.length > 7
+    const compact = menu.length > 6
     const cardH = compact ? 38 : 52
+    // 갈래가 바뀌는 지점에 머리글을 넣는다. 여덟 종이 한 줄로 늘어서 있으면
+    // "무엇 중에서 고르는 것인가"가 안 보이는데, 병(사람)·기(무기)·책(장애물)로
+    // 갈라 두면 목록을 훑기 전에 성격부터 읽힌다. TOWER_ORDER가 이미 갈래 순으로
+    // 정렬돼 있어 여기서는 바뀌는 곳만 짚으면 된다.
+    let lastKind: string | null = null
 
     // 게임이 끝나면 메뉴 전체를 죽인다. 예전에는 패배 화면에서도 초록색
     // 업그레이드 버튼이 그대로 살아 있어 눌릴 것처럼 보였다.
@@ -340,6 +352,27 @@ export class Hud {
       const selected = game.selectedBuildId === towerId
       const x = p.x + 12
       const w = p.w - 24
+
+      if (def.kind !== lastKind) {
+        lastKind = def.kind
+        ctx.globalAlpha = game.isOver ? 0.4 : 0.75
+        ctx.font = FONT.tiny
+        ctx.fillStyle = PALETTE.textMuted
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'middle'
+        const label = `${TOWER_KIND_LABEL[def.kind]}  ${TOWER_KIND_DESC[def.kind]}`
+        ctx.fillText(label, x + 2, y + 7)
+        // 머리글 오른쪽으로 옅은 선을 그어 묶음의 시작을 못 박는다
+        const lw = ctx.measureText(label).width
+        ctx.strokeStyle = 'rgba(255,255,255,0.09)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(x + lw + 10, y + 7.5)
+        ctx.lineTo(x + w, y + 7.5)
+        ctx.stroke()
+        ctx.globalAlpha = game.isOver ? 0.4 : 1
+        y += 17
+      }
 
       ctx.fillStyle = selected ? 'rgba(90,169,230,0.18)' : 'rgba(255,255,255,0.035)'
       roundRect(ctx, x, y, w, cardH, 6)

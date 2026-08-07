@@ -199,14 +199,23 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     accent: '#c8cfd8',
     shape: 'crystal',
     tagline: '말을 막는 물건 — 기마가 멈춘다',
-    desc: '통나무에 창을 꽂은 방책과 마름쇠. 죽이지는 못하지만 발을 묶는다. 특히 기마에게는 감속이 훨씬 깊게 걸린다 — 거마작은 애초에 말을 막으라고 만든 물건이다.',
+    desc: '통나무에 창을 꽂은 방책과 마름쇠. 죽이지는 못하고 잠깐 늦출 뿐이지만, 그 몇 초가 뒤쪽 기물의 사격 기회를 늘린다. 기마에게는 훨씬 깊게 걸린다 — 거마작은 애초에 말을 막으라고 만든 물건이다.',
     levels: [
       // 딜 3/5/8이었을 때 **거마작 몰빵이 정묘호란을 30% 클리어했다.** 광역
       // 1.55칸에 초당 1.2발이면 딸린 딜만으로도 16웨이브를 버틴다는 뜻이다.
       // "딜은 거의 없다"가 정체성이므로 여기를 깎는 것이 맞다.
-      lvl({ cost: 75, damage: 2, range: 3.2, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.1, slowAmount: 0.52, slowDuration: 4.0, cavalrySlow: 0.26 }),
-      lvl({ cost: 70, damage: 3, range: 3.5, fireRate: 1.1, projectileSpeed: 16, splashRadius: 1.3, slowAmount: 0.64, slowDuration: 5.5, cavalrySlow: 0.26 }),
-      lvl({ cost: 125, damage: 5, range: 3.8, fireRate: 1.2, projectileSpeed: 18, splashRadius: 1.55, slowAmount: 0.74, slowDuration: 7.0, cavalrySlow: 0.21 }),
+      //
+      // **깎아야 할 것은 세기지 지속이 아니다.** 처음엔 지속도 3.4초까지 같이
+      // 줄였는데, 그러자 정묘호란에서 거마작이 들어간 빌드만 전부 0%가 되고
+      // 없는 빌드는 92~100%가 됐다 — "지을수록 진다"가 되돌아온 것이다.
+      //
+      // 이 파일 위쪽과 GDD에 이미 적혀 있던 규칙을 스스로 어긴 것이었다:
+      // 지속이 짧으면 적이 거마작 사거리를 벗어나는 순간 감속이 풀려 **뒤쪽
+      // 기물이 아무 이득을 못 본다.** 감속은 지나간 뒤에도 남아야 곱셈이 된다.
+      // 지속은 되돌리고 세기만 낮췄다.
+      lvl({ cost: 75, damage: 2, range: 3.2, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.1, slowAmount: 0.18, slowDuration: 4.0, cavalrySlow: 0.10 }),
+      lvl({ cost: 70, damage: 3, range: 3.5, fireRate: 1.1, projectileSpeed: 16, splashRadius: 1.3, slowAmount: 0.23, slowDuration: 4.8, cavalrySlow: 0.12 }),
+      lvl({ cost: 125, damage: 5, range: 3.8, fireRate: 1.2, projectileSpeed: 18, splashRadius: 1.55, slowAmount: 0.28, slowDuration: 5.6, cavalrySlow: 0.18 }),
     ],
   },
   venom: {
@@ -245,56 +254,25 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     tagline: '가장 멀리서 한 발씩',
     desc: '사거리가 압도적이라 다른 기물이 닿지 못하는 곳을 때린다. 관통 피해라 흩어져 달리는 것들에게도 그대로 박히지만, 장전이 느려 물량 앞에서는 값을 못 한다.',
     levels: [
-      // 사거리를 5.5까지 줬더니 **조총 몰빵이 최종 스테이지를 클리어했다.**
-      // DPS는 궁수대보다 낮은데도 사거리가 넓어 14기가 거의 모든 구간을
-      // 덮어 버린 탓이다 — 커버리지는 DPS보다 강하다. 5.0으로 낮추고
-      // 데미지도 함께 깎았다. 그러고도 최종 스테이지를 혼자 클리어해서 한 번 더
-      // 조였다 — 사거리 4.7 / L3 48. 갑주 22 앞에서도 26이 들어가 여전히
-      // 궁수대(2)의 열세 배지만, 이제 혼자서는 판을 못 푼다.
-      lvl({ cost: 125, damage: 24, range: 4.2, fireRate: 0.72, projectileSpeed: 30 }),
-      lvl({ cost: 110, damage: 33, range: 4.4, fireRate: 0.82, projectileSpeed: 30 }),
-      lvl({ cost: 195, damage: 48, range: 4.7, fireRate: 0.92, projectileSpeed: 32 }),
+      // 사거리를 5.5까지 줬더니 **포수 몰빵이 최종 스테이지를 클리어했다.**
+      // DPS는 사수보다 낮은데도 사거리가 넓어 14기가 거의 모든 구간을 덮어 버린
+      // 탓이다 — 커버리지는 DPS보다 강하다. 4.7까지 낮추고 데미지도 깎았다.
+      //
+      // 그런데 그렇게 깎고 나니 **정체성이 거짓말이 됐다.** 골드당 유효 DPS를
+      // 재 보니 갑주 18짜리 철기 상대로 사수 66.1 / 포수 64.2로, "갑주에 강한
+      // 관통"이라던 기물이 정작 갑주 앞에서도 사수한테 졌다. 둘 다 관통이라
+      // 축이 통째로 겹쳐 있었던 것이다. 한 발의 무게를 올려 갈랐다 —
+      // 맨몸에는 여전히 사수가 두 배 넘게 낫고, 갑주 18부터 포수가 앞선다.
+      // 한 발의 무게를 62까지 올렸더니 이번엔 **포수 몰빵이 병자호란을 100%
+      // (생명 15.6) 클리어했다.** 관통이라 산개 80%를 통째로 무시하는데 사거리
+      // 4.7이 거의 모든 구간을 덮은 탓이다 — 여기서도 커버리지가 범인이었다.
+      // 데미지가 아니라 **사거리**를 깎았다. 4.3이면 여전히 전 기물 최장이지만
+      // (사수 4.0) 혼자 판을 덮지는 못한다.
+      lvl({ cost: 125, damage: 29, range: 3.9, fireRate: 0.72, projectileSpeed: 30 }),
+      lvl({ cost: 110, damage: 41, range: 4.1, fireRate: 0.82, projectileSpeed: 30 }),
+      lvl({ cost: 195, damage: 50, range: 4.3, fireRate: 0.92, projectileSpeed: 32 }),
     ],
   },
-  /**
-   * 불랑기포 — 명을 통해 들어온 후장식 속사포.
-   *
-   * 자포(子砲)를 미리 장전해 두었다가 갈아 끼우므로 재장전이 빠르다. 화차와
-   * 달리 **포신을 사람이 돌려 겨눌 수 있어 기병에도 닿는다.** 대신 반경이
-   * 좁고 비싸다 — 화차의 상위 호환이 아니라 다른 물건이다.
-   */
-  culverin: {
-    id: 'culverin',
-    name: '불랑기',
-    kind: 'engine',
-    damageType: 'magic',
-    targetsAir: true,
-    color: '#5c5346',
-    accent: '#d8a03c',
-    shape: 'mortar',
-    tagline: '기병에게도 닿는 광역',
-    desc: '자포를 갈아 끼워 쏘는 속사포. 화차와 달리 포신을 돌려 겨눌 수 있어 달리는 기병에게도 닿는다. 대신 폭발 반경이 좁고 비싸며, 화약이라 흩어진 것들에게는 반만 먹힌다.',
-    levels: [
-      lvl({ cost: 155, damage: 17, range: 3.2, fireRate: 0.75, projectileSpeed: 15, splashRadius: 0.75 }),
-      lvl({ cost: 140, damage: 28, range: 3.5, fireRate: 0.82, projectileSpeed: 15, splashRadius: 0.88 }),
-      lvl({ cost: 235, damage: 44, range: 3.8, fireRate: 0.9, projectileSpeed: 17, splashRadius: 1.05 }),
-    ],
-  },
-  /**
-   * 기고(旗鼓) — 화력이 아니라 부대를 움직이는 쪽.
-   *
-   * 조선군의 지휘는 **형명(形名)** 체계다. 깃발(形)로 보이고 북·징(名)으로
-   * 들려서 부대를 움직였다 — 『병학지남』에 북은 전진, 징은 정지로 명시된다.
-   * 조선 병서의 절반이 무기가 아니라 부대를 어떻게 움직이느냐에 관한 것이다.
-   *
-   * 이 게임의 곱셈 축은 그동안 거마작 하나뿐이었다. 거마작이 **적을 느리게**
-   * 하는 쪽이라면 기고는 **아군을 빠르게** 하는 쪽이고, 그래서 배치 판단이
-   * 정반대다 — 거마작은 경로 앞쪽에, 기고는 기물이 밀집한 곳에 놓아야 한다.
-   *
-   * 자기 딜이 0인 것으로는 부족해서, 못 하는 것을 하나 더 줬다:
-   * **주변에 기물이 없으면 아무것도 하지 않는다.** 거마작은 혼자서도 적을
-   * 늦추기라도 하지만 기고는 정말로 0이다.
-   */
   banner: {
     id: 'banner',
     name: '기고',
@@ -315,23 +293,25 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
 }
 
 /**
- * 배치 목록에 노출되는 순서. 단축키 1~9와 대응한다.
+ * 배치 목록에 노출되는 순서. 단축키 1~8과 대응하고, **화면의 묶음과 순서가
+ * 정확히 같다** — 목록에서 병(兵)·기(器)·책(柵)이 머리글로 갈라져 보이므로
+ * 순서가 어긋나면 숫자키와 눈이 따로 논다.
  *
- * 병(兵) → 기(器) → 책(柵) 순으로 묶고, 그 안에서는 역할이 가까운 것끼리
- * 붙여 둔다 — 근접(살수) → 단일(사수·포수) → 광역(화차·불랑기) →
- * 서포터(거마작·기고) → 지속(별파진). 목록에서 "무엇의 대안인가"가 보여야
- * 아홉 개를 외우지 않아도 고를 수 있다.
+ * 갈래 안에서는 역할 순이다 — 단일(사수) → 근접 광역(살수) → 장거리 단일(포수)
+ * → 지속(별파진) → 지휘(기고).
  */
 export const TOWER_ORDER: readonly string[] = [
+  // 병(兵)
   'archer',
   'sword',
   'musket',
-  'mage',
-  'cannon',
-  'culverin',
-  'frost',
   'venom',
   'banner',
+  // 기(器)
+  'mage',
+  'cannon',
+  // 책(柵)
+  'frost',
 ]
 
 /** 병(兵)·기(器)·책(柵) 분류 라벨. */
@@ -341,15 +321,25 @@ export const TOWER_KIND_LABEL: Record<TowerDef['kind'], string> = {
   barrier: '책',
 }
 
+/** 배치 목록 머리글에 붙는 한 줄 설명 — 한자만으로는 무엇인지 안 읽힌다. */
+export const TOWER_KIND_DESC: Record<TowerDef['kind'], string> = {
+  soldier: '사람이 선다',
+  engine: '거치하고 쏜다',
+  barrier: '땅에 깐다',
+}
+
 /**
  * 감속 상한. 완전 정지는 적을 사거리 밖에 영원히 세워두는 퇴행 전략을 만든다.
  *
- * 0.85로 내려 봤다가 되돌렸다. **거마작 몰빵이 정묘호란을 30% 클리어하는** 문제를
- * 잡으려던 것이었는데, 상한을 내려도 30%가 그대로였고 조합 빌드만 90% → 45%로
- * 떨어졌다 — 원인이 감속이 아니라 거마작 자신의 딜이었다는 뜻이다. 상한은
- * 되돌리고 딜을 깎았다.
+ * 0.95였을 때 **기마가 속도 5%로 사실상 얼어붙었다.** 지속 7초에 초당 1.2발이면
+ * 한 번 걸린 기병은 영영 풀리지 않아, 거마작 한 기가 판 하나를 통째로 쉽게
+ * 만들었다 — 게임이 너무 쉽다는 지적의 실체가 이것이었다.
+ *
+ * 0.65면 여전히 결정적이지만(기마가 35% 속도로 기어간다) 지나가기는 한다.
+ * 감속은 **다른 기물의 사격 기회를 늘리는 곱셈**이어야지, 그 자체로 답이 되면
+ * 조합을 고를 이유가 사라진다.
  */
-export const MAX_SLOW = 0.95
+export const MAX_SLOW = 0.48
 
 /** 철수 시 지금까지 투자한 골드의 몇 %를 돌려받는가. */
 export const SELL_REFUND_RATIO = 0.7
