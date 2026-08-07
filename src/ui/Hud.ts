@@ -249,17 +249,54 @@ export class Hud {
     if (game.selectedTower) this.drawTowerInfo(game, y)
     else this.drawWavePreview(game, y)
 
-    if (game.isOver) {
-      this.button({
-        id: 'restart',
-        x: p.x + 12,
-        y: p.y + p.h - 44,
-        w: p.w - 24,
-        h: 32,
-        label: '다시 시작 (R)',
-        enabled: true,
-        primary: true,
-      })
+  }
+
+  /**
+   * 결과 화면 버튼 묶음. 보드 위 오버레이에 그린다.
+   *
+   * 예전에는 우측 패널 맨 아래에 "다시 시작"만 있었고 다음 스테이지로 가는
+   * 길은 Q 키뿐이었다 — 한 판을 깬 사람이 다음에 무엇을 눌러야 하는지가
+   * 화면에 없었다. 결과를 읽은 시선이 그대로 다음 행동에 닿도록 카드 바로
+   * 아래에 놓는다.
+   *
+   * 그림은 Renderer가, 클릭 영역은 Hud가 소유한다는 경계는 지킨다 — 버튼은
+   * 여기서만 만들어져 히트 영역과 절대 어긋나지 않는다.
+   */
+  drawResultActions(game: Game, hasNextStage: boolean, contentBottom: number): void {
+    if (!game.isOver) return
+    const { layout } = this
+    const board = layout.board
+    const win = game.phase === 'victory'
+
+    // Renderer가 알려준 카드 아래에 붙인다.
+    const y = contentBottom + 26
+
+    const actions: Array<{ id: string; label: string; primary?: boolean }> = []
+    if (win && hasNextStage) actions.push({ id: 'nextStage', label: '다음 스테이지 ▶', primary: true })
+    actions.push({ id: 'restart', label: win ? '다시 하기 (R)' : '다시 시작 (R)', primary: !win })
+    actions.push({ id: 'toSelect', label: '스테이지 선택 (Q)' })
+
+    const h = 40
+    const gap = 10
+    const widths = actions.map((a) => (a.primary ? 176 : 148))
+    const total = widths.reduce((sum, w) => sum + w, 0) + gap * (actions.length - 1)
+    let x = board.x + board.w / 2 - total / 2
+
+    actions.forEach((action, i) => {
+      const w = widths[i]!
+      this.button({ id: action.id, x, y, w, h, label: action.label, enabled: true, primary: action.primary })
+      x += w + gap
+    })
+
+    // 전부 깼을 때는 다음이 없다는 사실을 말해 준다.
+    if (win && !hasNextStage) {
+      const { ctx } = this
+      ctx.font = FONT.small
+      ctx.fillStyle = PALETTE.gold
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('모든 스테이지를 클리어했습니다', board.x + board.w / 2, y + h + 20)
+      ctx.textAlign = 'left'
     }
   }
 

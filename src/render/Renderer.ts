@@ -4,6 +4,7 @@ import type { Game } from '../game/Game'
 import type { Enemy } from '../game/Enemy'
 import type { Tower } from '../game/Tower'
 import { getTowerDef } from '../data/towers'
+import type { TowerDef } from '../data/towers'
 import type { Layout } from '../ui/layout'
 import { FONT, PALETTE, roundRect } from './palette'
 import { enemySilhouettePath, enemyWingsPath } from './shapes'
@@ -776,38 +777,208 @@ export class Renderer {
     ctx.strokeRect(1, 1, board.w - 2, board.h - 2)
   }
 
-  /** 승리/패배 시 보드 위에 덮는 결과 화면. */
-  drawGameOver(game: Game): void {
-    if (!game.isOver) return
+  /**
+   * 승리/패배 결과 화면.
+   *
+   * 클리어는 이 게임에서 가장 중요한 순간이다 — 판을 깼다는 사실과 **무엇이
+   * 열렸는지**가 동시에 전달돼야 한다. 예전에는 문구 한 줄과 통계 세 줄이
+   * 전부였고 해금 보상은 이름만 작게 적혀 있어서, 새 기물이 열렸다는 사실이
+   * 그냥 지나갔다. 지금은 배너 → 통계 → 보상 카드 순으로 쌓고, 보상 카드가
+   * 화면에서 가장 큰 덩어리다.
+   *
+   * 버튼은 여기서 그리지 않는다. 클릭 영역은 Hud가 단독으로 소유해야
+   * 그림과 히트 영역이 어긋날 수 없다 (`Hud.drawResultActions`).
+   *
+   * @returns 카드 묶음의 아래쪽 y 좌표. 버튼을 이 밑에 붙이라고 알려준다.
+   *   양쪽에서 같은 산수를 따로 하면 카드가 늘어날 때마다 버튼이 카드를
+   *   덮는다 — 실제로 처음 붙였을 때 그렇게 겹쳤다.
+   */
+  drawGameOver(game: Game, unlock: TowerDef | null): number {
+    if (!game.isOver) return this.layout.board.y + this.layout.board.h / 2
     const { ctx } = this
     const { board } = this.layout
     const win = game.phase === 'victory'
 
     ctx.save()
-    ctx.fillStyle = 'rgba(8,11,16,0.82)'
+    ctx.fillStyle = 'rgba(8,11,16,0.88)'
     ctx.fillRect(board.x, board.y, board.w, board.h)
 
     const cx = board.x + board.w / 2
-    const cy = board.y + board.h / 2
+    // 보상 카드가 붙으면 전체가 길어지므로 위쪽부터 쌓는다.
+    let y = board.y + (unlock ? 54 : 130)
 
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = FONT.huge
-    ctx.fillStyle = win ? PALETTE.good : PALETTE.danger
-    ctx.fillText(win ? '왕국을 지켜냈다!' : '왕성이 함락되었다', cx, cy - 52)
 
+    // ── 배너
+    const label = win ? `STAGE ${game.stage.index} CLEAR` : 'DEFEAT'
+    const accent = win ? PALETTE.good : PALETTE.danger
+    ctx.font = FONT.small
+    ctx.fillStyle = accent
+    ctx.letterSpacing = '4px'
+    ctx.fillText(label, cx, y)
+    ctx.letterSpacing = '0px'
+    y += 34
+
+    ctx.font = FONT.huge
+    ctx.fillStyle = win ? PALETTE.text : PALETTE.danger
+    ctx.fillText(win ? game.stage.name : '왕성이 함락되었다', cx, y)
+    y += 32
+
+    // 배너 밑줄 — 제목과 통계를 시각적으로 분리한다.
+    ctx.strokeStyle = win ? 'rgba(139,212,80,0.4)' : 'rgba(255,92,92,0.35)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(cx - 90, y)
+    ctx.lineTo(cx + 90, y)
+    ctx.stroke()
+    y += 26
+
+    // ── 통계
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted
-    const lines = [
-      `도달 웨이브 ${Math.min(game.waves.waveNumber, game.waves.totalWaves)} / ${game.waves.totalWaves}`,
-      `처치 ${game.totalKills} · 유출 ${game.totalLeaked} · 누적 획득 ${game.goldEarned}G`,
-      `남은 생명 ${game.lives} · 건설한 타워 ${game.towers.length}`,
-    ]
-    lines.forEach((line, i) => ctx.fillText(line, cx, cy + 4 + i * 20))
+    const wave = Math.min(game.waves.waveNumber, game.waves.totalWaves)
+    ctx.fillText(
+      win
+        ? `${game.waves.totalWaves}웨이브 완주 · 처치 ${game.totalKills} · 유출 ${game.totalLeaked}`
+        : `도달 웨이브 ${wave} / ${game.waves.totalWaves} · 처치 ${game.totalKills}`,
+      cx,
+      y,
+    )
+    y += 22
+    ctx.fillText(
+      `남은 생명 ${game.lives} / ${game.stage.startLives} · 건설한 타워 ${game.towers.length} · 누적 ${game.goldEarned}G`,
+      cx,
+      y,
+    )
+    y += 30
 
-    ctx.font = FONT.label
-    ctx.fillStyle = PALETTE.accent
-    ctx.fillText('R 키를 눌러 다시 시작', cx, cy + 92)
+    if (unlock) y = this.drawUnlockCard(unlock, cx, y)
+
     ctx.restore()
+    return y
+  }
+
+  /**
+   * 해금 보상 카드.
+   *
+   * 이름만 적는 대신 **그림 + 한 줄 정체성 + 실제 수치 + 왜 필요한가**를 함께
+   * 보여준다. 새 기물이 열렸다는 사실보다 "이걸로 무엇이 달라지는가"가 다음
+   * 스테이지의 판단을 바꾸기 때문이다.
+   *
+   * @returns 카드 아래쪽 y 좌표
+   */
+  private drawUnlockCard(def: TowerDef, cx: number, top: number): number {
+    const { ctx } = this
+    const w = 430
+    const h = 152
+    const x = cx - w / 2
+
+    // 카드 바탕 — 타워 색으로 아주 옅게 물들여 "이 타워의 것"임을 알린다.
+    ctx.fillStyle = 'rgba(255,255,255,0.04)'
+    roundRect(ctx, x, top, w, h, 10)
+    ctx.fill()
+    const glow = ctx.createLinearGradient(x, top, x, top + h)
+    glow.addColorStop(0, `${def.accent}22`)
+    glow.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = glow
+    roundRect(ctx, x, top, w, h, 10)
+    ctx.fill()
+    ctx.strokeStyle = `${def.accent}88`
+    ctx.lineWidth = 1.5
+    roundRect(ctx, x, top, w, h, 10)
+    ctx.stroke()
+
+    // 머리말
+    ctx.font = FONT.small
+    ctx.fillStyle = def.accent
+    ctx.textAlign = 'center'
+    ctx.letterSpacing = '2px'
+    ctx.fillText('새 기물 해금', cx, top + 18)
+    ctx.letterSpacing = '0px'
+
+    // 그림 — 카드 왼쪽에 크게. 보상은 글자보다 그림이 먼저 와야 한다.
+    const artCx = x + 62
+    const artBase = top + 122
+    const halo = ctx.createRadialGradient(artCx, artBase - 26, 2, artCx, artBase - 26, 48)
+    halo.addColorStop(0, `${def.accent}33`)
+    halo.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = halo
+    ctx.fillRect(artCx - 48, artBase - 74, 96, 96)
+    const art = TOWER_ART[def.id]
+    if (art) drawArt(ctx, art, artCx, artBase, 74, { color: def.color, accent: def.accent })
+
+    // 오른쪽 텍스트 블록
+    const tx = x + 124
+    ctx.textAlign = 'left'
+    ctx.font = FONT.big
+    ctx.fillStyle = PALETTE.text
+    ctx.fillText(def.name, tx, top + 46)
+
+    ctx.font = FONT.body
+    ctx.fillStyle = def.accent
+    ctx.fillText(def.tagline, tx, top + 68)
+
+    // 핵심 수치 — 1레벨 기준. 다음 판에서 바로 쓸 정보만.
+    const l1 = def.levels[0]
+    const typeLabel =
+      def.damageType === 'physical' ? '물리' : def.damageType === 'magic' ? '마법' : '순수'
+    const chips: string[] = [`${l1.cost}G`, typeLabel, def.targetsAir ? '지상/공중' : '지상 전용']
+    if (l1.splashRadius > 0) chips.push('광역')
+    if (l1.slowAmount > 0) chips.push(`감속 −${Math.round(l1.slowAmount * 100)}%`)
+    if (l1.poisonDps > 0) chips.push(`중독 ${l1.poisonDps}/s`)
+    if (l1.damage >= 10) chips.push(`딜 ${l1.damage}`)
+
+    let chipX = tx
+    ctx.font = FONT.tiny
+    for (const chip of chips) {
+      const cw = ctx.measureText(chip).width + 14
+      if (chipX + cw > x + w - 16) break
+      ctx.fillStyle = 'rgba(255,255,255,0.07)'
+      roundRect(ctx, chipX, top + 80, cw, 18, 9)
+      ctx.fill()
+      ctx.fillStyle = PALETTE.textMuted
+      ctx.textAlign = 'center'
+      ctx.fillText(chip, chipX + cw / 2, top + 89)
+      ctx.textAlign = 'left'
+      chipX += cw + 5
+    }
+
+    // 왜 필요한가 — 설명문을 두 줄까지 접는다.
+    ctx.font = FONT.tiny
+    ctx.fillStyle = PALETTE.textDim
+    this.wrapLines(def.desc, tx, top + 114, x + w - 16 - tx, 14, 2)
+
+    return top + h
+  }
+
+  /** 캔버스에는 자동 줄바꿈이 없다. 최대 줄 수를 넘으면 말줄임한다. */
+  private wrapLines(
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    lineHeight: number,
+    maxLines: number,
+  ): void {
+    const { ctx } = this
+    const words = text.split(' ')
+    const lines: string[] = []
+    let line = ''
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line)
+        line = word
+        if (lines.length === maxLines) break
+      } else {
+        line = test
+      }
+    }
+    if (lines.length < maxLines && line) lines.push(line)
+    lines.forEach((l, i) => {
+      const last = i === maxLines - 1 && lines.length === maxLines
+      ctx.fillText(last && ctx.measureText(l).width > maxWidth - 12 ? `${l}…` : l, x, y + i * lineHeight)
+    })
   }
 }

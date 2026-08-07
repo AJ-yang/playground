@@ -5,7 +5,6 @@ import { Game, TILE_SIZE } from './game/Game'
 import { Progress, browserStorage } from './game/Progress'
 import { Renderer } from './render/Renderer'
 import { PALETTE, FONT } from './render/palette'
-import { TOWER_ART, drawArt } from './render/art'
 import { Hud } from './ui/Hud'
 import { StageSelect } from './ui/StageSelect'
 import { computeLayout, hitTest } from './ui/layout'
@@ -65,8 +64,11 @@ const loop = new GameLoop({
     ctx.fillStyle = PALETTE.bg
     ctx.fillRect(0, 0, layout.width, layout.height)
     renderer.drawBoard(game, elapsed)
-    renderer.drawGameOver(game)
+    const unlock = unlockBanner ? getTowerDef(unlockBanner) : null
+    const resultBottom = renderer.drawGameOver(game, unlock)
     hud.draw(game, speed, paused)
+    // 결과 화면 버튼은 오버레이 위에 그려야 하므로 HUD 다음이다.
+    hud.drawResultActions(game, nextStage() !== null, resultBottom)
     drawPlayChrome()
   },
 })
@@ -82,37 +84,19 @@ function drawPlayChrome(): void {
   ctx!.fillStyle = 'rgba(230,237,243,0.65)'
   ctx!.fillText(`S${stage.index} ${stage.name}`, x, y)
 
-  if (game.isOver && unlockBanner) {
-    const def = getTowerDef(unlockBanner)
-    const cx = layout.board.x + layout.board.w / 2
-    // 결과 문구(중앙 ~ +92) 아래로 충분히 내린다. 그림의 바닥 기준선.
-    const base = layout.board.y + layout.board.h / 2 + 182
+}
 
-    // 보상은 글자보다 **그림**이 먼저 와야 한다. 게임 전체에서 새 물건을
-    // 처음 보여주는 순간인데 예전에는 이름만 적고 넘어갔다.
-    const art = TOWER_ART[def.id]
-    if (art) {
-      ctx!.save()
-      const glowY = base - 26
-      const glow = ctx!.createRadialGradient(cx, glowY, 2, cx, glowY, 52)
-      glow.addColorStop(0, `${def.accent}38`)
-      glow.addColorStop(1, 'rgba(0,0,0,0)')
-      ctx!.fillStyle = glow
-      ctx!.fillRect(cx - 52, glowY - 52, 104, 104)
-      drawArt(ctx!, art, cx, base, 62, { color: def.color, accent: def.accent })
-      ctx!.restore()
-    }
-
-    ctx!.textAlign = 'center'
-    ctx!.textBaseline = 'middle'
-    ctx!.font = FONT.title
-    ctx!.fillStyle = def.accent
-    ctx!.fillText(`새 기물 해금 — ${def.name}`, cx, base + 24)
-    ctx!.font = FONT.small
-    ctx!.fillStyle = PALETTE.textMuted
-    ctx!.fillText(def.tagline, cx, base + 46)
-    ctx!.textAlign = 'left'
-  }
+/**
+ * 방금 판의 **바로 다음** 스테이지. 아직 잠겨 있으면 null.
+ *
+ * `progress.nextStage()`(아직 못 깬 첫 스테이지)를 쓰지 않는 이유는, 이미 깬
+ * 스테이지를 다시 플레이했을 때 엉뚱하게 앞쪽 스테이지로 보내기 때문이다.
+ * "다음"은 순서상 다음이어야 한다.
+ */
+function nextStage(): StageDef | null {
+  const i = STAGES.indexOf(stage)
+  const next = STAGES[i + 1]
+  return next && progress.isUnlocked(next) ? next : null
 }
 
 function applyTimeScale(): void {
@@ -227,6 +211,14 @@ function handleUiButton(id: string, payload?: string): void {
       break
     case 'restart':
       startStage(stage)
+      break
+    case 'nextStage': {
+      const next = nextStage()
+      if (next) startStage(next)
+      break
+    }
+    case 'toSelect':
+      backToSelect()
       break
   }
 }
