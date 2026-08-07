@@ -9,7 +9,7 @@ import { pickSpot, type Spot } from './coverage'
  *
  * 사람의 손맛을 흉내 내려는 것이 아니라, **빌드 방침 하나만 다르게 두고
  * 나머지 조건을 똑같이 맞춘 대조 실험**을 하기 위한 것이다. 그래야
- * "장승 몰빵은 막히고 조합은 통한다"는 설계 의도가 실제로 성립하는지
+ * "궁수대 몰빵은 막히고 조합은 통한다"는 설계 의도가 실제로 성립하는지
  * 수치로 확인할 수 있다.
  */
 export interface Strategy {
@@ -50,13 +50,13 @@ function cycleStrategy(opts: {
  * 다가오는 웨이브의 방어 속성을 보고 카운터를 고르는 전략.
  *
  * 게임이 "의도한 대로 플레이했을 때"의 상한선을 재기 위한 기준선이다.
- * 이것마저 클리어하지 못하면 밸런스가 너무 빡빡하다는 뜻이고,
+ * 이것산개 클리어하지 못하면 밸런스가 너무 빡빡하다는 뜻이고,
  * 몰빵 전략과 차이가 없으면 상성 설계가 작동하지 않는다는 뜻이다.
  */
 function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
   return {
     id: maxFrost === 0 ? 'adaptive-frost0' : `adaptive-frost${maxFrost}`,
-    label: `적응형 · 금줄 솟대 ${maxFrost}기`,
+    label: `적응형 · 거마작 ${maxFrost}기`,
     buildUntil: 14,
     upgradeFirst: false,
     earlyCall,
@@ -89,7 +89,7 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
       for (const t of game.towers) counts.set(t.def.id, (counts.get(t.def.id) ?? 0) + 1)
       const have = (id: string) => counts.get(id) ?? 0
 
-      // 기반 화력이 없으면 상성을 따질 여유가 없다. 가장 싼 장승부터 깐다.
+      // 기반 화력이 없으면 상성을 따질 여유가 없다. 가장 싼 궁수대부터 깐다.
       if (game.towers.length < 3) return 'archer'
 
       // 양면 저항이 두꺼우면 순수 피해(중독)가 유일한 답이다.
@@ -110,14 +110,14 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
         if (have('frost') < wantFrost) return 'frost'
       }
 
-      // 장갑이 두꺼우면 물리가 죽는다 → 서낭당
+      // 갑주이 두꺼우면 물리가 죽는다 → 총통
       if (avgArmor >= 6 && have('mage') < have('archer') + 2) return 'mage'
-      // 마법 저항이 높으면 마법이 죽는다 → 물리 기물 (공중이 없으면 징이 효율적)
+      // 화약 저항이 높으면 마법이 죽는다 → 활·화차 (공중이 없으면 화차가 효율적)
       if (avgResist >= 0.4) {
         if (flyShare < 0.2 && have('cannon') < 3 && game.towers.length >= 5) return 'cannon'
         return 'archer'
       }
-      // 공중이 많으면 징은 의미가 없다
+      // 공중이 많으면 화차는 의미가 없다
       if (flyShare > 0.35) return have('mage') <= have('archer') ? 'mage' : 'archer'
       // 특이사항 없으면 지상 물량 정리용 징을 섞는다
       if (have('cannon') < 2 && flyShare < 0.15 && game.towers.length >= 5) return 'cannon'
@@ -127,21 +127,21 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
 }
 
 export const STRATEGIES: Strategy[] = [
-  cycleStrategy({ id: 'archer-only', label: '장승 몰빵', cycle: ['archer'] }),
-  cycleStrategy({ id: 'mage-only', label: '서낭당 몰빵', cycle: ['mage'] }),
-  cycleStrategy({ id: 'cannon-only', label: '굿청 징 몰빵', cycle: ['cannon'] }),
-  cycleStrategy({ id: 'frost-only', label: '금줄 솟대 몰빵 (대조군)', cycle: ['frost'] }),
+  cycleStrategy({ id: 'archer-only', label: '궁수대 몰빵', cycle: ['archer'] }),
+  cycleStrategy({ id: 'mage-only', label: '총통 몰빵', cycle: ['mage'] }),
+  cycleStrategy({ id: 'cannon-only', label: '화차 몰빵', cycle: ['cannon'] }),
+  cycleStrategy({ id: 'frost-only', label: '거마작 몰빵 (대조군)', cycle: ['frost'] }),
   cycleStrategy({
     id: 'balanced-no-frost',
-    label: '균형 (장승·서낭당·징)',
+    label: '균형 (궁수대·총통·화차)',
     cycle: ['archer', 'mage', 'cannon'],
   }),
   cycleStrategy({
     id: 'balanced',
-    label: '균형 + 금줄 솟대',
+    label: '균형 + 거마작',
     cycle: ['archer', 'mage', 'cannon', 'archer', 'mage', 'frost'],
   }),
-  // 금줄 솟대 투자량 대조군 — "서포터가 실제로 값을 하는가, 몇 기가 적정인가"
+  // 거마작 투자량 대조군 — "서포터가 실제로 값을 하는가, 몇 기가 적정인가"
   adaptiveStrategy(0, false),
   adaptiveStrategy(1, false),
   adaptiveStrategy(2, false),
@@ -161,7 +161,7 @@ export const STRATEGIES: Strategy[] = [
     upgradeFirst: true,
   }),
   // 조기 소환 보너스 대조군
-  { ...adaptiveStrategy(2, true), id: 'adaptive-early', label: '적응형 · 솟대 2기 + 조기 소환' },
+  { ...adaptiveStrategy(2, true), id: 'adaptive-early', label: '적응형 · 거마작 2기 + 조기 소환' },
 ]
 
 export function findStrategy(id: string): Strategy | undefined {
@@ -207,7 +207,7 @@ function tryBuild(game: Game, strategy: Strategy, spots: readonly Spot[]): boole
   }
   if (game.gold < buildCost(towerId)) return false
 
-  // 금줄 솟대는 감속이 뒤쪽 타워 전부에 이득이 되므로 경로 앞쪽에 놓는다.
+  // 거마작는 감속이 뒤쪽 타워 전부에 이득이 되므로 경로 앞쪽에 놓는다.
   const preferEarly = getTowerDef(towerId).levels[0].slowAmount > 0
   const spot = pickSpot(game, spots, preferEarly)
   if (!spot) return false

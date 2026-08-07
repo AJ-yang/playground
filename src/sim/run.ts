@@ -121,7 +121,7 @@ function audit(): void {
         `사용 가능 ${towers.map((t) => TOWER_DEFS[t]!.name).join('·')}` +
         `${stage.unlocksTower ? ` → 클리어 시 ${TOWER_DEFS[stage.unlocksTower]!.name} 해금` : ''}`,
     )
-    console.log('| W | 적 수 | 총 HP | 현상금 | 보상 | 누적 수입 | 최대 장갑 | 최대 마저 | 공중 |')
+    console.log('| W | 적 수 | 총 HP | 현상금 | 보상 | 누적 수입 | 최대 갑주 | 최대 산개 | 공중 |')
     console.log('|---|---|---|---|---|---|---|---|---|')
 
     let cumulative = stage.startGold

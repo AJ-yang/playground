@@ -7,7 +7,7 @@ import { getTowerDef } from '../data/towers'
 import type { TowerDef } from '../data/towers'
 import type { Layout } from '../ui/layout'
 import { FONT, PALETTE, roundRect } from './palette'
-import { enemySilhouettePath, enemyWingsPath } from './shapes'
+import { cavalryDustPath, enemySilhouettePath } from './shapes'
 import { CASTLE_ART, ENEMY_ART, GATE_ART, ROCK_ART, TOWER_ART, TREE_ART, WEAPON_ART, drawArt, grainTile } from './art'
 
 /**
@@ -25,10 +25,10 @@ interface ArtFootprint {
 
 // 아래 값은 아트의 실제 경로 범위에서 뽑은 것이다. 눈대중으로 잡아 두었다가
 // 마을과 무덤이 보드 가장자리에서 잘렸다 — 아트를 고칠 때 여기도 같이 봐야 한다.
-/** 마을 — 초가와 기와가 좌우로 벌어져 32 칸을 꽉 채운다. 당산나무 때문에 up이 크다. */
-const CASTLE_FOOTPRINT: ArtFootprint = { size: 54, halfWidth: 17.5, up: 31.5, down: 1 }
-/** 무덤 — 만장이 위로 뻗는다. */
-const GATE_FOOTPRINT: ArtFootprint = { size: 46, halfWidth: 15.5, up: 27, down: 1 }
+/** 성 — 성벽이 32 칸을 꽉 채운다. 문루와 수자기 때문에 up이 크다. */
+const CASTLE_FOOTPRINT: ArtFootprint = { size: 54, halfWidth: 16.5, up: 30, down: 1 }
+/** 적진 — 깃발이 위로 뻗는다. */
+const GATE_FOOTPRINT: ArtFootprint = { size: 46, halfWidth: 17, up: 26.5, down: 1 }
 
 /** 라벨과 그림 꼭대기 사이 간격(px). */
 const LABEL_GAP = 13
@@ -158,7 +158,7 @@ export class Renderer {
       const br = rng.range(28, 82)
       const light = rng.next() < 0.5
       const grad = ctx.createRadialGradient(bx, by, 0, bx, by, br)
-      grad.addColorStop(0, light ? 'rgba(56,76,78,0.34)' : 'rgba(14,20,22,0.34)')
+      grad.addColorStop(0, light ? 'rgba(78,82,58,0.34)' : 'rgba(20,22,16,0.34)')
       grad.addColorStop(1, 'rgba(0,0,0,0)')
       ctx.fillStyle = grad
       ctx.fillRect(bx - br, by - br, br * 2, br * 2)
@@ -181,7 +181,7 @@ export class Renderer {
       const gx = rng.range(4, w - 4)
       const gy = rng.range(8, h - 4)
       const blades = rng.int(2, 4)
-      ctx.strokeStyle = `rgba(160,200,205,${rng.range(0.04, 0.11).toFixed(3)})`
+      ctx.strokeStyle = `rgba(206,198,158,${rng.range(0.04, 0.1).toFixed(3)})`
       ctx.lineWidth = rng.range(0.9, 1.5)
       ctx.beginPath()
       for (let b = 0; b < blades; b++) {
@@ -349,7 +349,7 @@ export class Renderer {
     ctx.font = FONT.label
     ctx.textBaseline = 'middle'
 
-    // 출발지 — 봉분 무덤. 그림이 있으면 "여기서 나온다"가 글자보다 빨리 읽힌다.
+    // 출발지 — 적의 진채. 그림이 있으면 "여기서 나온다"가 글자보다 빨리 읽힌다.
     paths.forEach((p, i) => {
       const start = p.positionAt(0)
       const spot = fitArt(start, GATE_FOOTPRINT, board)
@@ -357,16 +357,16 @@ export class Renderer {
 
       ctx.fillStyle = 'rgba(255,120,120,0.95)'
       ctx.textAlign = 'center'
-      ctx.fillText(paths.length > 1 ? `무덤 ${i + 1}` : '무덤', spot.x, spot.labelY)
+      ctx.fillText(paths.length > 1 ? `적진 ${i + 1}` : '적진', spot.x, spot.labelY)
     })
 
-    // 마을 — 지켜야 하는 곳
+    // 성 — 지켜야 하는 곳
     const end = paths[0]!.positionAt(paths[0]!.totalLength)
     const spot = fitArt(end, CASTLE_FOOTPRINT, board)
     drawArt(ctx, CASTLE_ART, spot.x, spot.baseline, CASTLE_FOOTPRINT.size)
     ctx.textAlign = 'center'
     ctx.fillStyle = 'rgba(120,180,240,0.95)'
-    ctx.fillText('마을', spot.x, spot.labelY)
+    ctx.fillText('성', spot.x, spot.labelY)
   }
 
   /** 건설 모드일 때 커서 아래 타일의 가/불가를 표시. */
@@ -544,18 +544,21 @@ export class Renderer {
       y: enemy.pos.y + Math.cos(angle) * enemy.lateral,
     }
 
-    // 공중 유닛은 그림자를 아래에 깔고 본체를 띄운다. 형태(날개)와 함께
-    // 세 겹으로 표시하는 이유는 정지 화면·고배속·색각 이상 어디서도
-    // "이건 굿청 징이 못 때린다"가 읽혀야 하기 때문이다.
-    // 그림자는 공중일 때 더 작고 진하게 — 본체와의 거리를 만든다.
-    const lift = def.flying ? 13 : 0
-    ctx.fillStyle = def.flying ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.35)'
+    // 기병(`flying`)은 말 위에 앉으므로 조금 높고, 그림자는 **길고 넓다**.
+    // 형태(흙먼지)와 함께 세 겹으로 표시하는 이유는 정지 화면·고배속·색각
+    // 이상 어디서도 "이건 화차가 못 때린다"가 읽혀야 하기 때문이다.
+    //
+    // 앞의 세계관에서는 이 플래그가 「공중」이었고 본체를 13px 띄웠다. 조선의
+    // 전장에 나는 것은 없으므로 띄우는 값을 크게 줄였다 — 그대로 두면 말이
+    // 공중에 뜬다. 대신 그림자를 말의 발자국만큼 길게 깔아 무게를 준다.
+    const lift = def.flying ? 4 : 0
+    ctx.fillStyle = def.flying ? 'rgba(0,0,0,0.42)' : 'rgba(0,0,0,0.35)'
     ctx.beginPath()
     ctx.ellipse(
       pos.x,
-      pos.y + r * 0.55,
-      r * (def.flying ? 0.6 : 0.85),
-      r * (def.flying ? 0.24 : 0.35),
+      pos.y + r * 0.6,
+      r * (def.flying ? 1.05 : 0.85),
+      r * (def.flying ? 0.3 : 0.35),
       0,
       0,
       Math.PI * 2,
@@ -565,24 +568,22 @@ export class Renderer {
     const bodyY = pos.y - lift
     const hit = enemy.flashTimer > 0
 
-    // 날개 (본체 뒤).
+    // 흙먼지 (본체 뒤).
     //
-    // 본체와 같은 색·같은 명도로 그리면 실루엣이 하나로 뭉쳐서 "날고 있다"가
-    // 안 읽힌다 — 장산범(지상 쐐기)와 도깨비불(공중 쐐기)이 색으로만 구분되는
-    // 상태가 된다. 그래서 밝은 테두리로 본체와 값을 분리하고 폭을 키웠다.
+    // 본체와 같은 색·같은 명도로 그리면 실루엣이 하나로 뭉쳐 "달리고 있다"가
+    // 안 읽힌다 — 척후(지상 쐐기)와 경기병(기마 쐐기)이 색으로만 구분되는
+    // 상태가 된다. 그래서 밝은 흙색으로 값을 분리한다.
+    //
+    // 회전은 진행 방향 그대로 쓴다(90°를 더하지 않는다). 날개는 좌우 대칭이라
+    // 방향이 상관없었지만 먼지는 **뒤로만** 끌리기 때문이다.
     if (def.flying) {
-      const flap = (Math.sin(time * 9 + enemy.id) + 1) / 2
+      const puff = (Math.sin(time * 6 + enemy.id) + 1) / 2
       ctx.save()
-      ctx.translate(pos.x, bodyY)
-      ctx.rotate(angle + Math.PI / 2)
-      enemyWingsPath(ctx, 0, 0, r, flap)
-      ctx.fillStyle = hit ? '#ffffff' : def.color
-      ctx.globalAlpha = 0.75
+      ctx.translate(pos.x, pos.y)
+      ctx.rotate(angle)
+      cavalryDustPath(ctx, 0, 0, r, puff)
+      ctx.fillStyle = hit ? '#ffffff' : 'rgba(214,198,168,0.5)'
       ctx.fill()
-      ctx.globalAlpha = 1
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)'
-      ctx.lineWidth = 1.4
-      ctx.stroke()
       ctx.restore()
     }
 
@@ -635,9 +636,9 @@ export class Renderer {
 
     // 표식 반지름은 서로 겹치지 않게 층을 나눈다. 예전에는 마저 오라가
     // 실루엣보다 훨씬 커서(1.32r) **옆 적까지 침범해** 몇 마리인지 안 읽혔고,
-    // 장갑·마저가 둘 다 켜지는 불가사리·보스는 링이 두 겹으로 보였다.
+    // 갑주·산개가 둘 다 켜지는 충차·보스는 링이 두 겹으로 보였다.
     //
-    // 장갑 — 같은 실루엣을 몸에 딱 붙여 한 겹 더. 예전에는 안쪽에 그렸는데
+    // 갑주 — 같은 실루엣을 몸에 딱 붙여 한 겹 더. 예전에는 안쪽에 그렸는데
     // 그림으로 바뀐 뒤로는 본체를 덮어 버려서 테두리로 옮겼다.
     if (showArmor) {
       ctx.strokeStyle = 'rgba(226,236,255,0.62)'
@@ -645,7 +646,7 @@ export class Renderer {
       enemySilhouettePath(ctx, sil, pos.x, bodyY, r * 1.12, silAngle)
       ctx.stroke()
     }
-    // 마법 저항 — 점선 오라. 장갑 테두리 바로 바깥.
+    // 산개 — 점선 오라. 갑주 테두리 바로 바깥.
     if (showWard) {
       ctx.strokeStyle = 'rgba(206,158,255,0.85)'
       ctx.lineWidth = 1.5
@@ -942,8 +943,8 @@ export class Renderer {
     // 핵심 수치 — 1레벨 기준. 다음 판에서 바로 쓸 정보만.
     const l1 = def.levels[0]
     const typeLabel =
-      def.damageType === 'physical' ? '물리' : def.damageType === 'magic' ? '마법' : '순수'
-    const chips: string[] = [`${l1.cost}G`, typeLabel, def.targetsAir ? '지상/공중' : '지상 전용']
+      def.damageType === 'physical' ? '관통' : def.damageType === 'magic' ? '화약' : '순수'
+    const chips: string[] = [`${l1.cost}G`, typeLabel, def.targetsAir ? '보병·기병' : '보병 전용']
     if (l1.splashRadius > 0) chips.push('광역')
     if (l1.slowAmount > 0) chips.push(`감속 −${Math.round(l1.slowAmount * 100)}%`)
     if (l1.poisonDps > 0) chips.push(`중독 ${l1.poisonDps}/s`)

@@ -32,7 +32,7 @@ function v(x: number, y: number): Vec2 {
 /** 완만한 S자. 건설 공간이 넓어 기본기를 배우기 좋다. */
 export const LEVEL_GREENVALE: LevelDef = {
   id: 'greenvale',
-  name: '마을 어귀',
+  name: '남해 포구',
   cols: COLS,
   rows: ROWS,
   routes: [
@@ -50,7 +50,7 @@ export const LEVEL_GREENVALE: LevelDef = {
 /** 촘촘한 지그재그. 코너가 많아 광역 타워가 제값을 한다. */
 export const LEVEL_RAMPARTS: LevelDef = {
   id: 'ramparts',
-  name: '무너진 돌담',
+  name: '제포 진성',
   cols: COLS,
   rows: ROWS,
   routes: [
@@ -72,7 +72,7 @@ export const LEVEL_RAMPARTS: LevelDef = {
 /** 출발점 2곳이 중앙에서 합류한다. 한쪽만 막으면 반대쪽이 뚫린다. */
 export const LEVEL_FORK: LevelDef = {
   id: 'fork',
-  name: '갈림길 서낭',
+  name: '새재 갈림길',
   cols: COLS,
   rows: ROWS,
   routes: [
@@ -91,7 +91,7 @@ export const LEVEL_FORK: LevelDef = {
 /** 길게 되접히는 나선. 경로가 길어 커버리지는 좋지만 물량이 많다. */
 export const LEVEL_HIGHLANDS: LevelDef = {
   id: 'highlands',
-  name: '안개 고개',
+  name: '안주성 벌판',
   cols: COLS,
   rows: ROWS,
   routes: [
@@ -110,7 +110,7 @@ export const LEVEL_HIGHLANDS: LevelDef = {
 /** 세 방향에서 동시에 밀려와 한 지점으로 합류하는 최종 맵. */
 export const LEVEL_GATE: LevelDef = {
   id: 'gate',
-  name: '저승 문턱',
+  name: '남한산성',
   cols: COLS,
   rows: ROWS,
   routes: [

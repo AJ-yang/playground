@@ -13,7 +13,7 @@ export interface ProgressStorage {
   write(key: string, value: string): void
 }
 
-const STORAGE_KEY = 'kingdom-defense/progress/v1'
+const STORAGE_KEY = 'joseon-defense/progress/v1'
 
 /** 메모리 저장소 — Node(시뮬레이터)와 테스트용. */
 export function memoryStorage(): ProgressStorage {

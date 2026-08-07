@@ -6,23 +6,23 @@
  * 지켜야 하는 것이 되도록 색을 배분했다.
  */
 export const PALETTE = {
-  bg: '#080a11',
+  bg: '#0b0d10',
   boardEdge: '#161c28',
 
   // 밤 들판 — 달빛 아래라 초록이 죽고 푸른기가 돈다. 한 색이 아니라 밝기가
   // 다른 세 톤을 섞어 평평해 보이지 않게 한다.
-  grassA: '#1e2a2b',
-  grassB: '#182223',
-  grassDeep: '#131b1d',
-  grassLight: '#263436',
-  grassBlade: 'rgba(160,200,205,0.13)',
+  grassA: '#2d3128',
+  grassB: '#252920',
+  grassDeep: '#1c1f18',
+  grassLight: '#3a3f31',
+  grassBlade: 'rgba(214,206,168,0.13)',
   grassLine: 'rgba(255,255,255,0.028)',
 
   // 달빛 받은 흙길 — 둑(가장 어두움) → 흙 → 밝은 자국 순으로 세 겹
-  pathBank: '#241f1a',
-  pathOuter: '#3b342a',
-  pathInner: '#524839',
-  pathLight: '#665946',
+  pathBank: '#2a2219',
+  pathOuter: '#463a2a',
+  pathInner: '#5e4f39',
+  pathLight: '#77664b',
   pathGravel: 'rgba(0,0,0,0.22)',
   pathRut: 'rgba(255,255,255,0.05)',
 

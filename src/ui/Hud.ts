@@ -397,10 +397,10 @@ export class Hud {
     y += 26
 
     const typeLabel =
-      tower.def.damageType === 'physical' ? '물리' : tower.def.damageType === 'magic' ? '마법' : '순수'
+      tower.def.damageType === 'physical' ? '관통' : tower.def.damageType === 'magic' ? '화약' : '순수'
     ctx.font = FONT.small
     ctx.fillStyle = PALETTE.textDim
-    ctx.fillText(`${typeLabel} · ${tower.def.targetsAir ? '지상/공중' : '지상 전용'}`, p.x + 14, y + 6)
+    ctx.fillText(`${typeLabel} · ${tower.def.targetsAir ? '보병·기병' : '보병 전용'}`, p.x + 14, y + 6)
     y += 22
 
     const rows: Array<[string, string, string | null]> = [
@@ -534,7 +534,7 @@ export class Hud {
         ctx.fill()
       }
       if (def.flying) {
-        // 공중은 형태가 아니라 부가 표식이므로 작은 날개 힌트만 붙인다.
+        // 기마는 형태가 아니라 부가 표식이므로 작은 먼지 힌트만 붙인다.
         ctx.strokeStyle = def.color
         ctx.lineWidth = 1.2
         ctx.beginPath()

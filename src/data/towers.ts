@@ -4,9 +4,9 @@ import type { DamageType } from '../game/types'
  * 타워 정의 (밸런스 데이터).
  *
  * 설계 의도 — 4개 타워는 각자 명확한 "못 하는 것"을 갖는다.
- *   장승: 싸고 빠르지만 장갑 앞에서 무력
- *   서낭당: 장갑을 무시하지만 느리고 비싸며 마법 저항에 막힘
- *   굿청 징: 광역 최강이지만 공중을 못 때리고 발사가 매우 느림
+ *   궁수대: 싸고 빠르지만 갑주 앞에서 무력
+ *   총통: 갑주를 무시하지만 느리고 비싸며 산개에 막힘
+ *   화차: 광역 최강이지만 기병을 못 때리고 발사가 매우 느림
  *   금줄 솟대: 딜은 거의 없지만 광역 감속으로 다른 타워의 DPS를 끌어올림
  * 어느 하나만 도배해서는 20웨이브를 넘길 수 없도록 수치를 잡았다.
  */
@@ -36,7 +36,7 @@ export interface TowerDef {
   id: string
   name: string
   damageType: DamageType
-  /** 공중 유닛을 타겟팅할 수 있는가 */
+  /** 기마 유닛을 타겟팅할 수 있는가 */
   targetsAir: boolean
   color: string
   accent: string
@@ -62,14 +62,14 @@ function lvl(partial: Partial<TowerLevelDef> & Pick<TowerLevelDef, 'cost' | 'dam
 export const TOWER_DEFS: Record<string, TowerDef> = {
   archer: {
     id: 'archer',
-    name: '장승',
+    name: '궁수대',
     damageType: 'physical',
     targetsAir: true,
-    color: '#c05a3e',
-    accent: '#e8b45c',
+    color: '#b3423c',
+    accent: '#dcc38a',
     shape: 'arrow',
-    tagline: '마을 어귀의 기본 수호',
-    desc: '골드 대비 DPS가 가장 좋다. 다만 물리 데미지라 장갑 앞에서는 딜이 거의 사라진다.',
+    tagline: '각궁과 편전 — 조선의 주력',
+    desc: '각궁과 편전. 골드 대비 화력이 가장 좋지만 화살은 갑주 앞에서 힘을 잃는다 — 조선의 주력이자 조선의 한계였다.',
     levels: [
       lvl({ cost: 70, damage: 10, range: 3.2, fireRate: 1.9, projectileSpeed: 18 }),
       lvl({ cost: 60, damage: 16, range: 3.6, fireRate: 2.3, projectileSpeed: 18 }),
@@ -78,14 +78,14 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   mage: {
     id: 'mage',
-    name: '서낭당',
+    name: '총통',
     damageType: 'magic',
     targetsAir: true,
-    color: '#33705c',
-    accent: '#59a183',
+    color: '#4e545f',
+    accent: '#c9a227',
     shape: 'orb',
-    tagline: '부적 — 갑옷이 소용없다',
-    desc: '장갑 수치를 완전히 무시한다. 귀졸·석장승의 넋의 해답이지만 마법 저항 앞에서는 반대로 무력하다.',
+    tagline: '화약 — 갑주가 소용없다',
+    desc: '화약은 두께로 막히지 않는다. 갑병·철기의 해답이지만, 흩어져 달리는 것들 앞에서는 반대로 무력하다.',
     levels: [
       lvl({ cost: 110, damage: 32, range: 3.0, fireRate: 0.85, projectileSpeed: 13 }),
       lvl({ cost: 100, damage: 55, range: 3.3, fireRate: 0.95, projectileSpeed: 13 }),
@@ -94,14 +94,14 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   cannon: {
     id: 'cannon',
-    name: '굿청 징',
+    name: '화차',
     damageType: 'physical',
     targetsAir: false,
-    color: '#c9a227',
-    accent: '#ecd06a',
+    color: '#7a5a3a',
+    accent: '#e0a63a',
     shape: 'cannon',
-    tagline: '소리가 땅을 울린다 (지상 전용)',
-    desc: '뭉친 지상 물량을 한 번에 정리한다. 발사가 매우 느려 감속과 함께 써야 제값을 하고, 공중은 조준조차 못 한다.',
+    tagline: '신기전 백 발 (보병 전용)',
+    desc: '신기전 백 발을 한 번에 쏜다. 뭉친 보병을 통째로 정리하지만, 고정 거치식이라 달리는 기병은 조준조차 못 한다.',
     levels: [
       lvl({ cost: 130, damage: 28, range: 3.4, fireRate: 0.55, projectileSpeed: 9, splashRadius: 1.1 }),
       lvl({ cost: 120, damage: 47, range: 3.6, fireRate: 0.6, projectileSpeed: 9, splashRadius: 1.3 }),
@@ -110,14 +110,14 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   frost: {
     id: 'frost',
-    name: '금줄 솟대',
+    name: '거마작',
     damageType: 'magic',
     targetsAir: true,
-    color: '#cdd6de',
-    accent: '#8fa4b6',
+    color: '#9c7852',
+    accent: '#c8cfd8',
     shape: 'crystal',
-    tagline: '금줄로 붙잡는다',
-    desc: '딜은 거의 없지만 범위 안의 적을 느리게 만든다. 다른 타워의 유효 사거리 체류 시간을 늘려 전체 DPS를 올리는 핵심 축.',
+    tagline: '통나무와 마름쇠로 발을 묶는다',
+    desc: '통나무 방책과 마름쇠. 직접 죽이지는 못하지만 발을 묶는다. 다른 기물의 사거리 안에 적을 오래 붙잡아 두는 곱셈 축.',
     levels: [
       lvl({ cost: 75, damage: 3, range: 3.2, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.1, slowAmount: 0.55, slowDuration: 4.0 }),
       lvl({ cost: 70, damage: 5, range: 3.5, fireRate: 1.1, projectileSpeed: 16, splashRadius: 1.3, slowAmount: 0.68, slowDuration: 5.5 }),
@@ -126,14 +126,14 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
   },
   venom: {
     id: 'venom',
-    name: '팥 항아리',
+    name: '비격진천뢰',
     damageType: 'pure',
     targetsAir: true,
-    color: '#a8322e',
-    accent: '#d95a4a',
+    color: '#2e333c',
+    accent: '#e8843a',
     shape: 'flask',
-    tagline: '붉은 팥 — 무엇에게든 통한다',
-    desc: '직접 딜은 거의 없지만 중독은 순수 피해라 장갑도 마법저항도 통하지 않는다. 양면 저항 탱커와 보스의 해답. 다만 중독은 중첩되지 않아 여러 기를 지어도 소용없다.',
+    tagline: '쇳조각 — 무엇에게든 박힌다',
+    desc: '터지고 나서 몸에 박힌 쇳조각이 계속 상처를 낸다. 갑주도 산개도 소용없는 순수 피해라 양면 저항의 해답이지만, 상처는 중첩되지 않아 여러 기를 지어도 소용없다.',
     levels: [
       lvl({ cost: 100, damage: 4, range: 3.0, fireRate: 0.9, projectileSpeed: 12, poisonDps: 9, poisonDuration: 3.0 }),
       lvl({ cost: 95, damage: 6, range: 3.2, fireRate: 0.95, projectileSpeed: 12, poisonDps: 16, poisonDuration: 3.5 }),

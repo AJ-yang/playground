@@ -48,7 +48,7 @@ export class StageSelect {
 
     ctx.font = FONT.huge
     ctx.fillStyle = PALETTE.text
-    ctx.fillText('밤길 방어전', 40, 88)
+    ctx.fillText('조선 방어전', 40, 88)
 
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted

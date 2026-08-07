@@ -53,11 +53,11 @@ export class TitleScreen {
 
     ctx.font = '800 62px system-ui, sans-serif'
     ctx.fillStyle = PALETTE.text
-    ctx.fillText('밤길 방어전', cx, 138)
+    ctx.fillText('조선 방어전', cx, 138)
 
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted
-    ctx.fillText('무덤에서 마을로 내려오는 것들을 장승과 부적으로 막는다', cx, 180)
+    ctx.fillText('왜구의 노략에서 병자호란까지 — 활과 화약으로 성을 지킨다', cx, 180)
 
     // ── 난이도
     ctx.font = FONT.label
@@ -178,7 +178,7 @@ export class TitleScreen {
     drawArt(ctx, CASTLE_ART, w - 92, roadY + 16, 92)
 
     // 길 위를 행진하는 적 — 시간에 따라 천천히 오른쪽으로 흐른다.
-    const marchers = ['grunt', 'armored', 'shaman', 'goblinking', 'brute'] as const
+    const marchers = ['grunt', 'armored', 'wyvern', 'goblinking', 'sentinel'] as const
     marchers.forEach((id, i) => {
       const def = getEnemyDef(id)
       const span = w - 300

@@ -101,25 +101,29 @@ export function enemySilhouettePath(
  * 부양 + 그림자만으로는 정지 화면에서 구분이 어려워 날개를 추가했다.
  * @param flap 0~1 날갯짓 위상
  */
-export function enemyWingsPath(
+/**
+ * 기병의 흙먼지 — 뒤로 길게 끌리는 자국.
+ *
+ * 예전 세계관에서는 이 자리에 **날개**가 있었다. 「화차가 못 때리는 것」을
+ * 형태로 알리는 자리라 없앨 수는 없는데, 조선의 전장에 나는 것은 없다.
+ * 그래서 같은 역할을 흙먼지가 맡는다 — 달리는 것 뒤에는 먼지가 인다.
+ *
+ * 날개와 달리 **뒤로만** 뻗는다. 좌우로 펼치면 다시 날개가 되기 때문이다.
+ * `flap`은 먼지가 피어오르는 정도로 쓴다.
+ */
+export function cavalryDustPath(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   r: number,
   flap: number,
 ): void {
-  const spread = r * (1.85 + flap * 0.35)
-  const rise = r * (0.7 + flap * 0.45)
+  const back = r * (1.7 + flap * 0.4)
+  const puff = r * (0.5 + flap * 0.22)
 
   ctx.beginPath()
-  // 왼쪽 날개
-  ctx.moveTo(cx - r * 0.3, cy)
-  ctx.lineTo(cx - spread, cy - rise)
-  ctx.lineTo(cx - spread * 0.6, cy + r * 0.42)
-  ctx.closePath()
-  // 오른쪽 날개
-  ctx.moveTo(cx + r * 0.3, cy)
-  ctx.lineTo(cx + spread, cy - rise)
-  ctx.lineTo(cx + spread * 0.6, cy + r * 0.42)
-  ctx.closePath()
+  // 뒤로 끌리는 세 덩이. 뒤로 갈수록 작아져야 "흩어진다"가 읽힌다.
+  ctx.ellipse(cx - r * 0.85, cy + r * 0.5, puff * 1.15, puff * 0.72, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx - r * 1.35, cy + r * 0.34, puff * 0.86, puff * 0.56, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx - back, cy + r * 0.18, puff * 0.58, puff * 0.4, 0, 0, Math.PI * 2)
 }
