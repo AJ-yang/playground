@@ -814,7 +814,7 @@ export class Renderer {
    *   양쪽에서 같은 산수를 따로 하면 카드가 늘어날 때마다 버튼이 카드를
    *   덮는다 — 실제로 처음 붙였을 때 그렇게 겹쳤다.
    */
-  drawGameOver(game: Game, unlock: TowerDef | null): number {
+  drawGameOver(game: Game, unlock: readonly TowerDef[]): number {
     if (!game.isOver) return this.layout.board.y + this.layout.board.h / 2
     const { ctx } = this
     const { board } = this.layout
@@ -826,7 +826,8 @@ export class Renderer {
 
     const cx = board.x + board.w / 2
     // 보상 카드가 붙으면 전체가 길어지므로 위쪽부터 쌓는다.
-    let y = board.y + (unlock ? 54 : 130)
+    // 보상 카드가 붙으면 전체가 길어지므로 장수만큼 더 위에서 시작한다.
+    let y = board.y + (unlock.length === 0 ? 130 : unlock.length === 1 ? 54 : 22)
 
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
@@ -843,7 +844,7 @@ export class Renderer {
 
     ctx.font = FONT.huge
     ctx.fillStyle = win ? PALETTE.text : PALETTE.danger
-    ctx.fillText(win ? game.stage.name : '마을이 무너졌다', cx, y)
+    ctx.fillText(win ? game.stage.name : '성이 무너졌다', cx, y)
     y += 32
 
     // 배너 밑줄 — 제목과 통계를 시각적으로 분리한다.
@@ -874,7 +875,7 @@ export class Renderer {
     )
     y += 30
 
-    if (unlock) y = this.drawUnlockCard(unlock, cx, y)
+    for (const def of unlock) y = this.drawUnlockCard(def, cx, y) + 10
 
     ctx.restore()
     return y
@@ -947,6 +948,9 @@ export class Renderer {
     const chips: string[] = [`${l1.cost}G`, typeLabel, def.targetsAir ? '보병·기병' : '보병 전용']
     if (l1.splashRadius > 0) chips.push('광역')
     if (l1.slowAmount > 0) chips.push(`감속 −${Math.round(l1.slowAmount * 100)}%`)
+    if (l1.cavalrySlow > 0) {
+      chips.push(`기마 −${Math.round(Math.min(0.95, l1.slowAmount + l1.cavalrySlow) * 100)}%`)
+    }
     if (l1.poisonDps > 0) chips.push(`중독 ${l1.poisonDps}/s`)
     if (l1.damage >= 10) chips.push(`딜 ${l1.damage}`)
 

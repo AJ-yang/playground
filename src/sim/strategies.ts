@@ -66,7 +66,6 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
       let flying = 0
       let armorWeighted = 0
       let resistWeighted = 0
-      let fastWeighted = 0
 
       for (const group of wave.groups) {
         const def = getEnemyDef(group.enemy)
@@ -76,14 +75,12 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
         if (def.flying) flying += weight
         armorWeighted += def.armor * weight
         resistWeighted += def.magicResist * weight
-        if (def.speed >= 3) fastWeighted += weight
       }
       if (total === 0) return 'archer'
 
       const flyShare = flying / total
       const avgArmor = armorWeighted / total
       const avgResist = resistWeighted / total
-      const fastShare = fastWeighted / total
 
       const counts = new Map<string, number>()
       for (const t of game.towers) counts.set(t.def.id, (counts.get(t.def.id) ?? 0) + 1)
@@ -103,24 +100,41 @@ function adaptiveStrategy(maxFrost: number, earlyCall: boolean): Strategy {
         return 'venom'
       }
 
-      // 감속은 고속 적이나 물량 웨이브에서 다른 타워의 체류 시간을 벌어준다.
+      // 거마작은 기마에게 감속이 훨씬 깊게 걸린다. 그러니 "웨이브가 깊어졌으니
+      // 하나 깔자"가 아니라 **말이 오는가**로 판단해야 맞다. 보병만 오는 웨이브에
+      // 거마작을 짓는 것은 그냥 화력을 버리는 것이다.
       // 몇 기가 적정인지는 이 상한만 바꿔가며 대조 실험으로 확인한다.
-      if (game.canUse('frost') && maxFrost > 0 && (fastShare > 0.25 || game.waves.waveNumber >= 5)) {
-        const wantFrost = Math.min(maxFrost, 1 + Math.floor(game.waves.waveNumber / 8))
+      if (game.canUse('frost') && maxFrost > 0 && game.towers.length >= 5 && flyShare > 0.2) {
+        const wantFrost = Math.min(maxFrost, 1 + Math.floor(flyShare * 3))
         if (have('frost') < wantFrost) return 'frost'
       }
 
-      // 갑주이 두꺼우면 물리가 죽는다 → 총통
+      // 갑주가 두꺼우면 관통이 죽는다 → 총통
       if (avgArmor >= 6 && have('mage') < have('archer') + 2) return 'mage'
-      // 화약 저항이 높으면 마법이 죽는다 → 활·화차 (공중이 없으면 화차가 효율적)
+
+      // 산개가 높으면 화약이 죽는다 → 관통 계열.
+      // 기병이 섞여 있으면 화차가 못 닿으므로 조총으로 간다 — 이 갈래가
+      // 조총을 넣은 이유 그 자체라, AI가 그걸 실제로 고르는지 확인하는 자리다.
       if (avgResist >= 0.4) {
+        if (game.canUse('musket') && (flyShare > 0.2 || avgArmor >= 8) && have('musket') < 3) {
+          return 'musket'
+        }
         if (flyShare < 0.2 && have('cannon') < 3 && game.towers.length >= 5) return 'cannon'
         return 'archer'
       }
-      // 공중이 많으면 화차는 의미가 없다
-      if (flyShare > 0.35) return have('mage') <= have('archer') ? 'mage' : 'archer'
-      // 특이사항 없으면 지상 물량 정리용 징을 섞는다
+
+      // 기병이 많으면 화차는 의미가 없다. 불랑기포는 기병에도 닿는 광역이라
+      // 여기서만 값을 한다 — 화차와 자리가 겹치지 않는지 확인하는 갈래.
+      if (flyShare > 0.35) {
+        if (game.canUse('culverin') && have('culverin') < 2 && game.towers.length >= 8) {
+          return 'culverin'
+        }
+        return have('mage') <= have('archer') ? 'mage' : 'archer'
+      }
+
+      // 특이사항 없으면 지상 물량 정리용 화차를 섞는다
       if (have('cannon') < 2 && flyShare < 0.15 && game.towers.length >= 5) return 'cannon'
+      if (game.canUse('musket') && have('musket') < 2 && game.towers.length >= 8) return 'musket'
       return have('archer') <= have('mage') ? 'archer' : 'mage'
     },
   }
@@ -131,6 +145,8 @@ export const STRATEGIES: Strategy[] = [
   cycleStrategy({ id: 'mage-only', label: '총통 몰빵', cycle: ['mage'] }),
   cycleStrategy({ id: 'cannon-only', label: '화차 몰빵', cycle: ['cannon'] }),
   cycleStrategy({ id: 'frost-only', label: '거마작 몰빵 (대조군)', cycle: ['frost'] }),
+  cycleStrategy({ id: 'musket-only', label: '조총 몰빵', cycle: ['musket'] }),
+  cycleStrategy({ id: 'culverin-only', label: '불랑기포 몰빵', cycle: ['culverin'] }),
   cycleStrategy({
     id: 'balanced-no-frost',
     label: '균형 (궁수대·총통·화차)',
@@ -140,6 +156,18 @@ export const STRATEGIES: Strategy[] = [
     id: 'balanced',
     label: '균형 + 거마작',
     cycle: ['archer', 'mage', 'cannon', 'archer', 'mage', 'frost'],
+  }),
+  // 신규 기물 두 종이 실제로 자리를 갖는지 보는 대조군 — 옛 다섯 종만 쓰는
+  // 빌드와 비교해 "굳이 필요한가"에 수치로 답해야 한다.
+  cycleStrategy({
+    id: 'balanced-old5',
+    label: '균형 · 옛 다섯 종만',
+    cycle: ['archer', 'mage', 'cannon', 'frost', 'archer', 'mage', 'venom'],
+  }),
+  cycleStrategy({
+    id: 'balanced-all7',
+    label: '균형 · 일곱 종 전부',
+    cycle: ['archer', 'musket', 'mage', 'cannon', 'culverin', 'frost', 'venom'],
   }),
   // 거마작 투자량 대조군 — "서포터가 실제로 값을 하는가, 몇 기가 적정인가"
   adaptiveStrategy(0, false),

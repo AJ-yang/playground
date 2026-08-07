@@ -1,5 +1,5 @@
 import type { Game } from '../game/Game'
-import { TOWER_ORDER, getTowerDef } from '../data/towers'
+import { TOWER_ORDER, getTowerDef, type TowerLevelDef } from '../data/towers'
 import { getEnemyDef } from '../data/enemies'
 import { TARGET_PRIORITY_LABEL } from '../game/types'
 import { FONT, PALETTE, roundRect } from '../render/palette'
@@ -241,13 +241,18 @@ export class Hud {
     ctx.stroke()
 
     let y = p.y + 14
-    y = this.drawBuildMenu(game, y)
-    y += 6
-    this.divider(y)
-    y += 12
-
-    if (game.selectedTower) this.drawTowerInfo(game, y)
-    else this.drawWavePreview(game, y)
+    // 기물이 일곱 종으로 늘면서 건설 목록만으로 패널 대부분이 찬다. 타워를 고른
+    // 상태에서는 목록을 접어 상세 수치가 잘리지 않게 한다 — 어차피 그 순간에
+    // 필요한 것은 "이걸 올릴까 팔까"지 "무엇을 새로 지을까"가 아니다.
+    if (!game.selectedTower) {
+      y = this.drawBuildMenu(game, y)
+      y += 6
+      this.divider(y)
+      y += 12
+      this.drawWavePreview(game, y)
+    } else {
+      this.drawTowerInfo(game, y)
+    }
 
   }
 
@@ -422,6 +427,11 @@ export class Hud {
         `-${Math.round(stats.slowAmount * 100)}% / ${stats.slowDuration.toFixed(1)}s`,
         next ? `-${Math.round(next.slowAmount * 100)}%` : null,
       ])
+      // 기마 감속은 이 기물을 언제 짓느냐를 가르는 수치라 따로 보여준다.
+      if (stats.cavalrySlow > 0) {
+        const cav = (s: TowerLevelDef) => Math.round(Math.min(0.95, s.slowAmount + s.cavalrySlow) * 100)
+        rows.push(['└ 기마에는', `-${cav(stats)}%`, next ? `-${cav(next)}%` : null])
+      }
     }
     if (stats.poisonDps > 0) {
       rows.push([

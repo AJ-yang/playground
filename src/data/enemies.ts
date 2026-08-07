@@ -179,6 +179,133 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
     desc: '사람과 말이 모두 갑주를 둘렀다. 화차는 못 닿고 화살은 튕긴다.',
   }),
   /**
+   * 방패병 — 갑주 축의 교과서.
+   *
+   * 큰 방패 뒤에 몸을 완전히 숨긴다. 화살은 아예 안 통하고 조총도 반토막이지만
+   * 체력 자체는 얇아서 **총통 한 발이면 끝난다.** "두께는 화약을 못 막는다"를
+   * 가장 노골적으로 가르치는 자리다.
+   */
+  shieldman: def({
+    id: 'shieldman',
+    silhouette: 'armored',
+    name: '방패병',
+    maxHp: 205,
+    speed: 1.5,
+    armor: 22,
+    bounty: 14,
+    radius: 12,
+    color: '#7c6a52',
+    accent: '#43596b',
+    desc: '큰 방패로 몸을 가렸다. 갑주 22 — 화살은 아예 안 통하지만 체력은 얇다. 총통이 답이다.',
+  }),
+  /**
+   * 결사대 — 커버리지 시험.
+   *
+   * 약하고 빠르고, 뚫리면 생명 3을 가져간다. 화력이 아니라 **사거리가 닿는가**를
+   * 묻는다. 방어선에 구멍이 하나라도 있으면 여기서 드러난다.
+   */
+  zealot: def({
+    id: 'zealot',
+    silhouette: 'basic',
+    name: '결사대',
+    maxHp: 95,
+    speed: 3.6,
+    bounty: 9,
+    leak: 3,
+    radius: 10,
+    color: '#a8434a',
+    accent: '#e8d9b8',
+    desc: '죽기로 달려든다. 약하지만 뚫리면 생명 3 — 사거리에 구멍이 있으면 여기서 드러난다.',
+  }),
+  /**
+   * 궁기병 — 화약이 통하지 않는 기병.
+   *
+   * 기마라 화차가 못 닿고, 흩어져 달려 총통·불랑기포도 반만 먹는다. 남는 답은
+   * **활과 조총뿐**이다. 여진의 상징이자 조총 해금의 존재 이유.
+   */
+  horsearcher: def({
+    id: 'horsearcher',
+    silhouette: 'swift',
+    name: '궁기병',
+    maxHp: 195,
+    speed: 3.4,
+    armor: 2,
+    magicResist: 0.55,
+    bounty: 16,
+    radius: 12,
+    color: '#9c7a4e',
+    accent: '#e6d2a8',
+    flying: true,
+    desc: '달리면서 쏜다. 화차는 못 닿고 화약은 45%만 먹는다 — 활과 조총만 남는다.',
+  }),
+  /**
+   * 운제 — 방어가 하나도 없는 덩치.
+   *
+   * 성벽에 걸치는 공성 사다리차다. 갑주도 산개도 0이라 무엇으로 때려도 들어가지만
+   * 체력이 통째로 크다. 상성 퀴즈가 아니라 **화력 총량**을 묻는 유일한 적이라,
+   * 충차(양면 저항)와 정반대의 문제가 된다.
+   */
+  ladder: def({
+    id: 'ladder',
+    silhouette: 'bulwark',
+    name: '운제',
+    maxHp: 980,
+    speed: 1.0,
+    bounty: 32,
+    leak: 3,
+    radius: 16,
+    color: '#8a7250',
+    accent: '#5d4a30',
+    desc: '성벽에 걸치는 사다리차. 방어는 없지만 체력이 통째로 크다 — 상성이 아니라 화력 총량을 묻는다.',
+  }),
+  /**
+   * 여진 대추장 — 니탕개의 난의 결론.
+   *
+   * 기마이면서 산개가 높다. 화차는 못 닿고 총통·불랑기포는 반만 먹으니
+   * **활과 조총 외에는 답이 없다.** 그 스테이지가 가르친 것을 보스로 못 박는
+   * 자리라, 수치가 그대로 교훈이 된다.
+   */
+  chieftain: def({
+    id: 'chieftain',
+    silhouette: 'boss',
+    name: '여진 대추장',
+    maxHp: 2050,
+    speed: 2.6,
+    armor: 4,
+    magicResist: 0.62,
+    bounty: 86,
+    leak: 3,
+    radius: 19,
+    color: '#8a6b46',
+    accent: '#c8483c',
+    flying: true,
+    boss: true,
+    desc: '기마에 산개 62%. 화차는 못 닿고 화약은 반만 먹는다 — 활과 조총만 남는다.',
+  }),
+  /**
+   * 누차 — 바퀴 달린 공성 망루.
+   *
+   * 성벽 높이까지 올려 병력을 쏟아붓는 물건이다. 방어보다 **크기**가 정체성이라
+   * 갑주는 보통이고 체력이 압도적이며 매우 느리다. 상성으로 푸는 것이 아니라
+   * 화력 총량으로 녹여야 하는 유일한 보스다.
+   */
+  siegetower: def({
+    id: 'siegetower',
+    silhouette: 'boss',
+    name: '누차',
+    maxHp: 3600,
+    speed: 0.85,
+    armor: 10,
+    magicResist: 0.15,
+    bounty: 112,
+    leak: 4,
+    radius: 22,
+    color: '#7d6444',
+    accent: '#4a3a24',
+    boss: true,
+    desc: '성벽 높이의 공성 망루. 상성이 아니라 화력 총량으로 녹여야 한다 — 시간이 오래 걸린다.',
+  }),
+  /**
    * 보스는 스테이지 중간중간에 등장한다.
    *
    * 웨이브 하나를 통째로 "물량"이 아니라 "한 덩어리"로 바꿔 리듬을 끊는 장치다.

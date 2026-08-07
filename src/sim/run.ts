@@ -69,7 +69,7 @@ function towersAtStage(stage: StageDef): string[] {
   const towers = [...STARTING_TOWERS]
   for (const s of STAGES) {
     if (s.index >= stage.index) break
-    if (s.unlocksTower) towers.push(s.unlocksTower)
+    towers.push(...s.unlocksTowers)
   }
   return towers
 }
@@ -119,7 +119,7 @@ function audit(): void {
       `맵 ${stage.level.name} · 경로 ${stage.level.routes.length}갈래 · ` +
         `시작 ${stage.startGold}G / 생명 ${stage.startLives} · ` +
         `사용 가능 ${towers.map((t) => TOWER_DEFS[t]!.name).join('·')}` +
-        `${stage.unlocksTower ? ` → 클리어 시 ${TOWER_DEFS[stage.unlocksTower]!.name} 해금` : ''}`,
+        `${stage.unlocksTowers.length ? ` → 클리어 시 ${stage.unlocksTowers.map((id) => TOWER_DEFS[id]!.name).join('·')} 해금` : ''}`,
     )
     console.log('| W | 적 수 | 총 HP | 현상금 | 보상 | 누적 수입 | 최대 갑주 | 최대 산개 | 공중 |')
     console.log('|---|---|---|---|---|---|---|---|---|')

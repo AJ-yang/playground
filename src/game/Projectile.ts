@@ -15,6 +15,8 @@ export interface ProjectileSpec {
   splashRadius: number
   slowAmount: number
   slowDuration: number
+  /** 기마 대상에 한해 slowAmount에 더해지는 값 (거마작 전용) */
+  cavalrySlow: number
   poisonDps: number
   poisonDuration: number
   color: string

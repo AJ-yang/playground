@@ -126,7 +126,7 @@ export class TitleScreen {
     ctx.fillText(
       started
         ? `진행도 ${progress.clearedCount} / ${TOTAL_STAGES} · 보유 기물 ${progress.unlockedTowers().length}종`
-        : `스테이지 ${TOTAL_STAGES}개 · 스테이지를 깰 때마다 새 기물이 열립니다`,
+        : `스테이지 ${TOTAL_STAGES}개 · 전쟁을 하나씩 넘길 때마다 그 시대의 기물이 열립니다`,
       cx,
       460,
     )

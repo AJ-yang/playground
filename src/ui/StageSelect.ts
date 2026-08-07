@@ -52,8 +52,8 @@ export class StageSelect {
 
     ctx.font = FONT.body
     ctx.fillStyle = PALETTE.textMuted
-    const introW = ctx.measureText('스테이지를 깰 때마다 새 기물이 열립니다').width
-    ctx.fillText('스테이지를 깰 때마다 새 기물이 열립니다', 40, 112)
+    const introW = ctx.measureText('전쟁을 하나씩 넘길 때마다 그 시대의 기물이 열립니다').width
+    ctx.fillText('전쟁을 하나씩 넘길 때마다 그 시대의 기물이 열립니다', 40, 112)
 
     // 난이도 배지 — 판마다 걸리는 설정이라 어느 화면에서도 지금 값이 보여야 한다.
     const diff = getDifficulty(progress.difficulty)
@@ -191,20 +191,22 @@ export class StageSelect {
 
       // 보상 — 색 사각형이 아니라 실제 타워 그림. 보드에서 보게 될 물건과
       // 카드에서 보는 물건이 같아야 "무엇이 열리는가"가 한 번에 읽힌다.
-      if (stage.unlocksTower) {
-        const reward = getTowerDef(stage.unlocksTower)
-        const art = TOWER_ART[reward.id]
-        if (art) {
-          drawArt(ctx, art, x + 24, y + 317, 22, { color: reward.color, accent: reward.accent })
+      if (stage.unlocksTowers.length > 0) {
+        // 둘이 열리는 스테이지가 있으므로 가로로 나란히 놓는다.
+        let rx = x + 24
+        for (const id of stage.unlocksTowers) {
+          const reward = getTowerDef(id)
+          const art = TOWER_ART[reward.id]
+          if (art) drawArt(ctx, art, rx, y + 317, 22, { color: reward.color, accent: reward.accent })
+          ctx.fillStyle = cleared ? PALETTE.textDim : PALETTE.gold
+          ctx.font = FONT.tiny
+          ctx.textBaseline = 'middle'
+          ctx.fillText(reward.name, rx + 14, y + 309)
+          rx += 16 + ctx.measureText(reward.name).width + 18
         }
         ctx.fillStyle = cleared ? PALETTE.textDim : PALETTE.gold
         ctx.font = FONT.tiny
-        ctx.textBaseline = 'middle'
-        ctx.fillText(
-          cleared ? `${reward.name} 해금됨` : `보상 · ${reward.name}`,
-          x + 38,
-          y + 309,
-        )
+        ctx.fillText(cleared ? '해금됨' : '보상', x + 16, y + 289)
       } else {
         ctx.fillStyle = PALETTE.danger
         ctx.font = FONT.tiny

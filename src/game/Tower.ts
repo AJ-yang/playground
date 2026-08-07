@@ -126,6 +126,7 @@ export class Tower {
       splashRadius: stats.splashRadius * tileSize,
       slowAmount: stats.slowAmount,
       slowDuration: stats.slowDuration,
+      cavalrySlow: stats.cavalrySlow,
       poisonDps: stats.poisonDps,
       poisonDuration: stats.poisonDuration,
       color: this.def.accent,

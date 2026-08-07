@@ -127,23 +127,23 @@ export class Progress {
   unlockedTowers(): string[] {
     const towers = [...STARTING_TOWERS]
     for (const stage of STAGES) {
-      if (stage.unlocksTower && this.cleared.has(stage.id)) towers.push(stage.unlocksTower)
+      if (this.cleared.has(stage.id)) towers.push(...stage.unlocksTowers)
     }
     return towers
   }
 
   /**
-   * 스테이지 클리어 기록. 이번에 새로 열린 타워 ID를 반환한다 (없으면 null).
-   * 이미 깬 스테이지를 다시 깨면 기록만 갱신하고 null을 반환한다.
+   * 스테이지 클리어 기록. 이번에 새로 열린 기물 ID들을 반환한다.
+   * 이미 깬 스테이지를 다시 깨면 기록만 갱신하고 빈 배열을 반환한다.
    */
-  completeStage(stage: StageDef, livesLeft: number): string | null {
+  completeStage(stage: StageDef, livesLeft: number): string[] {
     const first = !this.cleared.has(stage.id)
     this.cleared.add(stage.id)
     const key = `${stage.id}@${this.difficulty}`
     const prev = this.bestLives[key] ?? -1
     if (livesLeft > prev) this.bestLives[key] = livesLeft
     this.save()
-    return first ? stage.unlocksTower : null
+    return first ? [...stage.unlocksTowers] : []
   }
 
   /** 다음에 도전할 스테이지 (열려 있고 아직 못 깬 것). 전부 깼으면 null. */

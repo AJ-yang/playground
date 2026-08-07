@@ -354,7 +354,13 @@ export class Game {
     const hit = (enemy: Enemy): void => {
       const dealt = enemy.takeDamage(spec.damage, spec.damageType)
       if (source) source.damageDealt += dealt
-      enemy.applySlow(spec.slowAmount, spec.slowDuration)
+      // 거마작은 말을 막는 물건이라 기마에게 더 깊게 걸린다. 상한 0.95 —
+      // 완전 정지는 적을 사거리 밖에서 영원히 세워두는 퇴행 전략을 만든다.
+      const slow =
+        enemy.def.flying && spec.cavalrySlow > 0
+          ? Math.min(0.95, spec.slowAmount + spec.cavalrySlow)
+          : spec.slowAmount
+      enemy.applySlow(slow, spec.slowDuration)
       enemy.applyPoison(spec.poisonDps, spec.poisonDuration, projectile.sourceTowerId)
       if (!enemy.alive && !enemy.leaked) this.rewardKill(enemy, source)
     }

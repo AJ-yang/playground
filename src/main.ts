@@ -46,7 +46,7 @@ let paused = false
 let speed: 1 | 2 | 3 = 1
 let elapsed = 0
 /** 클리어 직후 한 번만 띄우는 해금 안내 (타워 ID) */
-let unlockBanner: string | null = null
+let unlockBanner: string[] = []
 /** 이번 판의 승패를 이미 진행도에 반영했는가 */
 let resultRecorded = false
 
@@ -75,7 +75,7 @@ const loop = new GameLoop({
     ctx.fillStyle = PALETTE.bg
     ctx.fillRect(0, 0, layout.width, layout.height)
     renderer.drawBoard(game, elapsed)
-    const unlock = unlockBanner ? getTowerDef(unlockBanner) : null
+    const unlock = unlockBanner.map(getTowerDef)
     const resultBottom = renderer.drawGameOver(game, unlock)
     hud.draw(game, speed, paused)
     // 결과 화면 버튼은 오버레이 위에 그려야 하므로 HUD 다음이다.
@@ -125,14 +125,14 @@ function startStage(target: StageDef): void {
   paused = false
   speed = 1
   elapsed = 0
-  unlockBanner = null
+  unlockBanner = []
   resultRecorded = false
   applyTimeScale()
 }
 
 function backToSelect(): void {
   screen = 'select'
-  unlockBanner = null
+  unlockBanner = []
   applyTimeScale()
 }
 
@@ -273,7 +273,9 @@ window.addEventListener('keydown', (event) => {
     case '2':
     case '3':
     case '4':
-    case '5': {
+    case '5':
+    case '6':
+    case '7': {
       // 메뉴에 보이는 순서(해금된 것만)와 숫자키를 맞춘다.
       const menu = TOWER_ORDER.filter((id) => game.canUse(id))
       const towerId = menu[Number(event.key) - 1]
