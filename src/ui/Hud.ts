@@ -1,0 +1,717 @@
+import type { Game } from '../game/Game'
+import {
+  MAX_SLOW,
+  TOWER_KIND_DESC,
+  TOWER_KIND_LABEL,
+  TOWER_ORDER,
+  getTowerDef,
+  type TowerLevelDef,
+} from '../data/towers'
+import { getEnemyDef } from '../data/enemies'
+import { TARGET_PRIORITY_LABEL, DAMAGE_TYPE_LABEL } from '../game/types'
+import { FONT, PALETTE, roundRect } from '../render/palette'
+import { enemySilhouettePath } from '../render/shapes'
+import { ENEMY_ART, TOWER_ART, drawArt } from '../render/art'
+import type { Layout, UiButton } from './layout'
+
+const SPEEDS = [1, 2, 3] as const
+
+/**
+ * 상단 HUD와 우측 패널.
+ *
+ * 그리기와 히트 영역 계산을 한 곳에서 한다. 버튼을 그리면서 좌표를 배열에
+ * 쌓아 반환하고, 입력 처리는 그 배열만 보고 판정한다 — 그림과 클릭 영역이
+ * 어긋날 수 없는 구조다.
+ */
+export class Hud {
+  private buttons: UiButton[] = []
+
+  constructor(
+    private readonly ctx: CanvasRenderingContext2D,
+    private readonly layout: Layout,
+  ) {}
+
+  /** 이번 프레임의 클릭 가능 영역. draw() 직후에 유효하다. */
+  get hitAreas(): readonly UiButton[] {
+    return this.buttons
+  }
+
+  draw(game: Game, timeScale: number, paused: boolean): void {
+    this.buttons = []
+    this.drawTopBar(game, timeScale, paused)
+    this.drawPanel(game)
+  }
+
+  // ────────────────────────────── 상단 바 ──────────────────────────────
+
+  private drawTopBar(game: Game, timeScale: number, paused: boolean): void {
+    const { ctx, layout } = this
+    const h = layout.hudHeight
+
+    ctx.fillStyle = PALETTE.hudBg
+    ctx.fillRect(0, 0, layout.width, h)
+    ctx.strokeStyle = PALETTE.hudEdge
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, h - 0.5)
+    ctx.lineTo(layout.width, h - 0.5)
+    ctx.stroke()
+
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'left'
+
+    let x = 16
+    x = this.drawLives(x, h / 2, game)
+    x = this.stat(x, h / 2, '◈', String(game.gold), PALETTE.gold)
+    x = this.stat(
+      x,
+      h / 2,
+      '⚑',
+      `${Math.min(game.waves.waveNumber, game.waves.totalWaves)} / ${game.waves.totalWaves}`,
+      PALETTE.accent,
+    )
+
+    // 웨이브 상태 — 준비 중이면 남은 시간, 진행 중이면 스폰 진행률
+    const statusX = x + 8
+    const statusW = 210
+    if (!game.isOver) {
+      if (game.waves.running) {
+        const { spawned, total } = game.waves.spawnProgress
+        this.progressBar(
+          statusX,
+          h / 2 - 9,
+          statusW,
+          18,
+          total === 0 ? 1 : spawned / total,
+          PALETTE.danger,
+          `교전 중 · 잔존 ${game.enemies.length}`,
+        )
+      } else {
+        const wave = game.waves.currentWave
+        const ratio = 1 - Math.max(0, game.waves.prepRemaining) / wave.prepTime
+        this.progressBar(
+          statusX,
+          h / 2 - 9,
+          statusW,
+          18,
+          ratio,
+          PALETTE.good,
+          `준비 ${Math.max(0, Math.ceil(game.waves.prepRemaining))}초`,
+        )
+      }
+    }
+
+    // 경고 문구
+    const warning = game.waves.currentWave.warning
+    if (warning && !game.waves.running && !game.isOver) {
+      ctx.font = FONT.small
+      ctx.fillStyle = PALETTE.warn
+      ctx.textAlign = 'left'
+      ctx.fillText(`⚠ ${warning}`, statusX + statusW + 14, h / 2)
+    }
+
+    // 우측 컨트롤: [다음 웨이브] [⏸] [1x][2x][3x]
+    let rx = layout.width - 16
+    for (let i = SPEEDS.length - 1; i >= 0; i--) {
+      const speed = SPEEDS[i]!
+      const w = 34
+      rx -= w
+      this.button({
+        id: `speed:${speed}`,
+        x: rx,
+        y: h / 2 - 14,
+        w,
+        h: 28,
+        label: `${speed}x`,
+        active: !paused && timeScale === speed,
+        enabled: true,
+      })
+      rx -= 4
+    }
+    rx -= 4
+    const pauseW = 34
+    rx -= pauseW
+    this.button({
+      id: 'pause',
+      x: rx,
+      y: h / 2 - 14,
+      w: pauseW,
+      h: 28,
+      label: paused ? '▶' : '❚❚',
+      active: paused,
+      enabled: true,
+    })
+
+    rx -= 12
+    const callW = 128
+    rx -= callW
+    const canCall = !game.waves.running && !game.isOver
+    this.button({
+      id: 'nextWave',
+      x: rx,
+      y: h / 2 - 14,
+      w: callW,
+      h: 28,
+      label: game.isOver ? '게임 종료' : canCall ? '다음 웨이브 ▶' : '웨이브 진행 중',
+      enabled: canCall,
+      primary: canCall,
+    })
+  }
+
+  /**
+   * 생명 표시. 남을수록 조용하고, 줄어들수록 커지고 붉어지고 맥동한다.
+   *
+   * 다른 지표(골드·웨이브)와 같은 크기로 나란히 두면 "20 → 19"가 눈에 들어오지
+   * 않는다. 위험도에 따라 시각적 무게를 바꿔서, 화면을 안 보고 있어도 주변시로
+   * 알아챌 수 있게 했다.
+   */
+  private drawLives(x: number, y: number, game: Game): number {
+    const { ctx } = this
+    const danger = game.dangerLevel
+    const critical = danger > 0.55
+    const pulse = critical ? 0.82 + 0.18 * Math.sin(performance.now() / 1000 * 6) : 1
+
+    // 위험하면 배경에 붉은 알약을 깔아 영역 자체를 강조한다.
+    if (danger > 0) {
+      ctx.fillStyle = `rgba(255,60,60,${(0.16 * danger * pulse).toFixed(3)})`
+      roundRect(ctx, x - 8, y - 15, 78, 30, 15)
+      ctx.fill()
+      ctx.strokeStyle = `rgba(255,80,80,${(0.5 * danger * pulse).toFixed(3)})`
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+    }
+
+    const size = 16 + danger * 6
+    ctx.font = `700 ${size.toFixed(0)}px system-ui, sans-serif`
+    ctx.fillStyle = danger > 0 ? PALETTE.danger : PALETTE.life
+    ctx.globalAlpha = pulse
+    ctx.fillText('♥', x, y)
+    const iconW = ctx.measureText('♥').width
+    ctx.fillStyle = danger > 0.3 ? PALETTE.danger : PALETTE.text
+    ctx.fillText(String(game.lives), x + iconW + 6, y)
+    const valueW = ctx.measureText(String(game.lives)).width
+    ctx.globalAlpha = 1
+
+    return x + iconW + 6 + valueW + 26
+  }
+
+  private stat(x: number, y: number, icon: string, value: string, color: string): number {
+    const { ctx } = this
+    ctx.font = FONT.title
+    ctx.fillStyle = color
+    ctx.fillText(icon, x, y)
+    const iconW = ctx.measureText(icon).width
+    ctx.fillStyle = PALETTE.text
+    ctx.fillText(value, x + iconW + 6, y)
+    return x + iconW + 6 + ctx.measureText(value).width + 22
+  }
+
+  private progressBar(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    ratio: number,
+    color: string,
+    label: string,
+  ): void {
+    const { ctx } = this
+    ctx.fillStyle = 'rgba(255,255,255,0.06)'
+    roundRect(ctx, x, y, w, h, h / 2)
+    ctx.fill()
+    ctx.save()
+    roundRect(ctx, x, y, w, h, h / 2)
+    ctx.clip()
+    ctx.fillStyle = color
+    ctx.globalAlpha = 0.35
+    ctx.fillRect(x, y, w * Math.max(0, Math.min(1, ratio)), h)
+    ctx.restore()
+
+    ctx.font = FONT.small
+    ctx.fillStyle = PALETTE.text
+    ctx.textAlign = 'center'
+    ctx.fillText(label, x + w / 2, y + h / 2)
+    ctx.textAlign = 'left'
+  }
+
+  // ────────────────────────────── 우측 패널 ──────────────────────────────
+
+  private drawPanel(game: Game): void {
+    const { ctx, layout } = this
+    const p = layout.panel
+
+    ctx.fillStyle = PALETTE.panelBg
+    roundRect(ctx, p.x, p.y, p.w, p.h, 8)
+    ctx.fill()
+    ctx.strokeStyle = PALETTE.panelEdge
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    let y = p.y + 14
+    // 기물이 여덟 종으로 늘면서 배치 목록만으로 패널 대부분이 찬다. 기물을 고른
+    // 상태에서는 목록을 접어 상세 수치가 잘리지 않게 한다 — 어차피 그 순간에
+    // 필요한 것은 "이걸 올릴까 팔까"지 "무엇을 새로 지을까"가 아니다.
+    if (!game.selectedTower) {
+      y = this.drawBuildMenu(game, y)
+      y += 6
+      this.divider(y)
+      y += 12
+      this.drawWavePreview(game, y)
+    } else {
+      this.drawTowerInfo(game, y)
+    }
+
+  }
+
+  /**
+   * 결과 화면 버튼 묶음. 보드 위 오버레이에 그린다.
+   *
+   * 예전에는 우측 패널 맨 아래에 "다시 시작"만 있었고 다음 스테이지로 가는
+   * 길은 Q 키뿐이었다 — 한 판을 깬 사람이 다음에 무엇을 눌러야 하는지가
+   * 화면에 없었다. 결과를 읽은 시선이 그대로 다음 행동에 닿도록 카드 바로
+   * 아래에 놓는다.
+   *
+   * 그림은 Renderer가, 클릭 영역은 Hud가 소유한다는 경계는 지킨다 — 버튼은
+   * 여기서만 만들어져 히트 영역과 절대 어긋나지 않는다.
+   */
+  drawResultActions(game: Game, hasNextStage: boolean, contentBottom: number): void {
+    if (!game.isOver) return
+    const { layout } = this
+    const board = layout.board
+    const win = game.phase === 'victory'
+
+    // Renderer가 알려준 카드 아래에 붙인다.
+    const y = contentBottom + 26
+
+    const actions: Array<{ id: string; label: string; primary?: boolean }> = []
+    if (win && hasNextStage) actions.push({ id: 'nextStage', label: '다음 스테이지 ▶', primary: true })
+    actions.push({ id: 'restart', label: win ? '다시 하기 (R)' : '다시 시작 (R)', primary: !win })
+    actions.push({ id: 'toSelect', label: '스테이지 선택 (Q)' })
+
+    const h = 40
+    const gap = 10
+    const widths = actions.map((a) => (a.primary ? 176 : 148))
+    const total = widths.reduce((sum, w) => sum + w, 0) + gap * (actions.length - 1)
+    let x = board.x + board.w / 2 - total / 2
+
+    actions.forEach((action, i) => {
+      const w = widths[i]!
+      this.button({ id: action.id, x, y, w, h, label: action.label, enabled: true, primary: action.primary })
+      x += w + gap
+    })
+
+    // 전부 깼을 때는 다음이 없다는 사실을 말해 준다.
+    if (win && !hasNextStage) {
+      const { ctx } = this
+      ctx.font = FONT.small
+      ctx.fillStyle = PALETTE.gold
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('모든 스테이지를 클리어했습니다', board.x + board.w / 2, y + h + 20)
+      ctx.textAlign = 'left'
+    }
+  }
+
+  private drawBuildMenu(game: Game, startY: number): number {
+    const { ctx, layout } = this
+    const p = layout.panel
+
+    ctx.font = FONT.label
+    ctx.fillStyle = PALETTE.textMuted
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillText('배치', p.x + 14, startY)
+    ctx.textBaseline = 'middle'
+
+    let y = startY + 20
+
+    // 해금된 기물만 노출한다. 잠긴 것을 흐리게 남겨두면 "언젠가 열린다"는
+    // 정보는 주지만 준비 단계의 판단을 방해한다 — 스테이지 선택 화면이
+    // 이미 해금 현황을 보여주므로 여기서는 쓸 수 있는 것만 보여준다.
+    const menu = TOWER_ORDER.filter((id) => game.canUse(id))
+
+    // 여덟 종이 전부 열리면 52px짜리 카드로는 목록만으로 패널이 넘쳐
+    // 다음 웨이브 미리보기가 잘린다. 여섯 종을 넘으면 한 줄 소개를 접고
+    // 카드를 낮춘다 — 소개는 어차피 기물을 고르면 상세 패널에 다시 나온다.
+    const compact = menu.length > 6
+    const cardH = compact ? 38 : 52
+    // 갈래가 바뀌는 지점에 머리글을 넣는다. 여덟 종이 한 줄로 늘어서 있으면
+    // "무엇 중에서 고르는 것인가"가 안 보이는데, 병(사람)·기(무기)·책(장애물)로
+    // 갈라 두면 목록을 훑기 전에 성격부터 읽힌다. TOWER_ORDER가 이미 갈래 순으로
+    // 정렬돼 있어 여기서는 바뀌는 곳만 짚으면 된다.
+    let lastKind: string | null = null
+
+    // 게임이 끝나면 메뉴 전체를 죽인다. 예전에는 패배 화면에서도 초록색
+    // 업그레이드 버튼이 그대로 살아 있어 눌릴 것처럼 보였다.
+    ctx.globalAlpha = game.isOver ? 0.4 : 1
+
+    menu.forEach((towerId, i) => {
+      const def = getTowerDef(towerId)
+      const cost = def.levels[0].cost
+      const affordable = game.gold >= cost
+      const selected = game.selectedBuildId === towerId
+      const x = p.x + 12
+      const w = p.w - 24
+
+      if (def.kind !== lastKind) {
+        lastKind = def.kind
+        ctx.globalAlpha = game.isOver ? 0.4 : 0.75
+        ctx.font = FONT.tiny
+        ctx.fillStyle = PALETTE.textMuted
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'middle'
+        const label = `${TOWER_KIND_LABEL[def.kind]}  ${TOWER_KIND_DESC[def.kind]}`
+        ctx.fillText(label, x + 2, y + 7)
+        // 머리글 오른쪽으로 옅은 선을 그어 묶음의 시작을 못 박는다
+        const lw = ctx.measureText(label).width
+        ctx.strokeStyle = 'rgba(255,255,255,0.09)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(x + lw + 10, y + 7.5)
+        ctx.lineTo(x + w, y + 7.5)
+        ctx.stroke()
+        ctx.globalAlpha = game.isOver ? 0.4 : 1
+        y += 17
+      }
+
+      ctx.fillStyle = selected ? 'rgba(90,169,230,0.18)' : 'rgba(255,255,255,0.035)'
+      roundRect(ctx, x, y, w, cardH, 6)
+      ctx.fill()
+      ctx.strokeStyle = selected ? PALETTE.accent : 'rgba(255,255,255,0.07)'
+      ctx.lineWidth = selected ? 1.6 : 1
+      ctx.stroke()
+
+      // 타워 배지 — 보드에 서는 건물 그림을 그대로 축소해 넣는다.
+      // 색 사각형만 있던 시절에는 메뉴와 보드가 별개의 언어였다.
+      //
+      // 배경에 타워 색을 옅게 깐다. 굿청 징·금줄 솟대는 몸체가 회색 석재라
+      // 그림만으로는 작은 크기에서 서로 비슷해 보였다.
+      const badge = compact ? 24 : 32
+      ctx.fillStyle = `${def.color}22`
+      roundRect(ctx, x + 8, y + (cardH - badge) / 2, badge, badge, 6)
+      ctx.fill()
+      const towerArt = TOWER_ART[def.id]
+      // 배지 안에 정확히 들어가도록 바닥 기준선을 상자 안쪽에 둔다.
+      if (towerArt) {
+        drawArt(ctx, towerArt, x + 8 + badge / 2, y + (cardH + badge) / 2 - 1, badge - 2, {
+          color: def.color,
+          accent: def.accent,
+        })
+      }
+
+      ctx.globalAlpha = affordable ? 1 : 0.45
+      ctx.font = FONT.bodyBold
+      ctx.fillStyle = PALETTE.text
+      ctx.textAlign = 'left'
+      ctx.fillText(`${i + 1}. ${def.name}`, x + 16 + badge, compact ? y + cardH / 2 : y + 17)
+      if (!compact) {
+        ctx.font = FONT.tiny
+        ctx.fillStyle = PALETTE.textDim
+        ctx.fillText(def.tagline, x + 48, y + 33)
+      }
+
+      ctx.font = FONT.bodyBold
+      ctx.fillStyle = affordable ? PALETTE.gold : PALETTE.danger
+      ctx.textAlign = 'right'
+      ctx.fillText(`${cost}G`, x + w - 10, compact ? y + cardH / 2 : y + 17)
+      ctx.globalAlpha = 1
+      ctx.textAlign = 'left'
+
+      this.buttons.push({
+        id: `build:${towerId}`,
+        x,
+        y,
+        w,
+        h: cardH,
+        enabled: !game.isOver,
+        payload: towerId,
+      })
+      y += cardH + 6
+    })
+
+    ctx.globalAlpha = 1
+    return y
+  }
+
+  private drawTowerInfo(game: Game, startY: number): void {
+    const { ctx, layout } = this
+    const p = layout.panel
+    const tower = game.selectedTower!
+    const stats = tower.stats
+    const next = tower.nextStats
+
+    let y = startY
+    ctx.textAlign = 'left'
+    ctx.font = FONT.title
+    ctx.fillStyle = PALETTE.text
+    ctx.fillText(`${tower.def.name} Lv.${tower.level}`, p.x + 14, y + 8)
+    y += 26
+
+    const typeLabel = DAMAGE_TYPE_LABEL[tower.def.damageType]
+    ctx.font = FONT.small
+    ctx.fillStyle = PALETTE.textDim
+    ctx.fillText(`${typeLabel} · ${tower.def.targetsAir ? '보병·기병' : '보병 전용'}`, p.x + 14, y + 6)
+    y += 22
+
+    const rows: Array<[string, string, string | null]> = [
+      ['공격력', String(stats.damage), next ? String(next.damage) : null],
+      ['공격 속도', `${stats.fireRate.toFixed(2)}/s`, next ? `${next.fireRate.toFixed(2)}/s` : null],
+      ['DPS', (stats.damage * stats.fireRate).toFixed(1), next ? (next.damage * next.fireRate).toFixed(1) : null],
+      ['사거리', `${stats.range.toFixed(1)}칸`, next ? `${next.range.toFixed(1)}칸` : null],
+    ]
+    if (stats.splashRadius > 0) {
+      rows.push([
+        '폭발 범위',
+        `${stats.splashRadius.toFixed(2)}칸`,
+        next ? `${next.splashRadius.toFixed(2)}칸` : null,
+      ])
+    }
+    if (stats.slowAmount > 0) {
+      rows.push([
+        '감속',
+        `-${Math.round(stats.slowAmount * 100)}% / ${stats.slowDuration.toFixed(1)}s`,
+        next ? `-${Math.round(next.slowAmount * 100)}%` : null,
+      ])
+      // 기마 감속은 이 기물을 언제 짓느냐를 가르는 수치라 따로 보여준다.
+      if (stats.cavalrySlow > 0) {
+        const cav = (s: TowerLevelDef) => Math.round(Math.min(MAX_SLOW, s.slowAmount + s.cavalrySlow) * 100)
+        rows.push(['└ 기마에는', `-${cav(stats)}%`, next ? `-${cav(next)}%` : null])
+      }
+    }
+    if (stats.poisonDps > 0) {
+      rows.push([
+        '중독',
+        `${stats.poisonDps}/s × ${stats.poisonDuration.toFixed(1)}s`,
+        next ? `${next.poisonDps}/s` : null,
+      ])
+    }
+
+    ctx.font = FONT.small
+    for (const [label, value, upgraded] of rows) {
+      ctx.fillStyle = PALETTE.textDim
+      ctx.textAlign = 'left'
+      ctx.fillText(label, p.x + 14, y + 6)
+      ctx.textAlign = 'right'
+      ctx.fillStyle = PALETTE.text
+      if (upgraded && upgraded !== value) {
+        const arrowX = p.x + p.w - 14
+        ctx.fillStyle = PALETTE.good
+        ctx.fillText(upgraded, arrowX, y + 6)
+        const upW = ctx.measureText(upgraded).width
+        ctx.fillStyle = PALETTE.textDim
+        ctx.fillText('→', arrowX - upW - 6, y + 6)
+        const arrowW = ctx.measureText('→').width
+        ctx.fillStyle = PALETTE.text
+        ctx.fillText(value, arrowX - upW - arrowW - 12, y + 6)
+      } else {
+        ctx.fillText(value, p.x + p.w - 14, y + 6)
+      }
+      y += 18
+    }
+
+    ctx.textAlign = 'left'
+    ctx.fillStyle = PALETTE.textDim
+    ctx.font = FONT.tiny
+    ctx.fillText(`처치 ${tower.kills} · 누적 딜 ${Math.round(tower.damageDealt)}`, p.x + 14, y + 8)
+    y += 24
+
+    // 타겟팅
+    this.button({
+      id: 'targeting',
+      x: p.x + 12,
+      y,
+      w: p.w - 24,
+      h: 28,
+      label: `타겟팅: ${TARGET_PRIORITY_LABEL[tower.targetPriority]}`,
+      enabled: !game.isOver,
+    })
+    y += 34
+
+    // 업그레이드
+    const upgradeCost = tower.upgradeCost
+    this.button({
+      id: 'upgrade',
+      x: p.x + 12,
+      y,
+      w: p.w - 24,
+      h: 34,
+      label: upgradeCost === null ? '최대 레벨' : `강화  ${upgradeCost}G`,
+      enabled: !game.isOver && upgradeCost !== null && game.gold >= upgradeCost,
+      primary: !game.isOver && upgradeCost !== null && game.gold >= upgradeCost,
+    })
+    y += 40
+
+    // 철수
+    this.button({
+      id: 'sell',
+      x: p.x + 12,
+      y,
+      w: p.w - 24,
+      h: 28,
+      label: `철수  +${tower.sellValue()}G`,
+      enabled: !game.isOver,
+      danger: true,
+    })
+  }
+
+  private drawWavePreview(game: Game, startY: number): number {
+    const { ctx, layout } = this
+    const p = layout.panel
+    const wave = game.waves.currentWave
+
+    let y = startY
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.font = FONT.label
+    ctx.fillStyle = PALETTE.textMuted
+    ctx.fillText(`웨이브 ${wave.id} 구성`, p.x + 14, y)
+    ctx.textBaseline = 'middle'
+    y += 22
+
+    // 같은 종류를 합쳐 보여준다
+    const counts = new Map<string, number>()
+    for (const g of wave.groups) counts.set(g.enemy, (counts.get(g.enemy) ?? 0) + g.count)
+
+    for (const [enemyId, count] of counts) {
+      const def = getEnemyDef(enemyId)
+
+      // 보드와 **같은 그림**을 쓴다 — 미리보기가 곧 범례가 되도록.
+      // 뒤의 어두운 실루엣까지 그대로 깔아야 형태 규칙이 패널에서도 성립한다.
+      const art = ENEMY_ART[def.id]
+      ctx.fillStyle = 'rgba(8,10,14,0.5)'
+      enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 7)
+      ctx.fill()
+      if (art) {
+        drawArt(ctx, art, p.x + 22, y + 8, 17, { color: def.color, accent: def.accent }, false)
+      } else {
+        ctx.fillStyle = def.color
+        enemySilhouettePath(ctx, def.silhouette, p.x + 22, y + 8, 6.5)
+        ctx.fill()
+      }
+      if (def.flying) {
+        // 기마는 형태가 아니라 부가 표식이므로 작은 먼지 힌트만 붙인다.
+        ctx.strokeStyle = def.color
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(p.x + 12, y + 5)
+        ctx.lineTo(p.x + 15.5, y + 8)
+        ctx.moveTo(p.x + 32, y + 5)
+        ctx.lineTo(p.x + 28.5, y + 8)
+        ctx.stroke()
+      }
+
+      ctx.font = FONT.body
+      ctx.fillStyle = PALETTE.text
+      ctx.textAlign = 'left'
+      ctx.fillText(def.name, p.x + 36, y + 8)
+      ctx.textAlign = 'right'
+      ctx.fillStyle = PALETTE.textDim
+      ctx.fillText(`×${count}`, p.x + p.w - 14, y + 8)
+      y += 17
+
+      // 위협 태그
+      // 태그는 실루엣이 나타내는 것과 같은 기준으로 뽑는다.
+      // 형태와 글자가 어긋나면 형태를 못 믿게 된다.
+      const sil = def.silhouette
+      const tags: string[] = []
+      if (def.flying) tags.push('공중')
+      if (def.armor > 0 && (sil === 'armored' || sil === 'bulwark' || sil === 'boss')) {
+        tags.push(`장갑 ${def.armor}`)
+      }
+      if (def.magicResist > 0 && (sil === 'warded' || sil === 'bulwark' || sil === 'boss')) {
+        tags.push(`마저 ${Math.round(def.magicResist * 100)}%`)
+      }
+      if (sil === 'swift') tags.push('고속')
+      if (def.boss) tags.push('보스')
+      if (tags.length) {
+        ctx.font = FONT.tiny
+        ctx.fillStyle = PALETTE.warn
+        ctx.textAlign = 'left'
+        ctx.fillText(tags.join(' · '), p.x + 36, y + 5)
+        y += 15
+      }
+      y += 4
+    }
+
+    ctx.textAlign = 'left'
+    ctx.font = FONT.tiny
+    ctx.fillStyle = PALETTE.textDim
+    ctx.fillText(`클리어 보상 ${wave.reward}G`, p.x + 14, y + 8)
+    y += 22
+
+    const hint = game.selectedBuildId
+      ? '빈 땅을 클릭해 배치 · Esc 로 취소'
+      : '기물을 클릭하면 강화·철수'
+    ctx.fillStyle = PALETTE.textDim
+    ctx.font = FONT.tiny
+    ctx.fillText(hint, p.x + 14, y + 8)
+
+    return y + 24
+  }
+
+  private divider(y: number): void {
+    const { ctx, layout } = this
+    const p = layout.panel
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(p.x + 12, y + 0.5)
+    ctx.lineTo(p.x + p.w - 12, y + 0.5)
+    ctx.stroke()
+  }
+
+  // ────────────────────────────── 공통 버튼 ──────────────────────────────
+
+  private button(opts: {
+    id: string
+    x: number
+    y: number
+    w: number
+    h: number
+    label: string
+    enabled: boolean
+    active?: boolean
+    primary?: boolean
+    danger?: boolean
+  }): void {
+    const { ctx } = this
+    const { x, y, w, h, label, enabled, active, primary, danger } = opts
+
+    let fill = 'rgba(255,255,255,0.06)'
+    let edge = 'rgba(255,255,255,0.10)'
+    let text: string = PALETTE.text
+    if (active) {
+      fill = 'rgba(90,169,230,0.28)'
+      edge = PALETTE.accent
+    } else if (primary) {
+      fill = 'rgba(139,212,80,0.20)'
+      edge = 'rgba(139,212,80,0.7)'
+      text = PALETTE.good
+    } else if (danger) {
+      fill = 'rgba(255,92,92,0.12)'
+      edge = 'rgba(255,92,92,0.45)'
+      text = PALETTE.danger
+    }
+    if (!enabled) {
+      fill = 'rgba(255,255,255,0.03)'
+      edge = 'rgba(255,255,255,0.06)'
+      text = PALETTE.textDim
+    }
+
+    ctx.fillStyle = fill
+    roundRect(ctx, x, y, w, h, 6)
+    ctx.fill()
+    ctx.strokeStyle = edge
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.font = FONT.bodyBold
+    ctx.fillStyle = text
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, x + w / 2, y + h / 2)
+    ctx.textAlign = 'left'
+
+    this.buttons.push({ id: opts.id, x, y, w, h, enabled })
+  }
+}

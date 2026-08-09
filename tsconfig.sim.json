@@ -1,0 +1,16 @@
+{
+  // 헤드리스 시뮬레이터 전용 빌드 설정.
+  // 브라우저 코드는 ESM + 확장자 없는 import를 쓰므로, Node에서 그대로 돌리려면
+  // CommonJS로 한 번 컴파일하는 편이 추가 의존성 없이 가장 확실하다.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "noEmit": false,
+    "outDir": ".sim-build",
+    "types": ["node"]
+  },
+  "include": ["src/sim", "src/core", "src/data", "src/game"]
+}
