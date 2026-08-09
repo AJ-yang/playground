@@ -213,9 +213,26 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
       // 지속이 짧으면 적이 거마작 사거리를 벗어나는 순간 감속이 풀려 **뒤쪽
       // 기물이 아무 이득을 못 본다.** 감속은 지나간 뒤에도 남아야 곱셈이 된다.
       // 지속은 되돌리고 세기만 낮췄다.
-      lvl({ cost: 75, damage: 2, range: 3.2, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.1, slowAmount: 0.18, slowDuration: 4.0, cavalrySlow: 0.10 }),
-      lvl({ cost: 70, damage: 3, range: 3.5, fireRate: 1.1, projectileSpeed: 16, splashRadius: 1.3, slowAmount: 0.23, slowDuration: 4.8, cavalrySlow: 0.12 }),
-      lvl({ cost: 125, damage: 5, range: 3.8, fireRate: 1.2, projectileSpeed: 18, splashRadius: 1.55, slowAmount: 0.28, slowDuration: 5.6, cavalrySlow: 0.18 }),
+      //
+      // **그런데 그 너프가 이번엔 반대쪽으로 지나쳤다.** 보병·기마를 함께
+      // 깎았더니 거마작이 처음 열리는 니탕개의 난에서 넣은 쪽이 오히려 나빠졌다
+      // (45% → 32%). "새로 열린 기물은 다음 스테이지에서 곧바로 쓰인다"는
+      // 이 프로젝트의 해금 규칙이 깨진 것이다.
+      //
+      // 되돌리는 방향을 고를 때 세 축을 따로 쟀다(각 60판):
+      //   보병·기마 함께 ↑ — S3 −12%, S5 97%, S6 생명 8.0
+      //   지속만 ↑        — S3 −22%, S5 95%, S6 생명 7.0  ← 더 나빠진다
+      //   기마만 ↑        — S3  ±0%, S5 100%, S6 생명 10.0 ← 채택
+      // 세기를 더 올리면 S6 생명이 18.0으로 튀어(절벽) 최종 스테이지가 통째로
+      // 시시해진다. 그 절벽 아래에서 값을 하는 지점이 기마 축이었다.
+      //
+      // 보병 감속은 건드리지 않았다. 거마작(拒馬柵)은 이름 그대로 말을 막는
+      // 물건이라, 기마 쪽만 올리는 것이 수치로도 고증으로도 맞다 — 화차가
+      // 기마를 조준하지 못하는 것과 짝을 이뤄 "기마 웨이브에는 거마작"이라는
+      // 판단이 선명해진다.
+      lvl({ cost: 75, damage: 2, range: 3.2, fireRate: 1.0, projectileSpeed: 16, splashRadius: 1.1, slowAmount: 0.18, slowDuration: 4.0, cavalrySlow: 0.20 }),
+      lvl({ cost: 70, damage: 3, range: 3.5, fireRate: 1.1, projectileSpeed: 16, splashRadius: 1.3, slowAmount: 0.23, slowDuration: 4.8, cavalrySlow: 0.26 }),
+      lvl({ cost: 125, damage: 5, range: 3.8, fireRate: 1.2, projectileSpeed: 18, splashRadius: 1.55, slowAmount: 0.28, slowDuration: 5.6, cavalrySlow: 0.34 }),
     ],
   },
   venom: {
@@ -335,11 +352,14 @@ export const TOWER_KIND_DESC: Record<TowerDef['kind'], string> = {
  * 한 번 걸린 기병은 영영 풀리지 않아, 거마작 한 기가 판 하나를 통째로 쉽게
  * 만들었다 — 게임이 너무 쉽다는 지적의 실체가 이것이었다.
  *
- * 0.65면 여전히 결정적이지만(기마가 35% 속도로 기어간다) 지나가기는 한다.
+ * 0.62면 여전히 결정적이지만(기마가 38% 속도로 기어간다) 지나가기는 한다.
  * 감속은 **다른 기물의 사격 기회를 늘리는 곱셈**이어야지, 그 자체로 답이 되면
  * 조합을 고를 이유가 사라진다.
+ *
+ * 만렙 거마작의 기마 감속(0.28 + 0.34)이 정확히 이 값에 걸린다 — 상한을
+ * 올리면 그만큼 그대로 세진다는 뜻이므로, 여기와 cavalrySlow는 같이 움직인다.
  */
-export const MAX_SLOW = 0.48
+export const MAX_SLOW = 0.62
 
 /** 철수 시 지금까지 투자한 골드의 몇 %를 돌려받는가. */
 export const SELL_REFUND_RATIO = 0.7

@@ -5,3 +5,7 @@ dist/
 .DS_Store
 .smoke.mjs
 .sim-build/
+
+# tools/build-artifact-page.py가 dist에서 만들어내는 단일 파일 배포본.
+# 번들을 통째로 인라인한 산출물이라 커밋하면 곧바로 낡는다.
+joseon-defense.html
