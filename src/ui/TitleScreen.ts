@@ -5,6 +5,15 @@ import { FONT, PALETTE, roundRect } from '../render/palette'
 import { CASTLE_ART, ENEMY_ART, GATE_ART, TOWER_ART, drawArt } from '../render/art'
 import { enemySilhouettePath } from '../render/shapes'
 import { INVASIONS, JEJU, PENINSULA, RIDGE, RIDGE_BRANCH, RIVERS, WAR_SITES } from '../render/mapArt'
+import {
+  backdropMapImage,
+  backdropPlateImages,
+  hasBackdropMap,
+  hasBackdropPhotos,
+  initBackdropImages,
+  type LoadedPlate,
+} from '../render/backdropImages'
+import { PLATE_SLOTS } from '../render/backdropLayout'
 import { getEnemyDef } from '../data/enemies'
 import { getTowerDef, TOWER_ORDER } from '../data/towers'
 import type { Layout, UiButton } from './layout'
@@ -28,7 +37,9 @@ export class TitleScreen {
   constructor(
     private readonly ctx: CanvasRenderingContext2D,
     private readonly layout: Layout,
-  ) {}
+  ) {
+    initBackdropImages()
+  }
 
   get hitAreas(): readonly UiButton[] {
     return this.buttons
@@ -147,6 +158,11 @@ export class TitleScreen {
    *
    * 글자와 버튼이 화면 가운데를 쓰므로 지도는 낮은 불투명도로 깔고, 표식만
    * 또렷하게 남긴다.
+   *
+   * 지도는 두 가지로 그려진다. `assets/backdrop/` 에 실제 고지도 스캔을 넣고
+   * 구웠으면 **그 사진**이 화면 높이를 가득 채우고, 유물 사진들이 좌우 여백에
+   * 흐리게 얹힌다. 원본이 없으면 벡터로 그린 기호 지도로 되돌아간다 —
+   * 대체품이지 목표가 아니다. `assets/backdrop/README.md` 를 보라.
    */
   private drawBackdrop(time: number): void {
     const { ctx, layout } = this
@@ -161,8 +177,18 @@ export class TitleScreen {
     ctx.fillStyle = lamp
     ctx.fillRect(0, 0, w, h)
 
-    this.drawOldMap(time)
-    this.drawFormationPlate(time)
+    if (hasBackdropMap()) {
+      // 디코드가 끝나기 전 한두 프레임은 지도 없이 지나간다. 그동안 벡터
+      // 지도를 대신 그리면 곧바로 사진으로 튀어서 깜빡임이 된다.
+      const scan = backdropMapImage()
+      if (scan) this.drawPhotoMap(scan, time)
+    } else {
+      this.drawOldMap(time)
+    }
+
+    const plates = backdropPlateImages()
+    if (plates.length > 0) this.drawPhotoPlates(plates, time)
+    else if (!hasBackdropPhotos()) this.drawFormationPlate(time)
 
     const roadY = h - 44
 
@@ -208,7 +234,76 @@ export class TitleScreen {
   }
 
   /**
-   * 조선 고지도 한 장.
+   * 실제 고지도 스캔 한 장을 배경 전체에 깐다.
+   *
+   * 반도는 원래 세로로 길다. 그래서 화면 **높이**에 맞춰 키우면 가운데에
+   * 기둥처럼 서고, 좌우로는 여백이 남아 거기에 유물 사진이 들어간다. 가로에
+   * 맞추면 위아래가 잘려 나가 지도가 지도로 안 읽힌다.
+   *
+   * 사진은 구울 때 이미 먹빛-종이빛 2색조로 통일해 두었으므로 여기서 할 일은
+   * 불투명도를 낮춰 글자 뒤로 물리는 것뿐이다.
+   */
+  private drawPhotoMap(scan: HTMLImageElement, time: number): void {
+    const { ctx, layout } = this
+    const dh = layout.height * 1.04
+    const dw = dh * (scan.naturalWidth / scan.naturalHeight)
+    const dx = (layout.width - dw) / 2
+    const dy = (layout.height - dh) / 2
+
+    ctx.save()
+    ctx.globalAlpha = 0.26
+    ctx.drawImage(scan, dx, dy, dw, dh)
+    ctx.restore()
+
+    // 표식은 사진 위에 또렷하게 남긴다 — 배경이 무엇으로 바뀌든 "여섯 전쟁이
+    // 어디서 벌어졌는가"는 이 화면이 말해야 하는 내용이다. 정규 좌표
+    // (100×140)를 그려진 사진 영역에 그대로 얹으므로, 지도는 반도가 화면을
+    // 채우는 전도(全圖)여야 표식이 제자리에 앉는다.
+    const px = (x: number) => dx + (x / 100) * dw
+    const py = (y: number) => dy + (y / 140) * dh
+
+    ctx.save()
+    this.drawInvasions(px, py, time)
+    // 지도가 화면 전체를 쓰게 되면서 표식 몇 개가 가운데 카드 위로 올라온다.
+    // 지워 버리면 진행도를 지도 위에서 읽는다는 점이 사라지므로, 지도에
+    // 적어 넣은 주(註)처럼 보이도록 낮춘다 — 읽히되 글자와 다투지 않는다.
+    ctx.globalAlpha = 0.5
+    this.drawWarSites(px, py, time)
+    ctx.restore()
+  }
+
+  /**
+   * 방어 기물의 모티브가 된 실물 사진들을 좌우 여백에 흩는다.
+   *
+   * 게임 안의 그림이 아니라 **원래의 물건**이다 — 각궁과 조총과 비격진천뢰가
+   * 실제로 어떻게 생겼는지가 배경에 깔려 있어야, 화면의 기물들이 창작물이
+   * 아니라 실물에서 나왔다는 게 설명 없이 전해진다.
+   *
+   * 구울 때 흐리게 하고 가장자리를 녹여 두었으므로 여기서는 자리와 각도만
+   * 잡는다.
+   */
+  private drawPhotoPlates(plates: readonly LoadedPlate[], time: number): void {
+    const { ctx, layout } = this
+
+    plates.forEach((plate, i) => {
+      const slot = PLATE_SLOTS[i % PLATE_SLOTS.length]
+      // 완전히 멈춰 있으면 배경이 아니라 얼룩으로 보인다. 알아채기 직전까지만
+      // 아주 느리게 숨 쉬게 한다.
+      const breathe = 1 + Math.sin(time * 0.25 + i * 1.3) * 0.02
+      const pw = slot.width * breathe
+      const ph = pw * (plate.img.naturalHeight / plate.img.naturalWidth)
+
+      ctx.save()
+      ctx.translate(slot.nx * layout.width, slot.ny * layout.height)
+      ctx.rotate(slot.rotation)
+      ctx.globalAlpha = slot.alpha
+      ctx.drawImage(plate.img, -pw / 2, -ph / 2, pw, ph)
+      ctx.restore()
+    })
+  }
+
+  /**
+   * 조선 고지도 한 장 — **원본 스캔이 없을 때의 대체품**.
    *
    * 실측이 아니라 **형태의 기호**다. 서해안이 들쭉날쭉하고 동해안이 곧은 것,
    * 산줄기가 북동에서 남서로 흐르는 것, 물줄기가 두 줄로 그려지는 것 —

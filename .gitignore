@@ -6,6 +6,12 @@ dist/
 .smoke.mjs
 .sim-build/
 
+# 타이틀 배경의 원본 스캔·사진. 수십 MB짜리 원본이라 커밋하지 않는다.
+# tools/bake-backdrop.py가 구워낸 src/render/backdropAssets.ts 쪽만 커밋한다.
+assets/backdrop/*
+!assets/backdrop/README.md
+!assets/backdrop/CREDITS.tsv
+
 # tools/build-artifact-page.py가 dist에서 만들어내는 단일 파일 배포본.
 # 번들을 통째로 인라인한 산출물이라 커밋하면 곧바로 낡는다.
 joseon-defense.html
