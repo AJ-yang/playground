@@ -239,13 +239,24 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
       // (1.0~1.2 → 1.8~2.2). 연사는 세기가 아니라 처리량이라 감속 자체가
       // 세지지는 않는다.
       //
-      // 대가는 남는다. 2갈래 맵에서 거마작 2기로 양쪽 무리를 동시에 묶을 수
-      // 없어, 여러 종을 고루 도는 빌드의 S5가 95% → 68%로 내려갔다.
-      // 광역을 되살리려면 이 세 줄의 splashRadius만 1.1/1.3/1.55로 되돌리면
-      // 된다 — 타겟팅 규칙은 splashRadius가 0일 때만 동작한다.
-      lvl({ cost: 75, damage: 2, range: 3.2, fireRate: 1.8, projectileSpeed: 16, splashRadius: 0, slowAmount: 0.18, slowDuration: 4.0, cavalrySlow: 0.20 }),
-      lvl({ cost: 70, damage: 3, range: 3.5, fireRate: 2.0, projectileSpeed: 16, splashRadius: 0, slowAmount: 0.23, slowDuration: 4.8, cavalrySlow: 0.26 }),
-      lvl({ cost: 125, damage: 5, range: 3.8, fireRate: 2.2, projectileSpeed: 18, splashRadius: 0, slowAmount: 0.28, slowDuration: 5.6, cavalrySlow: 0.34 }),
+      // **잃은 자리는 사거리로 메웠다** (3.2~3.8 → 3.8~4.6). 처음엔 광역을
+      // 떼자 2갈래 맵에서 여러 종을 고루 도는 빌드가 무너졌는데(S5 여덟 종
+      // 95% → 73%, 넓히기 70% → 13%), 그건 화력이 모자라서가 아니라 얇게
+      // 나뉜 기물이 두 갈래를 못 덮어서였다. 웨이브 구성과 경제를 먼저 건드려
+      // 봤지만 둘 다 틀린 지렛대였다:
+      //   경제 +15% — 여덟 종은 살아나지만 총통 몰빵이 10%로 뚫린다
+      //   기병 ↑    — 거마작이 상대하는 것을 늘리니 오히려 거마작만 필수가 된다
+      //   지상 저항 ↑ — 판이 통째로 쉬워질 뿐(균형 65% → 98%) 얇은 빌드는 그대로
+      // 사거리를 넓히자 거마작이 들어간 빌드만 회복됐다(여덟 종 98%, 옛 다섯
+      // 100%, 넓히기 93%). 거마작이 없는 균형(3종)은 65%로 미동도 없어서,
+      // 이 변경이 거마작 빌드에만 작용한다는 대조가 된다.
+      //
+      // 광역을 되살리려면 이 세 줄의 splashRadius만 1.1/1.3/1.55로, 연사를
+      // 1.0/1.1/1.2로, 사거리를 3.2/3.5/3.8로 되돌리면 된다 — 타겟팅 규칙은
+      // splashRadius가 0일 때만 동작하므로 저절로 꺼진다.
+      lvl({ cost: 75, damage: 2, range: 3.8, fireRate: 1.8, projectileSpeed: 16, splashRadius: 0, slowAmount: 0.18, slowDuration: 4.0, cavalrySlow: 0.20 }),
+      lvl({ cost: 70, damage: 3, range: 4.2, fireRate: 2.0, projectileSpeed: 16, splashRadius: 0, slowAmount: 0.23, slowDuration: 4.8, cavalrySlow: 0.26 }),
+      lvl({ cost: 125, damage: 5, range: 4.6, fireRate: 2.2, projectileSpeed: 18, splashRadius: 0, slowAmount: 0.28, slowDuration: 5.6, cavalrySlow: 0.34 }),
     ],
   },
   venom: {
