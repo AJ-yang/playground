@@ -19,6 +19,13 @@ concurrency:
 
 jobs:
   verify:
+    # 같은 저장소의 브랜치는 push와 pull_request가 **둘 다** 발화해서 같은
+    # 커밋을 두 번 검사한다(concurrency로도 안 묶인다 — 두 이벤트의 ref가
+    # 다르기 때문이다). push 쪽 하나로 돌리고, push 이벤트가 없는 포크발
+    # PR만 pull_request 쪽으로 받는다.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
