@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "sim": "node scripts/sim.mjs"
+    "sim": "node scripts/sim.mjs",
+    "balance": "node scripts/sim.mjs --gate"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

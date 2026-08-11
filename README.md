@@ -25,6 +25,7 @@ npm run typecheck  # 타입 검사
 npm run build      # dist/ 로 프로덕션 빌드
 npm run preview    # 빌드 결과 확인
 npm run sim        # 헤드리스 밸런스 검증 (렌더링 없이 수백 판을 돌린다)
+npm run balance    # 밸런스 회귀 게이트 — 설계 의도가 깨지면 종료 코드 1
 ```
 
 ## 스테이지와 해금
@@ -200,6 +201,7 @@ npm run sim -- --only balanced     # 특정 전략만
 npm run sim -- --audit             # 스테이지별 압박·수입 곡선
 npm run sim -- --income 1.3        # 수입 배율 스윕 (튜닝용)
 npm run sim -- --hp 0.8            # 적 HP 배율 스윕 (튜닝용)
+npm run balance                    # 회귀 게이트 (CI가 이걸 돌린다)
 ```
 
 스테이지마다 **그 시점에 해금된 타워만** 주고 돌린다 — 진행 설계의 검증 그 자체다.
@@ -207,3 +209,10 @@ npm run sim -- --hp 0.8            # 적 HP 배율 스윕 (튜닝용)
 현재 검증 결과: 한 기물만 도배하는 빌드는 **S3 이후 전 스테이지에서 0~5%**
 (S2의 총통 100%는 그 판의 교훈 자체다 — "갑주에는 화약"). 조합 빌드는 스테이지마다
 최소 하나 이상이 100%. 자세한 표는 [`docs/BALANCE.md`](docs/BALANCE.md) 5장.
+
+`npm run balance`는 그중 **설계 의도만** 검사해 어긋나면 종료 코드 1로 떨어진다.
+이 저장소에서 밸런스가 무너진 세 번이 전부 같은 모양이었기 때문이다 —
+**기물을 더 지었는데 더 나빠진다.** 셋 다 코드를 읽어서는 안 보였고 셋 다
+시뮬레이터가 잡았으므로, 그 판단을 사람의 기억이 아니라 CI에 맡긴다.
+규칙은 `src/sim/gate.ts`에 있고 자세한 사정은
+[`docs/BALANCE.md`](docs/BALANCE.md) 13장.
