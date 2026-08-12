@@ -24,8 +24,8 @@ concurrency:
 
 defaults:
   run:
-    # 게임은 저장소 루트가 아니라 joseon-defense/ 안에 있다.
-    working-directory: joseon-defense
+    # 게임은 저장소 루트가 아니라 Games/joseon-defense/ 안에 있다.
+    working-directory: Games/joseon-defense
 
 jobs:
   build:
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: joseon-defense/package-lock.json
+          cache-dependency-path: Games/joseon-defense/package-lock.json
 
       - run: npm ci
 
@@ -55,7 +55,7 @@ jobs:
       # 여기는 경로를 직접 적어야 한다.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: joseon-defense/dist
+          path: Games/joseon-defense/dist
 
   deploy:
     needs: build

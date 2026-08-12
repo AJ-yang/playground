@@ -19,8 +19,8 @@ concurrency:
 
 defaults:
   run:
-    # 게임은 저장소 루트가 아니라 joseon-defense/ 안에 있다.
-    working-directory: joseon-defense
+    # 게임은 저장소 루트가 아니라 Games/joseon-defense/ 안에 있다.
+    working-directory: Games/joseon-defense
 
 jobs:
   verify:
@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: joseon-defense/package-lock.json
+          cache-dependency-path: Games/joseon-defense/package-lock.json
 
       - run: npm ci
 
