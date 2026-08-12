@@ -157,6 +157,21 @@ export class Tower {
     let best: Enemy | null = null
     let bestScore = 0
 
+    // 감속이 본업이고 단일 대상으로 거는 기물(거마작)은 **감속이 넉넉히
+    // 남은 적을 다시 쏘지 않는다.** 감속은 중첩되지 않아 같은 적을 또 맞혀 봐야
+    // 남은 지속만 갱신될 뿐인데, 「선두」 우선순위와 겹치면 맨 앞 하나만 계속
+    // 다시 묶느라 옆으로 지나가는 적을 통째로 놓친다.
+    //
+    // 다만 기준을 "안 걸린 적"으로 잡으면 반대로 망가진다 — 모두가 한 번씩만
+    // 걸리고, 지속이 끝날 즈음 거마작은 이미 다른 적을 보고 있어 **아무도
+    // 계속 묶여 있지 않게 된다.** 오래 붙잡아야 하는 판(정묘호란)에서 조합
+    // 빌드가 그것 때문에 무너졌다. 그래서 기준은 "곧 풀릴 적"이다 —
+    // 남은 감속이 지속의 40% 아래로 떨어진 적을 우선한다. 새로 들어온 적은
+    // 남은 시간이 0이라 자연히 여기 포함된다.
+    const spreadSlow = this.stats.slowAmount > 0 && this.stats.splashRadius === 0
+    const staleAt = this.stats.slowDuration * 0.4
+    let sawFreshTarget = false
+
     for (const enemy of enemies) {
       if (!enemy.alive) continue
       if (enemy.flyingBlocked(this.def.targetsAir)) continue
@@ -165,6 +180,17 @@ export class Tower {
 
       const dSq = dist2(this.pos, enemy.pos)
       if (dSq > rangeSq) continue
+
+      // 감속이 곧 풀릴 적이 사거리 안에 하나라도 있으면 그쪽만 고른다.
+      // 하나도 없으면 아래 조건이 계속 거짓이라 평소대로 고르게 된다.
+      if (spreadSlow) {
+        const stale = enemy.slowRemaining < staleAt
+        if (stale && !sawFreshTarget) {
+          sawFreshTarget = true
+          best = null
+        }
+        if (sawFreshTarget && !stale) continue
+      }
 
       let score: number
       switch (this.targetPriority) {

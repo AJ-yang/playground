@@ -83,6 +83,17 @@ export class Enemy {
     return this.slowTimer > 0
   }
 
+  /**
+   * 감속이 앞으로 몇 초 더 남았는가. 0이면 안 걸린 상태다.
+   *
+   * 단일 대상으로 감속을 거는 기물이 "곧 풀릴 적"을 골라 쏘는 데 쓴다 —
+   * 넉넉히 남은 적을 다시 쏘면 겹치지 않는 감속을 낭비하는 것이고,
+   * 반대로 한 번 건 뒤 영영 안 보면 아무도 계속 묶여 있지 않게 된다.
+   */
+  get slowRemaining(): number {
+    return Math.max(0, this.slowTimer)
+  }
+
   get isPoisoned(): boolean {
     return this.poisonTimer > 0
   }

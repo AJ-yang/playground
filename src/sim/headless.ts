@@ -1,8 +1,34 @@
 import { FIXED_DT } from '../core/loop'
-import type { StageDef } from '../data/stages'
+import { STAGES, STARTING_TOWERS, type StageDef } from '../data/stages'
 import { Game } from '../game/Game'
 import { rankSpots } from './coverage'
 import { act, type Strategy } from './strategies'
+
+/**
+ * 시드는 고정 규칙으로 만든다 — 같은 명령이면 항상 같은 결과가 나온다.
+ *
+ * 러너와 회귀 게이트가 **같은 시드를 써야** 게이트가 문서의 수치와 같은 것을
+ * 재게 된다. 그래서 둘 중 한쪽에 두지 않고 여기에 둔다.
+ */
+export function seedFor(index: number): number {
+  return 0x1000 + index * 7919
+}
+
+/**
+ * 스테이지에 진입하는 시점에 플레이어가 가진 타워.
+ *
+ * 선형 해금이므로 "앞선 스테이지를 전부 깬 상태"가 곧 정상 진행이다.
+ * 이 함수가 곧 진행 설계의 검증 대상이기도 하다 — 여기서 주어지는 기물만으로
+ * 해당 스테이지가 풀리지 않으면 해금 순서가 잘못된 것이다.
+ */
+export function towersAtStage(stage: StageDef): string[] {
+  const towers = [...STARTING_TOWERS]
+  for (const s of STAGES) {
+    if (s.index >= stage.index) break
+    towers.push(...s.unlocksTowers)
+  }
+  return towers
+}
 
 /** 한 판의 결과. */
 export interface SimResult {

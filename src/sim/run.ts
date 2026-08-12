@@ -1,9 +1,11 @@
 import { TOWER_DEFS } from '../data/towers'
 import { ENEMY_DEFS, getEnemyDef } from '../data/enemies'
-import { STAGES, STARTING_TOWERS, type StageDef } from '../data/stages'
+import { STAGES, type StageDef } from '../data/stages'
 import { getDifficulty } from '../data/difficulty'
-import { aggregate, simulate, type Aggregate, type SimResult } from './headless'
-import { STRATEGIES, findStrategy, type Strategy } from './strategies'
+import { aggregate, seedFor, simulate, towersAtStage, type Aggregate, type SimResult } from './headless'
+import { MIXED_PRIORITY, STRATEGIES, findStrategy, type Strategy } from './strategies'
+import { TARGET_PRIORITY_LABEL, TARGET_PRIORITY_ORDER, type TargetPriority } from '../game/types'
+import { runGate } from './gate'
 
 /**
  * 밸런스 검증 러너.
@@ -16,6 +18,8 @@ import { STRATEGIES, findStrategy, type Strategy } from './strategies'
  *   npm run sim -- --difficulty hard   난이도별 검증 (적 HP 배율의 별칭)
  *   npm run sim -- --markdown        docs/BALANCE.md에 붙일 표로 출력
  *   npm run sim -- --audit           스테이지별 압박·수입 곡선 (시뮬레이션 없이)
+ *   npm run sim -- --gate            밸런스 회귀 게이트 (CI용, 어긋나면 종료 코드 1)
+ *   npm run sim -- --priority last   타겟팅 우선순위를 전 전략에 덮어씌워 재검증
  *   npm run sim -- --income 1.3      수입 전역 배율 스윕 (튜닝용)
  */
 
@@ -25,10 +29,20 @@ interface Options {
   stages: string[] | null
   markdown: boolean
   audit: boolean
+  /** 설계 의도가 유지되는지만 보고 어긋나면 종료 코드 1. CI가 부르는 모드다. */
+  gate: boolean
   /** 수입(현상금·클리어 보상) 전역 배율. 경제 곡선을 스윕할 때 쓰는 튜닝 노브. */
   income: number
   /** 적 HP 전역 배율. 압박 곡선을 스윕할 때 쓰는 튜닝 노브. */
   hp: number
+  /**
+   * 모든 전략의 타겟팅 우선순위를 이 값으로 덮어쓴다.
+   *
+   * 우선순위는 빌드와 **직교하는 축**이라 전략마다 심으면 조합이 폭발한다.
+   * 행렬을 통째로 다시 돌려 기본값(선두)과 비교하는 쪽이 축의 값어치를
+   * 재는 방법이다.
+   */
+  priority: TargetPriority | 'mixed' | null
 }
 
 function parseArgs(argv: string[]): Options {
@@ -38,8 +52,10 @@ function parseArgs(argv: string[]): Options {
     stages: null,
     markdown: false,
     audit: false,
+    gate: false,
     income: 1,
     hp: 1,
+    priority: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -48,30 +64,23 @@ function parseArgs(argv: string[]): Options {
     else if (arg === '--stage' && argv[i + 1]) opts.stages = argv[++i]!.split(',')
     else if (arg === '--markdown') opts.markdown = true
     else if (arg === '--audit') opts.audit = true
+    else if (arg === '--gate') opts.gate = true
     else if (arg === '--income' && argv[i + 1]) opts.income = Number(argv[++i])
     else if (arg === '--hp' && argv[i + 1]) opts.hp = Number(argv[++i])
     // 난이도는 결국 적 HP 배율 하나이므로 --hp의 별칭으로 둔다.
     // 이름으로 부를 수 있으면 "어려움에서도 조합 빌드가 클리어되는가"를
     // 게임과 같은 어휘로 물어볼 수 있다.
     else if (arg === '--difficulty' && argv[i + 1]) opts.hp = getDifficulty(argv[++i]!).hpScale
+    else if (arg === '--priority' && argv[i + 1]) {
+      const value = argv[++i]! as TargetPriority | 'mixed'
+      if (value !== 'mixed' && !TARGET_PRIORITY_ORDER.includes(value)) {
+        console.error(`--priority 값이 잘못됐습니다: ${value} (${TARGET_PRIORITY_ORDER.join(' / ')} / mixed)`)
+        process.exit(1)
+      }
+      opts.priority = value
+    }
   }
   return opts
-}
-
-/**
- * 스테이지에 진입하는 시점에 플레이어가 가진 타워.
- *
- * 선형 해금이므로 "앞선 스테이지를 전부 깬 상태"가 곧 정상 진행이다.
- * 이 함수가 곧 진행 설계의 검증 대상이기도 하다 — 여기서 주어지는 기물만으로
- * 해당 스테이지가 풀리지 않으면 해금 순서가 잘못된 것이다.
- */
-function towersAtStage(stage: StageDef): string[] {
-  const towers = [...STARTING_TOWERS]
-  for (const s of STAGES) {
-    if (s.index >= stage.index) break
-    towers.push(...s.unlocksTowers)
-  }
-  return towers
 }
 
 /**
@@ -99,11 +108,6 @@ function applyHpMultiplier(mult: number): void {
   for (const def of Object.values(ENEMY_DEFS)) {
     def.maxHp = Math.max(1, Math.round(def.maxHp * mult))
   }
-}
-
-/** 시드는 고정 규칙으로 만든다 — 같은 명령이면 항상 같은 결과가 나온다. */
-function seedFor(index: number): number {
-  return 0x1000 + index * 7919
 }
 
 function pct(x: number): string {
@@ -178,13 +182,26 @@ function main(): void {
     audit()
     return
   }
+  if (opts.gate) {
+    process.exit(runGate())
+  }
 
   const stages = opts.stages
     ? STAGES.filter((s) => opts.stages!.includes(s.id))
     : STAGES
-  const strategies = opts.only
+  let strategies = opts.only
     ? opts.only.map((id) => findStrategy(id)).filter((s): s is Strategy => Boolean(s))
     : STRATEGIES
+  if (opts.priority) {
+    const priority = opts.priority
+    const applied = priority === 'mixed' ? MIXED_PRIORITY : priority
+    strategies = strategies.map((s) => ({ ...s, targetPriority: applied }))
+    console.log(
+      `타겟팅 우선순위: 전 전략 「${
+        priority === 'mixed' ? '기물별 혼합 (총통·포수 강한 적 · 별파진 후미)' : TARGET_PRIORITY_LABEL[priority]
+      }」\n`,
+    )
+  }
 
   if (stages.length === 0 || strategies.length === 0) {
     console.error('실행할 스테이지 또는 전략이 없습니다. --stage / --only 값을 확인하세요.')

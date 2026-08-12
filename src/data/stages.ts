@@ -480,131 +480,143 @@ const WAVES_S5: WaveDef[] = [
 
 // ────────────────────────────── S6 남한산성 ──────────────────────────────
 // 세 방향 동시 압박 + 보스. 비격진천뢰의 순수 피해가 양면 저항의 해답.
+//
+// **보상은 한 번 깎였다.** 원래 이 판의 보상 합계는 5,540G로 S5(2,321G)의
+// 2.4배였다. 경로가 셋이라 같은 압박이라도 어렵다는 이유였는데(BALANCE 4장),
+// 재 보니 보정이 과했다 — 마지막 판이 앞 판보다 **헐거웠다.**
+//
+//     남은 생명        S5 →  S6(이전)
+//     넓히기 우선      3.0 → 15.9
+//     여덟 종 전부     4.9 → 14.9
+//
+// 20에서 15.9를 남기고 끝나는 판은 최종전이 아니다. 적 HP가 아니라 보상을
+// ×0.8로 깎았다 — 압박 곡선을 다시 만들지 않아도 되고, 애초에 과했던 것이
+// 보정 쪽이기 때문이다. 자세한 것은 BALANCE.md 14장.
 
 const WAVES_S6: WaveDef[] = [
   {
     id: 1,
     prepTime: 22,
-    reward: 75,
+    reward: 60,
     groups: [g('grunt', 5, 1.15), g('runner', 5, 1.15, 8, 1)],
   },
   {
     id: 2,
     prepTime: 16,
-    reward: 75,
+    reward: 60,
     groups: [g('grunt', 5, 1.1), g('runner', 7, 1.1, 8, 1)],
   },
   {
     id: 3,
     prepTime: 16,
-    reward: 87,
+    reward: 70,
     groups: [g('armored', 2, 1.05), g('grunt', 3, 1.05, 8, 1), g('shaman', 2, 1.05, 12, 2), g('wyvern', 2, 1.05, 16)],
   },
   {
     id: 4,
     prepTime: 17,
-    reward: 101,
+    reward: 80,
     warning: '간자 — 화약 저항 80%',
     groups: [g('armored', 2, 1.0), g('grunt', 3, 1.0, 8, 1), g('shaman', 2, 1.0, 12, 2), g('wyvern', 2, 1.0, 16)],
   },
   {
     id: 5,
     prepTime: 17,
-    reward: 114,
+    reward: 90,
     warning: '충차 — 양면 저항. 비격진천뢰가 답입니다',
     groups: [g('armored', 2, 0.95), g('shaman', 2, 0.95, 8, 1), g('wyvern', 2, 0.95, 12, 2), g('brute', 2, 0.95, 16), g('warlock', 2, 0.95, 16, 1)],
   },
   {
     id: 6,
     prepTime: 17,
-    reward: 128,
+    reward: 100,
     groups: [g('shieldman', 3, 0.8), g('shaman', 2, 0.9, 8, 1), g('wyvern', 2, 0.9, 12, 2), g('brute', 2, 0.9, 16), g('warlock', 2, 0.9, 16, 1)],
   },
   {
     id: 7,
     prepTime: 17,
-    reward: 140,
+    reward: 110,
     groups: [g('armored', 2, 0.85), g('shaman', 2, 0.85, 8, 1), g('wyvern', 2, 0.85, 12, 2), g('brute', 2, 0.85, 16), g('warlock', 2, 0.85, 16, 1)],
   },
   {
     id: 8,
     prepTime: 22,
-    reward: 330,
+    reward: 265,
     warning: '중간 보스 — 선봉 기병',
     groups: [g('sentinel', 2, 0.8, 0, 1), g('warlock', 2, 0.8, 6, 2), g('wyvern', 3, 0.8, 10), g('twinwyvern', 1, 1, 14)],
   },
   {
     id: 9,
     prepTime: 18,
-    reward: 166,
+    reward: 135,
     groups: [g('brute', 2, 0.75), g('sentinel', 2, 0.75, 8, 1), g('warlock', 2, 0.75, 12, 2), g('wyvern', 3, 0.75, 16)],
   },
   {
     id: 10,
     prepTime: 18,
-    reward: 190,
+    reward: 150,
     groups: [g('brute', 2, 0.7), g('sentinel', 2, 0.7, 8, 1), g('warlock', 2, 0.7, 12, 2), g('wyvern', 3, 0.7, 16)],
   },
   {
     id: 11,
     prepTime: 18,
-    reward: 217,
+    reward: 175,
     groups: [g('brute', 2, 0.65), g('sentinel', 2, 0.65, 8, 1), g('warlock', 2, 0.65, 12, 2), g('wyvern', 3, 0.65, 16)],
   },
   {
     id: 12,
     prepTime: 18,
-    reward: 229,
+    reward: 185,
     groups: [g('warlock', 2, 0.6), g('brute', 2, 0.6, 8, 1), g('sentinel', 2, 0.6, 12, 2), g('runner', 8, 0.6, 16)],
   },
   {
     id: 13,
     prepTime: 18,
-    reward: 253,
+    reward: 200,
     groups: [g('warlock', 2, 0.55), g('brute', 2, 0.55, 8, 1), g('sentinel', 2, 0.55, 12, 2), g('runner', 8, 0.55, 16)],
   },
   {
     id: 14,
     prepTime: 24,
-    reward: 584,
+    reward: 465,
     warning: '중간 보스 — 철갑 장수',
     groups: [g('warlock', 2, 0.5), g('sentinel', 2, 0.5, 8, 2), g('runner', 7, 0.5, 12), g('golem', 1, 1, 16, 1)],
   },
   {
     id: 15,
     prepTime: 19,
-    reward: 318,
+    reward: 255,
     groups: [g('warlock', 3, 0.45), g('brute', 2, 0.45, 8, 1), g('sentinel', 2, 0.45, 12, 2), g('runner', 10, 0.45, 16)],
   },
   {
     id: 16,
     prepTime: 19,
-    reward: 354,
+    reward: 285,
     groups: [g('brute', 2, 0.4), g('sentinel', 2, 0.4, 8, 1), g('warlock', 3, 0.4, 12, 2), g('runner', 5, 0.4, 16)],
   },
   {
     id: 17,
     prepTime: 19,
-    reward: 394,
+    reward: 315,
     groups: [g('brute', 2, 0.35), g('sentinel', 2, 0.35, 8, 1), g('warlock', 3, 0.35, 12, 2), g('runner', 7, 0.35, 16)],
   },
   {
     id: 18,
     prepTime: 19,
-    reward: 431,
+    reward: 345,
     groups: [g('brute', 2, 0.3), g('sentinel', 2, 0.3, 8, 1), g('warlock', 3, 0.3, 12, 2), g('runner', 7, 0.3, 16)],
   },
   {
     id: 19,
     prepTime: 20,
-    reward: 483,
+    reward: 385,
     warning: '총공세 — 마지막 정비 기회입니다',
     groups: [g('brute', 3, 0.25), g('sentinel', 3, 0.25, 8, 1), g('warlock', 3, 0.25, 12, 2), g('runner', 8, 0.25, 16)],
   },
   {
     id: 20,
     prepTime: 24,
-    reward: 864,
+    reward: 690,
     warning: '팔기 대장 출진 — 최종 웨이브',
     groups: [g('brute', 3, 0.2), g('sentinel', 3, 0.2, 8, 1), g('warlock', 5, 0.2, 12, 2), g('runner', 13, 0.2, 16), g('overlord', 1, 1, 22)],
   },

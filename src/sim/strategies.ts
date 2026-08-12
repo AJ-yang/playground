@@ -2,6 +2,7 @@ import { buildCost, TOWER_ORDER, getTowerDef } from '../data/towers'
 import { getEnemyDef } from '../data/enemies'
 import type { Game } from '../game/Game'
 import type { Tower } from '../game/Tower'
+import type { TargetPriority } from '../game/types'
 import { pickCommandSpot, pickSpot, type SpotIndex } from './coverage'
 
 /**
@@ -23,6 +24,32 @@ export interface Strategy {
   upgradeFirst: boolean
   /** true면 준비 시간을 기다리지 않고 즉시 다음 웨이브를 부른다 */
   earlyCall: boolean
+  /**
+   * 지은 타워에 걸 타겟팅 우선순위. 없으면 게임 기본값(선두)을 그대로 쓴다.
+   *
+   * 전략 목록에는 이 값을 넣지 않는다. 우선순위는 **빌드와 직교하는 축**이라,
+   * 전략마다 따로 두면 조합이 폭발하고 대조 실험이 성립하지 않는다. 대신
+   * `--priority`가 전 전략에 같은 값을 덮어씌워 행렬을 통째로 다시 돌린다.
+   */
+  targetPriority?: TargetPriority | Readonly<Partial<Record<string, TargetPriority>>>
+}
+
+/**
+ * 기물 성격에 맞춰 손으로 고른 우선순위 — 「선두」 일괄과 비교하기 위한 것.
+ *
+ * 일괄로 걸면 「선두」가 거의 언제나 이긴다(BALANCE 15장). 그렇다면 이 축이
+ * 가짜 선택지인지, 아니면 **기물마다 다르게 걸어야 값을 하는지**를 갈라 봐야
+ * 한다. 근거를 붙일 수 있는 것만 바꾼다.
+ *
+ *   - 총통·포수: 갑주를 뚫는 것이 본업이므로 **가장 두꺼운 적**을 노린다
+ *   - 별파진: 중독은 시간이 필요하다. 마을에 닿기 직전인 적에게 걸면 효과가
+ *     끝나기 전에 도착하므로 **남은 거리가 긴 적**에게 건다
+ *   - 나머지: 기본값 그대로
+ */
+export const MIXED_PRIORITY: Readonly<Partial<Record<string, TargetPriority>>> = {
+  mage: 'strongest',
+  musket: 'strongest',
+  venom: 'last',
 }
 
 /** 고정 순환 빌드 — 정해진 순서대로 타워를 돌려 짓는다. */
@@ -288,7 +315,18 @@ function tryBuild(game: Game, strategy: Strategy, spots: SpotIndex): boolean {
       : pickSpot(game, spots.forRange(first.range))
   if (!spot) return false
 
-  return game.tryBuild(towerId, spot.col, spot.row).ok
+  if (!game.tryBuild(towerId, spot.col, spot.row).ok) return false
+
+  // 방금 지은 것에만 건다. 게임에서도 타워를 짓고 나서 개별로 바꾸는 값이다.
+  const wanted =
+    typeof strategy.targetPriority === 'string'
+      ? strategy.targetPriority
+      : strategy.targetPriority?.[towerId]
+  if (wanted) {
+    const built = game.towers[game.towers.length - 1]
+    if (built) built.targetPriority = wanted
+  }
+  return true
 }
 
 /** 커버리지가 가장 좋은 타워부터 올린다 — 같은 골드로 가장 많은 사격 기회를 산다. */

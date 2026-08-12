@@ -1,0 +1,60 @@
+# GitHub Pages 배포.
+#
+# 게임은 정적 파일 뭉치라(에셋 로딩도 서버도 없다) `dist/`를 그대로 올리면 된다.
+# vite 설정의 `base: './'`가 상대 경로를 쓰므로 프로젝트 페이지의 하위 경로
+# (/playground/)에서도 그대로 동작한다.
+
+name: 배포
+
+on:
+  push:
+    branches: [main]
+  # 브랜치를 건드리지 않고 다시 올리고 싶을 때를 위해 수동 실행도 열어 둔다.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 앞선 것을 중간에 끊으면 안 된다 — 취소하지 않고 줄을 세운다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run build`가 tsc --noEmit을 먼저 돌리므로 타입 검사도 여기 포함된다.
+      # 밸런스 게이트는 verify.yml이 같은 푸시에서 따로 돌린다.
+      - name: 빌드
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+        with:
+          # 저장소 설정에서 Pages를 켜 두지 않았어도 여기서 켠다.
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
