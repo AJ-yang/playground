@@ -22,6 +22,11 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+defaults:
+  run:
+    # 게임은 저장소 루트가 아니라 joseon-defense/ 안에 있다.
+    working-directory: joseon-defense
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,6 +37,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+          cache-dependency-path: joseon-defense/package-lock.json
 
       - run: npm ci
 
@@ -40,14 +46,16 @@ jobs:
       - name: 빌드
         run: npm run build
 
+      # Pages는 저장소 설정(Settings → Pages → Source: GitHub Actions)에서 켜 둔다.
+      # `enablement: true`로 워크플로가 켜게 해 봤지만 기본 토큰에는 사이트를
+      # 만들 권한이 없어(Resource not accessible by integration) 항상 실패했다.
       - uses: actions/configure-pages@v5
-        with:
-          # 저장소 설정에서 Pages를 켜 두지 않았어도 여기서 켠다.
-          enablement: true
 
+      # `defaults.run`은 셸 명령에만 적용된다. 액션 입력은 저장소 루트 기준이라
+      # 여기는 경로를 직접 적어야 한다.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: joseon-defense/dist
 
   deploy:
     needs: build

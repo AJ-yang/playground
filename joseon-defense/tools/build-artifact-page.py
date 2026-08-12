@@ -1,6 +1,7 @@
 import glob, pathlib
 
-bundle = pathlib.Path(glob.glob('dist/assets/index-*.js')[0]).read_text()
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+bundle = pathlib.Path(glob.glob(str(ROOT / 'dist/assets/index-*.js'))[0]).read_text()
 
 # 설명을 전부 걷어내고 캔버스만 남긴다. 게임 코드는 손대지 않았다 —
 # main.ts가 캔버스에 인라인 style.width/height(px)를 박기 때문에 페이지 쪽에서
@@ -159,6 +160,6 @@ page = f'''<meta charset="utf-8">
 </script>
 '''
 
-out = pathlib.Path('joseon-defense.html')
+out = ROOT / 'joseon-defense.html'
 out.write_text(page)
 print(out, f'{out.stat().st_size / 1024:.0f}KB')
