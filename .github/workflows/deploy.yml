@@ -1,8 +1,18 @@
 # GitHub Pages 배포.
 #
-# 게임은 정적 파일 뭉치라(에셋 로딩도 서버도 없다) `dist/`를 그대로 올리면 된다.
-# vite 설정의 `base: './'`가 상대 경로를 쓰므로 프로젝트 페이지의 하위 경로
-# (/playground/)에서도 그대로 동작한다.
+# **저장소 구조를 그대로 주소로 옮긴다.** 저장소가 갈래(Games/)별로 프로젝트를
+# 담고 있으므로 배포도 같은 모양이 되어야 나중에 프로젝트를 늘릴 때 주소가
+# 흐트러지지 않는다.
+#
+#   Games/joseon-defense/dist  →  /playground/joseon-defense/
+#   site/index.html            →  /playground/
+#
+# 프로젝트 사이트의 첫 칸(/playground/)은 저장소 이름이라 바꿀 수 없다. 대신
+# 그 아래를 저장소 구조와 맞춰 두면 주소에 프로젝트 이름이 드러난다.
+#
+# 게임은 정적 파일 뭉치라(에셋 로딩도 서버도 없다) dist를 그대로 올리면 된다.
+# vite 설정의 `base: './'`가 상대 경로를 쓰므로 몇 단계 아래에 놓여도 그대로
+# 동작한다.
 
 name: 배포
 
@@ -22,11 +32,6 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-defaults:
-  run:
-    # 게임은 저장소 루트가 아니라 Games/joseon-defense/ 안에 있다.
-    working-directory: Games/joseon-defense
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -40,22 +45,30 @@ jobs:
           cache-dependency-path: Games/joseon-defense/package-lock.json
 
       - run: npm ci
+        working-directory: Games/joseon-defense
 
       # `npm run build`가 tsc --noEmit을 먼저 돌리므로 타입 검사도 여기 포함된다.
       # 밸런스 게이트는 verify.yml이 같은 푸시에서 따로 돌린다.
-      - name: 빌드
+      - name: 조선 방어전 빌드
         run: npm run build
+        working-directory: Games/joseon-defense
+
+      # 프로젝트가 늘어나면 여기에 한 줄씩 붙인다.
+      - name: 배포 트리 조립
+        run: |
+          mkdir -p _site/joseon-defense
+          cp -r Games/joseon-defense/dist/. _site/joseon-defense/
+          cp site/index.html _site/index.html
+          find _site -type f | sort
 
       # Pages는 저장소 설정(Settings → Pages → Source: GitHub Actions)에서 켜 둔다.
       # `enablement: true`로 워크플로가 켜게 해 봤지만 기본 토큰에는 사이트를
       # 만들 권한이 없어(Resource not accessible by integration) 항상 실패했다.
       - uses: actions/configure-pages@v5
 
-      # `defaults.run`은 셸 명령에만 적용된다. 액션 입력은 저장소 루트 기준이라
-      # 여기는 경로를 직접 적어야 한다.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: Games/joseon-defense/dist
+          path: _site
 
   deploy:
     needs: build

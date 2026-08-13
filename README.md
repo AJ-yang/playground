@@ -4,7 +4,7 @@
 
 | 폴더 | 무엇 | 상태 |
 | --- | --- | --- |
-| [`Games/joseon-defense/`](Games/joseon-defense/) | **조선 방어전** — 왜구의 노략에서 병자호란까지, 여섯 전쟁으로부터 성을 지키는 경로형 타워디펜스 | 배포됨 |
+| [`Games/joseon-defense/`](Games/joseon-defense/) | **조선 방어전** — 왜구의 노략에서 병자호란까지, 여섯 전쟁으로부터 성을 지키는 경로형 타워디펜스 | [배포됨](https://aj-yang.github.io/playground/joseon-defense/) |
 
 저장소 루트의 `.claude/`·`.agents/`·`skills-lock.json`은 프로젝트가 아니라 이
 저장소에서 쓰는 도구 설정이다.
@@ -14,7 +14,7 @@
 TypeScript + HTML5 Canvas, 게임 엔진 의존성 없음. 스프라이트 파일도 없이 손으로
 쓴 SVG 패스를 `Path2D`로 그린다.
 
-**놀아 보기** → <https://aj-yang.github.io/playground/>
+**놀아 보기** → <https://aj-yang.github.io/playground/joseon-defense/>
 
 ```bash
 cd Games/joseon-defense
@@ -38,6 +38,17 @@ npm run balance    # 밸런스 회귀 게이트 — 설계 의도가 깨지면 �
 
 ## 배포
 
-`main`에 푸시되면 `.github/workflows/deploy.yml`이 `Games/joseon-defense/`를 빌드해
-GitHub Pages로 올린다. 같은 푸시에서 `verify.yml`이 타입 검사·빌드·밸런스
-게이트를 돌린다. 두 워크플로 모두 `working-directory: Games/joseon-defense`로 돈다.
+`main`에 푸시되면 `.github/workflows/deploy.yml`이 GitHub Pages로 올린다. 같은
+푸시에서 `verify.yml`이 타입 검사·빌드·밸런스 게이트를 돌린다.
+
+**주소는 저장소 구조를 그대로 따라간다.**
+
+| 저장소 | 주소 |
+|---|---|
+| `site/index.html` | <https://aj-yang.github.io/playground/> |
+| `Games/joseon-defense/dist` | <https://aj-yang.github.io/playground/joseon-defense/> |
+
+첫 칸(`/playground/`)은 저장소 이름이라 바꿀 수 없다. 대신 그 아래를 저장소
+구조와 맞춰 두면 주소에 프로젝트 이름이 드러나고, 프로젝트를 늘려도 서로
+자리를 다투지 않는다. 프로젝트를 추가할 때는 `deploy.yml`의 「배포 트리 조립」
+단계에 한 줄, `site/index.html`에 카드 하나를 붙이면 된다.

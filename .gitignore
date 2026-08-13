@@ -6,6 +6,9 @@ dist/
 .smoke.mjs
 .sim-build/
 
+# deploy.yml이 배포 직전에 조립하는 트리.
+_site/
+
 # 타이틀 배경의 원본 스캔·사진. 수십 MB짜리 원본이라 커밋하지 않는다.
 # tools/bake-backdrop.py가 구워낸 src/render/backdropAssets.ts 쪽만 커밋한다.
 Games/joseon-defense/assets/backdrop/*
