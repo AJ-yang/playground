@@ -8,7 +8,7 @@ import { clamp } from '../core/vec2'
  * 표현하는 것이 이 클래스의 핵심이다. 그 덕분에
  *   - 선두/후미 타겟팅이 distance 비교 한 번으로 끝나고
  *   - 감속·이동이 스칼라 연산이 되며
- *   - 굿청 징의 예측 사격도 "distance + speed * t"로 간단히 계산된다.
+ *   - 느린 투사체(화차)의 예측 사격도 "distance + speed * t"로 간단히 계산된다.
  */
 export class Path {
   /** 픽셀 좌표로 변환된 웨이포인트 */

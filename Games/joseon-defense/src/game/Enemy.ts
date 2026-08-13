@@ -109,7 +109,7 @@ export class Enemy {
     return this.path.totalLength - this.distance
   }
 
-  /** 이 적이 해당 타워의 타겟팅 대상에서 제외되는가 (공중 유닛 판정). */
+  /** 이 적이 해당 타워의 타겟팅 대상에서 제외되는가 (기마 판정). */
   flyingBlocked(towerTargetsAir: boolean): boolean {
     return this.def.flying && !towerTargetsAir
   }
@@ -156,7 +156,7 @@ export class Enemy {
     let dealt: number
     switch (type) {
       case 'physical':
-        // 장갑은 고정 감소. 완전 무효화는 막되 최소 1로 눌러 존재감은 남긴다.
+        // 갑주는 고정 감소. 완전 무효화는 막되 최소 1로 눌러 존재감은 남긴다.
         dealt = Math.max(1, amount - this.def.armor)
         break
       case 'magic':
@@ -185,7 +185,7 @@ export class Enemy {
     if (this.slowTimer > 0) this.slowTimer -= dt
     if (this.flashTimer > 0) this.flashTimer -= dt
 
-    // 중독은 순수 피해라 장갑·마법저항을 통과한다.
+    // 중독은 순수 피해라 갑주·산개를 통과한다.
     this.poisonTickDamage = 0
     if (this.poisonTimer > 0) {
       this.poisonTimer -= dt
@@ -210,7 +210,7 @@ export class Enemy {
   }
 
   /**
-   * dt초 뒤 예상 위치. 굿청 징처럼 투사체가 느린 타워의 예측 사격에 쓴다.
+   * dt초 뒤 예상 위치. 화차처럼 투사체가 느린 타워의 예측 사격에 쓴다.
    * 감속 지속시간까지 고려하지는 않는다 — 그 정도 오차는 광역 폭발이 흡수한다.
    */
   predictPosition(dt: number, tileSize: number): Vec2 {
