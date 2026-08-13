@@ -235,6 +235,12 @@ export const STRATEGIES: Strategy[] = [
   adaptiveStrategy(2, false),
   adaptiveStrategy(3, false),
   // 투자 성향 대조군 — 넓히기 vs 키우기
+  //
+  // GDD 3장이 "매 웨이브 내리는 결정" 첫째로 꼽는 축이라 **양 끝과 중간을
+  // 모두** 둔다. 오랫동안 끝 두 개(6기 / 20기)만 있었는데, 그러면 "키우기가
+  // 진다"까지만 보이고 **어디서 뒤집히는지**가 안 보인다. 6기는 3갈래 맵에서
+  // 경로를 덮지 못해 골드 효율과 무관하게 지는 극단값이라, 그것만 놓고
+  // 강화의 값을 판단하면 틀린 결론이 나온다.
   cycleStrategy({
     id: 'wide',
     label: '넓히기 우선 (건설 20기)',
@@ -246,6 +252,20 @@ export const STRATEGIES: Strategy[] = [
     label: '키우기 우선 (6기 만렙)',
     cycle: ['archer', 'mage', 'cannon', 'frost'],
     buildUntil: 6,
+    upgradeFirst: true,
+  }),
+  cycleStrategy({
+    id: 'tall-10',
+    label: '키우기 우선 (10기 만렙)',
+    cycle: ['archer', 'mage', 'cannon', 'frost'],
+    buildUntil: 10,
+    upgradeFirst: true,
+  }),
+  cycleStrategy({
+    id: 'tall-14',
+    label: '키우기 우선 (14기 만렙)',
+    cycle: ['archer', 'mage', 'cannon', 'frost'],
+    buildUntil: 14,
     upgradeFirst: true,
   }),
   // 조기 소환 보너스 대조군
