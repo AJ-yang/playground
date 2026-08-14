@@ -1,0 +1,38 @@
+{
+  "name": "gyeol",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "fetch:catalog": "tsx --env-file=.env.local scripts/fetch-catalog.ts",
+    "fetch:keywords": "tsx --env-file=.env.local scripts/fetch-keywords.ts",
+    "build:catalog": "tsx scripts/build-catalog.ts",
+    "build:pages": "PAGES_BASE_PATH=/gyeol PAGES_SITE_URL=https://AJ-yang.github.io/gyeol next build && tsx scripts/postbuild-pages.ts",
+    "deploy:pages": "npm run build:pages && bash scripts/deploy-pages.sh",
+    "fetch:recommendations": "tsx --env-file=.env.local scripts/fetch-recommendations.ts",
+    "build:data": "npm run fetch:catalog && npm run fetch:keywords && npm run build:catalog && npm run fetch:recommendations && npm run fetch:details",
+    "fetch:details": "tsx --env-file=.env.local scripts/fetch-details.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.1",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
