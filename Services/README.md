@@ -3,6 +3,22 @@
 | 프로젝트 | 무엇 | 상태 |
 | --- | --- | --- |
 | [`gyeol/`](gyeol/) | **결(gyeol)** — 재미있게 본 영화·드라마를 고르면 이야기 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/playground/gyeol/) |
+| [`volleyball-rotation/`](volleyball-rotation/) | **배구 로테이션 보드** — 6인제 로테이션·대형, 라인업 저장, 이미지 내보내기 | [배포됨](https://aj-yang.github.io/playground/volleyball-rotation/) |
+
+**빌드가 있는 프로젝트와 없는 프로젝트가 섞여 있다.** 결은 Next.js로 `out`을
+굽지만 배구 로테이션 보드는 `index.html` 한 장이 곧 서비스라 빌드 단계가 없다.
+그래서 `deploy.yml`의 조립 단계는 갈래 폴더를 훑지 않고 **프로젝트마다 올릴
+것을 따로 적는다.**
+
+## 배구 로테이션 보드의 배포
+
+`index.html`을 그대로 올린다. 폰트(Google Fonts)와 이미지 내보내기에 쓰는
+html2canvas는 CDN에서 받으므로 같이 올릴 것이 없고, 페이지 안에 최상단을
+가리키는 절대 경로가 없어서 몇 단계 아래에 놓여도 그대로 동작한다.
+
+**저장한 라인업은 주소가 바뀌어도 남는다.** `localStorage`는 경로가 아니라
+출처(origin) 단위라, `aj-yang.github.io`가 그대로인 한 옛 주소에서 저장한
+라인업을 새 주소에서도 읽는다.
 
 ## 결의 배포
 

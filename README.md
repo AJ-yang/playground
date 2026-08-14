@@ -12,6 +12,7 @@
 | [`Games/joseon-defense/`](Games/joseon-defense/) | **조선 방어전** — 왜구의 노략에서 병자호란까지, 여섯 전쟁으로부터 성을 지키는 경로형 타워디펜스 | [배포됨](https://aj-yang.github.io/playground/joseon-defense/) |
 | [`Games/casino-learning-game/`](Games/casino-learning-game/) | **카지노 게임 배우기** — 걸어다니며 룰을 익히는 학습용 카지노 | [배포됨](https://aj-yang.github.io/playground/casino-learning-game/) |
 | [`Services/gyeol/`](Services/gyeol/) | **결(gyeol)** — 영화·드라마 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/playground/gyeol/) |
+| [`Services/volleyball-rotation/`](Services/volleyball-rotation/) | **배구 로테이션 보드** — 6인제 로테이션·대형을 코트 위에 놓고 보는 보드 | [배포됨](https://aj-yang.github.io/playground/volleyball-rotation/) |
 
 갈래 폴더 밖의 것들은 프로젝트가 아니다.
 
@@ -60,6 +61,7 @@ npm run balance    # 밸런스 회귀 게이트 — 설계 의도가 깨지면 �
 | `Games/joseon-defense/dist` | <https://aj-yang.github.io/playground/joseon-defense/> |
 | `Games/casino-learning-game/index.html` | <https://aj-yang.github.io/playground/casino-learning-game/> |
 | `Services/gyeol/out` | <https://aj-yang.github.io/playground/gyeol/> |
+| `Services/volleyball-rotation/index.html` | <https://aj-yang.github.io/playground/volleyball-rotation/> |
 
 **결은 앞의 셋과 달리 주소가 빌드 시점에 박힌다.** Next.js 정적
 내보내기라 `basePath`가 산출물 안에 문자열로 들어가서, 파일을 옮기는 것만으로는

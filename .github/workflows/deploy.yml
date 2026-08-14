@@ -7,6 +7,7 @@
 #   Games/joseon-defense/dist            →  /playground/joseon-defense/
 #   Games/casino-learning-game/index.html →  /playground/casino-learning-game/
 #   Services/gyeol/out                   →  /playground/gyeol/
+#   Services/volleyball-rotation/index.html → /playground/volleyball-rotation/
 #   site/index.html                      →  /playground/
 #
 # 프로젝트 사이트의 첫 칸(/playground/)은 저장소 이름이라 바꿀 수 없다. 대신
@@ -88,6 +89,10 @@ jobs:
           # 돌지 않는다 — .nojekyll은 없어도 되지만 있어도 해가 없다.)
           mkdir -p _site/gyeol
           cp -r Services/gyeol/out/. _site/gyeol/
+          # 배구 로테이션 보드도 HTML 한 장이다. 폰트와 html2canvas는 CDN에서
+          # 받으므로 같이 올릴 것이 없다.
+          mkdir -p _site/volleyball-rotation
+          cp Services/volleyball-rotation/index.html _site/volleyball-rotation/
           cp site/index.html _site/index.html
           # 조립 결과를 로그에 남긴다. 결만 800개가 넘어서 개수만 센다.
           find _site -type f | wc -l
