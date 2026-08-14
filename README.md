@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | [`Games/joseon-defense/`](Games/joseon-defense/) | **조선 방어전** — 왜구의 노략에서 병자호란까지, 여섯 전쟁으로부터 성을 지키는 경로형 타워디펜스 | [배포됨](https://aj-yang.github.io/playground/joseon-defense/) |
 | [`Games/casino-learning-game/`](Games/casino-learning-game/) | **카지노 게임 배우기** — 걸어다니며 룰을 익히는 학습용 카지노 | [배포됨](https://aj-yang.github.io/playground/casino-learning-game/) |
-| `Services/` | _(아직 없음)_ | — |
+| [`Services/gyeol/`](Services/gyeol/) | **결(gyeol)** — 영화·드라마 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/gyeol/) · 자체 저장소에서 배포 |
 
 저장소 루트의 `.claude/`·`.agents/`·`skills-lock.json`은 프로젝트가 아니라 이
 저장소에서 쓰는 도구 설정이다.
@@ -58,6 +58,11 @@ npm run balance    # 밸런스 회귀 게이트 — 설계 의도가 깨지면 �
 | `site/index.html` | <https://aj-yang.github.io/playground/> |
 | `Games/joseon-defense/dist` | <https://aj-yang.github.io/playground/joseon-defense/> |
 | `Games/casino-learning-game/index.html` | <https://aj-yang.github.io/playground/casino-learning-game/> |
+
+**`Services/gyeol/`은 이 표에 없다.** 소스만 여기 있고 배포는 원본
+저장소(`AJ-yang/gyeol`)의 `gh-pages`가 계속 맡는다 — 빌드에 필요한 카탈로그가
+`.gitignore` 대상이라 이 저장소의 CI로는 만들 수 없고, 주소를 옮기면 이미 뿌린
+공유 링크가 죽는다. 자세한 것은 [`Services/README.md`](Services/README.md).
 
 첫 칸(`/playground/`)은 저장소 이름이라 바꿀 수 없다. 대신 그 아래를 저장소
 구조와 맞춰 두면 주소에 프로젝트 이름이 드러나고, 프로젝트를 늘려도 서로
