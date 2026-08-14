@@ -44,7 +44,14 @@ next-env.d.ts
 # 임시 실험 스크립트
 *.tmp.ts
 
-# 재생성 가능한 TMDB 원본과 색인
+# 재생성 가능한 TMDB 원본
 data/*.raw.json
-public/catalog.json
 public/recommendations.json
+
+# public/catalog.json은 일부러 커밋한다.
+#
+# 생성물이지만 만들려면 TMDB API 키가 필요하다(`npm run build:data`). 배포가
+# playground CI로 넘어온 뒤로는 키 없는 러너가 이걸 만들 수 없으므로, 커밋하지
+# 않으면 배포가 아예 불가능하다. 커밋해 두면 클론만으로 빌드가 되고,
+# `lib/gyeol/catalog.test.ts`의 색인 검증도 CI에서 실제로 돈다(없으면 skip된다).
+# 키를 가진 사람이 `npm run build:data`로 갱신해 커밋하면 다음 배포에 반영된다.

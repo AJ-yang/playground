@@ -56,6 +56,13 @@ describe('absoluteResultHref', () => {
     )
   })
 
+  it('basePath가 두 칸이어도 된다', () => {
+    // playground 저장소로 배포가 옮겨 오면서 실제 basePath가 두 칸이 됐다.
+    expect(absoluteResultHref('https://aj-yang.github.io', '/playground/gyeol', mine)).toBe(
+      'https://aj-yang.github.io/playground/gyeol/r/sound/?p=AbC-_123',
+    )
+  })
+
   it('basePath가 없으면 그대로 붙인다', () => {
     expect(absoluteResultHref('http://localhost:3100', '', mine)).toBe(
       'http://localhost:3100/r/sound/?p=AbC-_123',

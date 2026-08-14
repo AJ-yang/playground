@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
 import { GYEOL_TYPES } from '@/data/gyeol-types'
+import { SITE_LABEL } from '@/lib/gyeol/site'
 
 /**
  * 결마다 하나씩 굽는 공유 미리보기 이미지.
@@ -71,7 +72,7 @@ export default async function Image({ params }: { params: Promise<{ gyeol: strin
         <div
           style={{ display: 'flex', fontSize: 28, color: 'rgba(255,255,255,0.5)', marginTop: 56 }}
         >
-          aj-yang.github.io/gyeol
+          {SITE_LABEL}
         </div>
       </div>
     ),

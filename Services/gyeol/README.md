@@ -2,7 +2,7 @@
 
 재미있게 본 영화·드라마를 고르면 **당신의 이야기 취향에 이름을 붙여주는** 서비스.
 
-**→ [aj-yang.github.io/gyeol](https://aj-yang.github.io/gyeol/)**
+**→ [aj-yang.github.io/playground/gyeol](https://aj-yang.github.io/playground/gyeol/)**
 
 이 서비스가 파는 것은 추천 정확도가 아니다. 시청 이력을 가진 왓챠피디아·넷플릭스를 그것으로 이길 방법은 없다. 대신 취향을 **언어로** 만들어준다 — "액션 4.2점"이 아니라 "서늘한 복수의 결"이라고.
 
@@ -12,7 +12,7 @@
 
 결과에는 **판정을 가른 한 편**이 함께 나온다 — 고른 것을 하나씩 빼보고 결이 바뀌는 작품을 찾는다. 그리고 친구에게 링크를 보내면 **둘의 궁합**(`/vs/`)이 나온다. 둘 다 서버 없이 주소만으로 돈다.
 
-공유 카드는 두 규격으로 만든다. 카카오톡은 4:5가, 인스타그램 스토리는 9:16이 크게 잡힌다. 25개 결은 [`/gyeols/`](https://aj-yang.github.io/gyeol/gyeols/)에 모아 두었다.
+공유 카드는 두 규격으로 만든다. 카카오톡은 4:5가, 인스타그램 스토리는 9:16이 크게 잡힌다. 25개 결은 [`/gyeols/`](https://aj-yang.github.io/playground/gyeol/gyeols/)에 모아 두었다.
 
 ## 구조
 
@@ -34,7 +34,7 @@ npm run build:data   # 카탈로그 → 키워드 → 색인 → 추천. TMDB �
 npm run dev
 ```
 
-산출물(`public/catalog.json`, `public/recommendations.json`)은 재생성 가능하므로 커밋하지 않는다.
+`public/recommendations.json`은 재생성 가능하므로 커밋하지 않는다. **`public/catalog.json`은 커밋한다** — 배포하는 CI 러너에는 TMDB 키가 없어서 이걸 만들 수 없다. 작품을 갱신하려면 키를 가진 사람이 `build:data`를 돌리고 바뀐 색인을 커밋한다.
 
 ## 계측
 
@@ -54,11 +54,22 @@ npm run dev
 
 ## 배포
 
+`main`에 푸시하면 playground 저장소의 `deploy.yml`이 굽고 올린다. 사람이 손으로
+밀어 넣던 것을(예전에는 `gh-pages`로 강제 푸시했다) CI가 대신한다.
+
+배포와 똑같은 빌드를 손으로 돌려 보려면:
+
 ```bash
-npm run deploy:pages
+npm run build:pages   # out/에 정적 파일이 나온다
 ```
 
-정적 빌드를 `gh-pages` 브랜치로 강제 푸시한다. **`public/`의 데이터가 그대로 실려 나가므로** 데이터를 다시 굽지 않은 채 배포하면 직전 배포의 값이 유지된다 — 코드만 고쳤을 때는 그것이 맞다.
+**주소가 빌드 시점에 박힌다.** `basePath`가 HTML·JS 안에 문자열로 들어가므로
+산출물을 다른 자리로 옮기는 것만으로는 주소가 안 바뀐다. 경로는
+`package.json`의 `build:pages`에 적혀 있고, 공유 카드·OG 이미지에 인쇄되는
+주소도 같은 값에서 나온다(`lib/gyeol/site.ts`).
+
+`public/`의 데이터는 그대로 실려 나간다 — 색인을 다시 굽지 않고 배포하면 직전
+색인이 유지된다. 코드만 고쳤을 때는 그것이 맞다.
 
 ---
 

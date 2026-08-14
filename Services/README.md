@@ -2,28 +2,53 @@
 
 | 프로젝트 | 무엇 | 상태 |
 | --- | --- | --- |
-| [`gyeol/`](gyeol/) | **결(gyeol)** — 재미있게 본 영화·드라마를 고르면 이야기 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/gyeol/) · **자체 저장소에서 배포** |
+| [`gyeol/`](gyeol/) | **결(gyeol)** — 재미있게 본 영화·드라마를 고르면 이야기 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/playground/gyeol/) |
 
-## 결은 아직 이 저장소에서 배포되지 않는다
+## 결의 배포
 
-소스는 여기 있지만 **배포는 원본 저장소(`AJ-yang/gyeol`)의 `gh-pages` 브랜치가
-계속 맡는다.** 주소도 `aj-yang.github.io/gyeol` 그대로다. 옮기지 않은 이유가
-셋이다.
+소스도 배포도 이 저장소가 맡는다. `main`에 푸시되면 `deploy.yml`이 결을 굽고
+`/playground/gyeol/`에 올린다.
 
-1. **빌드에 필요한 데이터가 저장소에 없다.** `public/catalog.json`과
-   `public/recommendations.json`은 `.gitignore` 대상이다 — TMDB API 키로
-   파이프라인(`npm run build:data`)을 돌려야 생기는 12,595편짜리 색인이라
-   커밋하지 않는다. 이 저장소의 CI에는 그 키가 없다.
-2. **주소가 바뀌면 이미 뿌린 링크가 죽는다.** 결의 핵심 기능이 결과 공유와
-   궁합(`/vs/`)이라 URL이 곧 제품이다. `/gyeol` → `/playground/gyeol`로 옮기면
-   그동안 공유된 링크가 전부 깨진다.
-3. **배포 방식이 다르다.** 결은 `out/`을 `gh-pages`로 강제 푸시하고, 이
-   저장소는 `upload-pages-artifact`로 트리를 조립한다. `basePath`도 빌드 때
-   `/gyeol`로 박힌다.
+```bash
+cd Services/gyeol
+npm install
+npm run dev          # http://localhost:3000
+npm test             # 159건
+npm run build:pages  # 배포와 같은 빌드 — out/에 정적 파일이 나온다
+```
 
-옮기려면 TMDB 키를 저장소 시크릿으로 넣고, 카탈로그 파이프라인을 CI에서 돌리고,
-`basePath`를 바꾸고, 옛 주소에 리다이렉트를 남겨야 한다. 배선 한 줄로 되는 일이
-아니라 별도 작업으로 둔다.
+**주소가 빌드 시점에 박힌다.** 결은 Next.js 정적 내보내기(`output: 'export'`)라
+`basePath`가 HTML·JS 안에 문자열로 들어간다. 그래서 조선 방어전처럼 `dist`를
+그대로 옮기면 되는 게 아니라, 배포 경로를 넣어서 다시 구워야 한다. 그 경로는
+`package.json`의 `build:pages`에 적혀 있다.
+
+```
+PAGES_BASE_PATH=/playground/gyeol
+PAGES_SITE_URL=https://aj-yang.github.io/playground/gyeol
+```
+
+앞의 것은 페이지가 받아 올 자기 자산의 경로, 뒤의 것은 공유 미리보기
+(`og:image`)에 박히는 절대 주소다. 주소를 옮기려면 이 둘과 `deploy.yml`의 조립
+경로를 같이 바꿔야 한다.
+
+## `public/catalog.json`은 커밋되어 있다
+
+12,595편짜리 색인이고 생성물이지만, 만들려면 TMDB API 키로
+`npm run build:data`를 돌려야 한다. CI 러너에는 그 키가 없으므로 커밋하지
+않으면 배포 자체가 불가능하다. 커밋해 둔 덕에 따라오는 것이 둘 더 있다 —
+클론만으로 빌드가 되고, `lib/gyeol/catalog.test.ts`의 색인 검증 11건이 CI에서
+실제로 돈다(파일이 없으면 통째로 skip된다).
+
+작품을 갱신하려면 키를 가진 사람이 `npm run build:data`를 돌리고 바뀐
+`public/catalog.json`을 커밋한다. 원본 덤프(`data/*.raw.json`)는 여전히
+추적하지 않는다 — 색인만 있으면 되고 원본은 크다.
+
+## 옛 주소
+
+결은 예전에 `aj-yang.github.io/gyeol`에서 서빙됐다. 배포가 이리로 오면서
+주소가 `aj-yang.github.io/playground/gyeol`로 바뀌었다. 결은 결과 공유와
+궁합(`/vs/`)이 핵심이라 그동안 뿌려진 링크가 옛 주소를 가리키고 있다 —
+원본 저장소(`AJ-yang/gyeol`)의 `gh-pages`를 어떻게 할지는 별도 작업이다.
 
 ## 프로젝트를 추가할 때
 

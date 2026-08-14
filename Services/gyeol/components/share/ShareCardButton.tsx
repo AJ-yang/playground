@@ -11,9 +11,8 @@ import {
 } from '@/lib/gyeol/share-card'
 import { track } from '@/lib/gyeol/track'
 import type { BreakdownRow } from '@/lib/gyeol/breakdown'
+import { SITE_LABEL } from '@/lib/gyeol/site'
 import type { CatalogEntry, Gyeol } from '@/lib/gyeol/types'
-
-const SITE_URL = 'aj-yang.github.io/gyeol'
 
 type State = 'idle' | 'working' | 'failed' | 'copied'
 
@@ -69,7 +68,7 @@ export function ShareCardButton({
       const context = canvas.getContext('2d')
       if (!context) throw new Error('canvas 2d 컨텍스트를 못 얻었다')
 
-      drawShareCard(context, { format, gyeol, rows, posters, decisive, siteUrl: SITE_URL })
+      drawShareCard(context, { format, gyeol, rows, posters, decisive, siteUrl: SITE_LABEL })
 
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
       if (!blob) throw new Error('이미지로 못 바꿨다')

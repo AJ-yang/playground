@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
+import { SITE_LABEL } from '@/lib/gyeol/site'
 
 /**
  * 궁합 링크의 미리보기.
@@ -62,7 +63,7 @@ export default async function Image() {
         <div
           style={{ display: 'flex', fontSize: 28, color: 'rgba(255,255,255,0.5)', marginTop: 56 }}
         >
-          aj-yang.github.io/gyeol
+          {SITE_LABEL}
         </div>
       </div>
     ),

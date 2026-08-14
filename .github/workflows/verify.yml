@@ -17,11 +17,6 @@ concurrency:
   group: verify-${{ github.ref }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    # 게임은 저장소 루트가 아니라 Games/joseon-defense/ 안에 있다.
-    working-directory: Games/joseon-defense
-
 jobs:
   verify:
     # 같은 저장소의 브랜치는 push와 pull_request가 **둘 다** 발화해서 같은
@@ -32,6 +27,10 @@ jobs:
       github.event_name == 'push' ||
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        # 게임은 저장소 루트가 아니라 Games/joseon-defense/ 안에 있다.
+        working-directory: Games/joseon-defense
     steps:
       - uses: actions/checkout@v4
 
@@ -53,3 +52,33 @@ jobs:
       # 어긋나면 종료 코드 1로 떨어진다.
       - name: 밸런스 회귀 게이트
         run: npm run balance
+
+  # 결의 배포가 이 저장소로 넘어왔으므로 결이 깨지면 배포도 깨진다.
+  # deploy.yml은 main에서만 도는데 그때 알면 늦어서, 여기서 먼저 잡는다.
+  gyeol:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Services/gyeol
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Services/gyeol/package-lock.json
+
+      - run: npm ci
+
+      # public/catalog.json을 커밋해 둔 덕에 색인 검증 11건이 실제로 돈다.
+      # 파일이 없으면 vitest가 그 파일들을 통째로 skip해서 조용히 지나간다.
+      - name: 테스트
+        run: npm test
+
+      # deploy.yml이 돌리는 것과 같은 명령이다 — 배포용 basePath까지 그대로.
+      - name: 배포 빌드
+        run: npm run build:pages
