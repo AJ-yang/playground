@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { ResultView } from '@/components/ResultView'
+import { ResultView } from '@/components/result/ResultView'
 import { GYEOL_TYPES } from '@/data/gyeol-types'
 
 /**

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Perforations, ProjectorBeam, VELVET, VELVET_LINE, VELVET_SOFT, VELVET_TEXT } from '@/components/cinema'
+import { Perforations, ProjectorBeam, VELVET, VELVET_LINE, VELVET_SOFT, VELVET_TEXT } from '@/components/common/cinema'
 
 /**
  * 첫 화면.

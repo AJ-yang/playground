@@ -5,7 +5,7 @@ import {
   VELVET_SOFT,
   VELVET_TEXT,
   VelvetButton,
-} from '@/components/cinema'
+} from '@/components/common/cinema'
 
 /**
  * 라운드 시작 전 안내 화면.

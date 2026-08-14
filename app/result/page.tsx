@@ -1,6 +1,6 @@
 // app/result/page.tsx
 import { Suspense } from 'react'
-import { ResultView } from '@/components/ResultView'
+import { ResultView } from '@/components/result/ResultView'
 
 /**
  * 결이 붙지 않은 결과 주소.

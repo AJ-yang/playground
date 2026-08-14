@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { PickView } from '@/components/PickView'
+import { PickView } from '@/components/pick/PickView'
 
 /**
  * 작품을 고르는 화면.

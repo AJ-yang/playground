@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
-import { MatchUpView } from '@/components/MatchUpView'
+import { MatchUpView } from '@/components/vs/MatchUpView'
 
 /**
  * 두 사람의 궁합.

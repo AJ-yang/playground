@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { Perforations, VELVET, VELVET_LINE, VELVET_SOFT, VELVET_TEXT } from '@/components/cinema'
+import { Perforations, VELVET, VELVET_LINE, VELVET_SOFT, VELVET_TEXT } from '@/components/common/cinema'
 import { GYEOL_TYPES } from '@/data/gyeol-types'
 
 /**

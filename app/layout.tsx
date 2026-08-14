@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
-import { Analytics } from '@/components/Analytics'
-import { Footer } from '@/components/Footer'
+import { Analytics } from '@/components/common/Analytics'
+import { Footer } from '@/components/common/Footer'
 import './globals.css'
 
 export const metadata: Metadata = {

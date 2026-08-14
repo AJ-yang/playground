@@ -1,6 +1,6 @@
 'use client'
 
-import { VELVET_TEXT } from '@/components/cinema'
+import { VELVET_TEXT } from '@/components/common/cinema'
 import type { Duel as DuelData } from '@/lib/gyeol/duel'
 import type { CatalogEntry } from '@/lib/gyeol/types'
 
