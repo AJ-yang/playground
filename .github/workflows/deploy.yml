@@ -4,8 +4,9 @@
 # 담고 있으므로 배포도 같은 모양이 되어야 나중에 프로젝트를 늘릴 때 주소가
 # 흐트러지지 않는다.
 #
-#   Games/joseon-defense/dist  →  /playground/joseon-defense/
-#   site/index.html            →  /playground/
+#   Games/joseon-defense/dist            →  /playground/joseon-defense/
+#   Games/casino-learning-game/index.html →  /playground/casino-learning-game/
+#   site/index.html                      →  /playground/
 #
 # 프로젝트 사이트의 첫 칸(/playground/)은 저장소 이름이라 바꿀 수 없다. 대신
 # 그 아래를 저장소 구조와 맞춰 두면 주소에 프로젝트 이름이 드러난다.
@@ -13,6 +14,11 @@
 # 게임은 정적 파일 뭉치라(에셋 로딩도 서버도 없다) dist를 그대로 올리면 된다.
 # vite 설정의 `base: './'`가 상대 경로를 쓰므로 몇 단계 아래에 놓여도 그대로
 # 동작한다.
+#
+# **프로젝트마다 빌드가 있는 것은 아니다.** 조선 방어전은 vite로 dist를 굽지만
+# 카지노 학습 게임은 HTML 한 장이 곧 게임이라 빌드 단계가 없다. 그래서 조립은
+# "dist를 올린다"가 아니라 **프로젝트마다 올릴 것을 따로 적는다**로 둔다 —
+# 갈래 폴더를 훑어서 자동화하면 이 차이를 못 담는다.
 
 name: 배포
 
@@ -58,6 +64,10 @@ jobs:
         run: |
           mkdir -p _site/joseon-defense
           cp -r Games/joseon-defense/dist/. _site/joseon-defense/
+          # 카지노 학습 게임은 빌드 산출물이 없다 — HTML 한 장이 곧 게임이라
+          # dist가 아니라 소스를 그대로 올린다.
+          mkdir -p _site/casino-learning-game
+          cp Games/casino-learning-game/index.html _site/casino-learning-game/
           cp site/index.html _site/index.html
           find _site -type f | sort
 
