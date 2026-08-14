@@ -2,9 +2,19 @@
 
 이것저것 만들어 보는 저장소. 갈래별로 폴더를 두고 그 아래에 프로젝트를 하나씩 넣는다.
 
-| 폴더 | 무엇 | 상태 |
+| 갈래 | 무엇을 넣는가 | 기준 |
+| --- | --- | --- |
+| [`Games/`](Games/) | 놀라고 만든 것 | **재밌나?** |
+| [`Services/`](Services/) | 쓰라고 만든 것 — 도구·웹서비스·API·자동화 | **되나?** |
+
+**갈래는 취향 분류가 아니라 판단 기준의 분류다.** 재미로 평가하는 것과 쓸모로
+평가하는 것은 검증 방법도, 문서에 남겨야 하는 것도 다르다. 그래서 갈라 둔다.
+
+| 프로젝트 | 무엇 | 상태 |
 | --- | --- | --- |
 | [`Games/joseon-defense/`](Games/joseon-defense/) | **조선 방어전** — 왜구의 노략에서 병자호란까지, 여섯 전쟁으로부터 성을 지키는 경로형 타워디펜스 | [배포됨](https://aj-yang.github.io/playground/joseon-defense/) |
+| [`Games/casino-learning-game/`](Games/casino-learning-game/) | **카지노 게임 배우기** — 걸어다니며 룰을 익히는 학습용 카지노 | [배포됨](https://aj-yang.github.io/playground/casino-learning-game/) |
+| `Services/` | _(아직 없음)_ | — |
 
 저장소 루트의 `.claude/`·`.agents/`·`skills-lock.json`은 프로젝트가 아니라 이
 저장소에서 쓰는 도구 설정이다.
@@ -47,6 +57,7 @@ npm run balance    # 밸런스 회귀 게이트 — 설계 의도가 깨지면 �
 |---|---|
 | `site/index.html` | <https://aj-yang.github.io/playground/> |
 | `Games/joseon-defense/dist` | <https://aj-yang.github.io/playground/joseon-defense/> |
+| `Games/casino-learning-game/index.html` | <https://aj-yang.github.io/playground/casino-learning-game/> |
 
 첫 칸(`/playground/`)은 저장소 이름이라 바꿀 수 없다. 대신 그 아래를 저장소
 구조와 맞춰 두면 주소에 프로젝트 이름이 드러나고, 프로젝트를 늘려도 서로
