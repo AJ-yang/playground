@@ -1,6 +1,6 @@
 import type { Vec2 } from '../core/vec2'
 
-/** 폭발 링 이펙트. 징·금줄 솟대 착탄 시 생성. */
+/** 폭발 링 이펙트. 광역탄(`splashRadius > 0`)이 착탄할 때 생성. */
 export interface Blast {
   pos: Vec2
   radius: number

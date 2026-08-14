@@ -122,7 +122,7 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     levels: [
       lvl({ cost: 70, damage: 10, range: 3.2, fireRate: 1.9, projectileSpeed: 18 }),
       lvl({ cost: 60, damage: 16, range: 3.6, fireRate: 2.3, projectileSpeed: 18 }),
-      lvl({ cost: 115, damage: 24, range: 4.0, fireRate: 2.7, projectileSpeed: 20 }),
+      lvl({ cost: 100, damage: 24, range: 4.0, fireRate: 2.7, projectileSpeed: 20 }),
     ],
   },
   /**
@@ -151,7 +151,7 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     levels: [
       lvl({ cost: 80, damage: 22, range: 1.9, fireRate: 0.75, projectileSpeed: 36, splashRadius: 0.85 }),
       lvl({ cost: 70, damage: 36, range: 2.1, fireRate: 0.8, projectileSpeed: 36, splashRadius: 1.0 }),
-      lvl({ cost: 135, damage: 56, range: 2.3, fireRate: 0.85, projectileSpeed: 38, splashRadius: 1.2 }),
+      lvl({ cost: 120, damage: 56, range: 2.3, fireRate: 0.85, projectileSpeed: 38, splashRadius: 1.2 }),
     ],
   },
   mage: {
@@ -255,8 +255,8 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
       // 1.0/1.1/1.2로, 사거리를 3.2/3.5/3.8로 되돌리면 된다 — 타겟팅 규칙은
       // splashRadius가 0일 때만 동작하므로 저절로 꺼진다.
       lvl({ cost: 75, damage: 2, range: 3.8, fireRate: 1.8, projectileSpeed: 16, splashRadius: 0, slowAmount: 0.18, slowDuration: 4.0, cavalrySlow: 0.20 }),
-      lvl({ cost: 70, damage: 3, range: 4.2, fireRate: 2.0, projectileSpeed: 16, splashRadius: 0, slowAmount: 0.23, slowDuration: 4.8, cavalrySlow: 0.26 }),
-      lvl({ cost: 125, damage: 5, range: 4.6, fireRate: 2.2, projectileSpeed: 18, splashRadius: 0, slowAmount: 0.28, slowDuration: 5.6, cavalrySlow: 0.34 }),
+      lvl({ cost: 55, damage: 3, range: 4.2, fireRate: 2.0, projectileSpeed: 16, splashRadius: 0, slowAmount: 0.23, slowDuration: 4.8, cavalrySlow: 0.26 }),
+      lvl({ cost: 95, damage: 5, range: 4.6, fireRate: 2.2, projectileSpeed: 18, splashRadius: 0, slowAmount: 0.28, slowDuration: 5.6, cavalrySlow: 0.34 }),
     ],
   },
   venom: {
@@ -272,8 +272,8 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     desc: '대완구로 비격진천뢰를 쏘아 보내는 화약 전문 병종. 터진 뒤 몸에 박힌 쇳조각이 계속 상처를 낸다. 갑주도 산개도 소용없는 순수 피해라 양면 저항의 해답이지만, 상처는 중첩되지 않아 여러 기를 두어도 소용없다.',
     levels: [
       lvl({ cost: 100, damage: 4, range: 3.0, fireRate: 0.9, projectileSpeed: 12, poisonDps: 9, poisonDuration: 3.0 }),
-      lvl({ cost: 95, damage: 6, range: 3.2, fireRate: 0.95, projectileSpeed: 12, poisonDps: 16, poisonDuration: 3.5 }),
-      lvl({ cost: 170, damage: 9, range: 3.5, fireRate: 1.0, projectileSpeed: 14, poisonDps: 28, poisonDuration: 4.0 }),
+      lvl({ cost: 70, damage: 6, range: 3.2, fireRate: 0.95, projectileSpeed: 12, poisonDps: 16, poisonDuration: 3.5 }),
+      lvl({ cost: 120, damage: 9, range: 3.5, fireRate: 1.0, projectileSpeed: 14, poisonDps: 28, poisonDuration: 4.0 }),
     ],
   },
   /**
@@ -309,9 +309,9 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
       // 4.7이 거의 모든 구간을 덮은 탓이다 — 여기서도 커버리지가 범인이었다.
       // 데미지가 아니라 **사거리**를 깎았다. 4.3이면 여전히 전 기물 최장이지만
       // (사수 4.0) 혼자 판을 덮지는 못한다.
-      lvl({ cost: 125, damage: 29, range: 3.9, fireRate: 0.72, projectileSpeed: 30 }),
-      lvl({ cost: 110, damage: 41, range: 4.1, fireRate: 0.82, projectileSpeed: 30 }),
-      lvl({ cost: 195, damage: 50, range: 4.3, fireRate: 0.92, projectileSpeed: 32 }),
+      lvl({ cost: 165, damage: 29, range: 3.9, fireRate: 0.72, projectileSpeed: 30 }),
+      lvl({ cost: 100, damage: 41, range: 4.1, fireRate: 0.82, projectileSpeed: 30 }),
+      lvl({ cost: 95, damage: 50, range: 4.3, fireRate: 0.92, projectileSpeed: 32 }),
     ],
   },
   banner: {
@@ -327,8 +327,8 @@ export const TOWER_DEFS: Record<string, TowerDef> = {
     desc: '북을 쳐 전진을 알리고 깃발로 신호를 보낸다. 스스로는 한 명도 죽이지 못하지만, 지휘가 닿는 범위 안의 기물이 더 빨리 쏜다. 여럿을 겹쳐 놓아도 가장 센 하나만 듣고, 기고끼리는 서로를 지휘하지 않는다.',
     levels: [
       lvl({ cost: 90, damage: 0, range: 0.1, fireRate: 0.1, auraFireRate: 0.18, auraRange: 2.6 }),
-      lvl({ cost: 80, damage: 0, range: 0.1, fireRate: 0.1, auraFireRate: 0.26, auraRange: 2.9 }),
-      lvl({ cost: 145, damage: 0, range: 0.1, fireRate: 0.1, auraFireRate: 0.35, auraRange: 3.2 }),
+      lvl({ cost: 70, damage: 0, range: 0.1, fireRate: 0.1, auraFireRate: 0.26, auraRange: 2.9 }),
+      lvl({ cost: 120, damage: 0, range: 0.1, fireRate: 0.1, auraFireRate: 0.35, auraRange: 3.2 }),
     ],
   },
 }

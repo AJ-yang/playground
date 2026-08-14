@@ -384,7 +384,7 @@ export class Hud {
       // 타워 배지 — 보드에 서는 건물 그림을 그대로 축소해 넣는다.
       // 색 사각형만 있던 시절에는 메뉴와 보드가 별개의 언어였다.
       //
-      // 배경에 타워 색을 옅게 깐다. 굿청 징·금줄 솟대는 몸체가 회색 석재라
+      // 배경에 타워 색을 옅게 깐다. 몸체가 같은 계열 색인 기물끼리는
       // 그림만으로는 작은 크기에서 서로 비슷해 보였다.
       const badge = compact ? 24 : 32
       ctx.fillStyle = `${def.color}22`
@@ -612,14 +612,20 @@ export class Hud {
       // 위협 태그
       // 태그는 실루엣이 나타내는 것과 같은 기준으로 뽑는다.
       // 형태와 글자가 어긋나면 형태를 못 믿게 된다.
+      //
+      // **글자는 게임이 실제로 쓰는 말이어야 한다.** 세계관을 조선의 전쟁으로
+      // 갈면서 공중→기마 / 장갑→갑주 / 마법저항→산개로 개명했는데 이 태그만
+      // 옛 이름이 남아, 말 탄 병사에게 「공중」이 붙고 화약밖에 없는 게임에
+      // 「마저(마법저항)」가 떴다. 상성을 가르치는 유일한 화면이 게임의 다른
+      // 어디에도 없는 단어로 말하고 있었던 셈이다.
       const sil = def.silhouette
       const tags: string[] = []
-      if (def.flying) tags.push('공중')
+      if (def.flying) tags.push('기마')
       if (def.armor > 0 && (sil === 'armored' || sil === 'bulwark' || sil === 'boss')) {
-        tags.push(`장갑 ${def.armor}`)
+        tags.push(`갑주 ${def.armor}`)
       }
       if (def.magicResist > 0 && (sil === 'warded' || sil === 'bulwark' || sil === 'boss')) {
-        tags.push(`마저 ${Math.round(def.magicResist * 100)}%`)
+        tags.push(`산개 ${Math.round(def.magicResist * 100)}%`)
       }
       if (sil === 'swift') tags.push('고속')
       if (def.boss) tags.push('보스')

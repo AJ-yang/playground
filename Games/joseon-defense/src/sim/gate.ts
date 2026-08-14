@@ -25,6 +25,7 @@
  */
 
 import { STAGES, type StageDef } from '../data/stages'
+import { TOWER_DEFS, type TowerDef } from '../data/towers'
 import { aggregate, seedFor, simulate, towersAtStage } from './headless'
 import { STRATEGIES, findStrategy, type Strategy } from './strategies'
 
@@ -90,6 +91,57 @@ interface Breach {
   detail: string
 }
 
+/**
+ * 「넓히기 vs 키우기」가 실제로 선택인가 — 수치만으로 검사한다.
+ *
+ * GDD 3장은 매 웨이브의 결정 중 첫째로 *"업그레이드는 골드 대비 DPS가 좋고,
+ * 신규 건설은 커버리지가 넓어진다"* 를 든다. 그런데 그 앞 절반이 오랫동안
+ * 사실이 아니었다. 강화의 **한계** 골드당 DPS가 새 기물 1기보다 낮으면
+ * 강화는 골드 효율에서도 지는 것이라, 커버리지까지 손해인 쪽이 이길 이유가
+ * 하나도 없다. 실제로 그랬다 — 딜 기물 6종 중 5종이 L3에서 그랬고(포수는
+ * 2.63배), 시뮬레이션에서도 「키우기 우선」이 S5·S6 클리어율 0%였다.
+ *
+ * 이건 판을 돌릴 필요가 없다. 표만 읽으면 나오는 산수라 게이트에서 가장 싼
+ * 규칙이고, 그래서 수치를 만질 때마다 즉시 걸린다.
+ *
+ * **상태이상 기물(거마작·별파진·기고)은 제외한다.** 값이 딜이 아니라
+ * 감속·중독·오라에 있어서 「골드당 DPS」라는 잣대 자체가 성립하지 않는다.
+ * 셋 다 중첩되지 않아 성장축이 강화뿐이라는 별개의 사정도 있어서, 그쪽
+ * 가격은 산수가 아니라 시뮬레이션으로 잡는다.
+ */
+const SUPPORT_TOWERS = new Set(['frost', 'venom', 'banner'])
+
+/** 광역은 한 발이 여러 마리를 때리므로 반경만큼 가중한다. */
+function effectiveDps(level: TowerDef['levels'][number]): number {
+  return level.damage * level.fireRate * (1 + level.splashRadius)
+}
+
+function checkUpgradeCurve(): Breach[] {
+  const breaches: Breach[] = []
+  for (const def of Object.values(TOWER_DEFS)) {
+    if (SUPPORT_TOWERS.has(def.id)) continue
+    const base = effectiveDps(def.levels[0]) / def.levels[0].cost
+    if (!Number.isFinite(base) || base <= 0) continue
+
+    let prev = effectiveDps(def.levels[0])
+    for (let i = 1; i < def.levels.length; i++) {
+      const level = def.levels[i]!
+      const gained = effectiveDps(level) - prev
+      const ratio = gained / level.cost
+      prev = effectiveDps(level)
+      if (ratio >= base) continue
+      breaches.push({
+        rule: '강화가 신규 건설보다 골드 효율이 나쁘지 않다',
+        detail:
+          `${def.name} L${i + 1} — 한계 ${ratio.toFixed(3)} DPS/G < 새 기물 ${base.toFixed(3)} DPS/G ` +
+          `(${(base / ratio).toFixed(2)}배 손해). ${level.cost}G → ` +
+          `${Math.floor(gained / base)}G 이하로 낮추거나 성능을 올릴 것`,
+      })
+    }
+  }
+  return breaches
+}
+
 function stageOf(id: string): StageDef {
   const stage = STAGES.find((s) => s.id === id)
   if (!stage) throw new Error(`알 수 없는 스테이지: ${id}`)
@@ -140,7 +192,8 @@ export function runGate(): number {
     }
   }
 
-  const breaches: Breach[] = []
+  // 수치만 읽는 규칙이라 판을 돌리기 전에 먼저 본다.
+  const breaches: Breach[] = checkUpgradeCurve()
   for (const rule of RULES) {
     for (const stageId of rule.stages) {
       const stage = stageOf(stageId)
@@ -174,7 +227,12 @@ export function runGate(): number {
   }
 
   const secs = ((Date.now() - started) / 1000).toFixed(1)
-  console.log(`밸런스 게이트 — ${RULES.length}개 규칙, ${total}판, ${secs}초\n`)
+  console.log(`밸런스 게이트 — ${RULES.length + 1}개 규칙, ${total}판, ${secs}초\n`)
+
+  const curveRule = '강화가 신규 건설보다 골드 효율이 나쁘지 않다'
+  const curveHits = breaches.filter((b) => b.rule === curveRule)
+  console.log(`${curveHits.length ? '✗' : '✓'} ${curveRule}`)
+  for (const b of curveHits) console.log(`    ${b.detail}`)
 
   for (const rule of RULES) {
     const hit = breaches.filter((b) => b.rule === rule.what)
