@@ -43,7 +43,7 @@
         font-size: 14px;
       }
       h2 {
-        margin: 0 0 14px;
+        margin: 40px 0 14px;
         font-size: 12px;
         font-weight: 600;
         letter-spacing: 0.14em;
@@ -63,6 +63,8 @@
         border-color: var(--accent);
         transform: translateY(-2px);
       }
+      /* 카드끼리 붙지 않게. 마지막 카드에는 여백이 안 생기도록 인접 선택자를 쓴다. */
+      a.card + a.card { margin-top: 12px; }
       .title {
         font-size: 20px;
         font-weight: 700;
@@ -122,6 +124,20 @@
           <span class="tag">HTML 한 장</span>
           <span class="tag">빌드 없음</span>
           <span class="tag">온보딩 가이드</span>
+        </div>
+      </a>
+
+      <h2>Services</h2>
+      <a class="card" href="./gyeol/">
+        <div class="title">결</div>
+        <div class="sub">
+          재미있게 본 영화·드라마를 고르면 당신의 이야기 취향에 이름을 붙여준다
+        </div>
+        <div class="tags">
+          <span class="tag">Next.js</span>
+          <span class="tag">서버 없음</span>
+          <span class="tag">취향 25결</span>
+          <span class="tag">정적 내보내기</span>
         </div>
       </a>
 

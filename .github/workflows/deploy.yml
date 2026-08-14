@@ -6,6 +6,7 @@
 #
 #   Games/joseon-defense/dist            →  /playground/joseon-defense/
 #   Games/casino-learning-game/index.html →  /playground/casino-learning-game/
+#   Services/gyeol/out                   →  /playground/gyeol/
 #   site/index.html                      →  /playground/
 #
 # 프로젝트 사이트의 첫 칸(/playground/)은 저장소 이름이라 바꿀 수 없다. 대신
@@ -16,9 +17,11 @@
 # 동작한다.
 #
 # **프로젝트마다 빌드가 있는 것은 아니다.** 조선 방어전은 vite로 dist를 굽지만
-# 카지노 학습 게임은 HTML 한 장이 곧 게임이라 빌드 단계가 없다. 그래서 조립은
-# "dist를 올린다"가 아니라 **프로젝트마다 올릴 것을 따로 적는다**로 둔다 —
-# 갈래 폴더를 훑어서 자동화하면 이 차이를 못 담는다.
+# 카지노 학습 게임은 HTML 한 장이 곧 게임이라 빌드 단계가 없다. 결은 Next.js
+# 정적 내보내기라 dist도 아닌 out을 굽고, 주소가 빌드 시점에 basePath로 박히기
+# 때문에 빌드 명령에 경로가 들어간다. 그래서 조립은 "dist를 올린다"가 아니라
+# **프로젝트마다 올릴 것을 따로 적는다**로 둔다 — 갈래 폴더를 훑어서
+# 자동화하면 이 차이를 못 담는다.
 
 name: 배포
 
@@ -48,7 +51,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: Games/joseon-defense/package-lock.json
+          cache-dependency-path: |
+            Games/joseon-defense/package-lock.json
+            Services/gyeol/package-lock.json
 
       - run: npm ci
         working-directory: Games/joseon-defense
@@ -59,6 +64,16 @@ jobs:
         run: npm run build
         working-directory: Games/joseon-defense
 
+      - run: npm ci
+        working-directory: Services/gyeol
+
+      # basePath가 빌드 시점에 박힌다 — 주소를 바꾸려면 다시 구워야 한다.
+      # 경로는 package.json의 build:pages에 적혀 있다(/playground/gyeol).
+      # 색인(public/catalog.json)은 TMDB 키가 있어야 만들 수 있어서 커밋해 뒀다.
+      - name: 결 빌드
+        run: npm run build:pages
+        working-directory: Services/gyeol
+
       # 프로젝트가 늘어나면 여기에 한 줄씩 붙인다.
       - name: 배포 트리 조립
         run: |
@@ -68,8 +83,15 @@ jobs:
           # dist가 아니라 소스를 그대로 올린다.
           mkdir -p _site/casino-learning-game
           cp Games/casino-learning-game/index.html _site/casino-learning-game/
+          # 결의 out/에는 .nojekyll 같은 숨김 파일이 있으므로 `.`로 끝내
+          # 딸려 오게 한다. (이 저장소는 deploy-pages로 올리므로 Jekyll이
+          # 돌지 않는다 — .nojekyll은 없어도 되지만 있어도 해가 없다.)
+          mkdir -p _site/gyeol
+          cp -r Services/gyeol/out/. _site/gyeol/
           cp site/index.html _site/index.html
-          find _site -type f | sort
+          # 조립 결과를 로그에 남긴다. 결만 800개가 넘어서 개수만 센다.
+          find _site -type f | wc -l
+          find _site -maxdepth 2 -not -path '*/_next/*' | sort
 
       # Pages는 저장소 설정(Settings → Pages → Source: GitHub Actions)에서 켜 둔다.
       # `enablement: true`로 워크플로가 켜게 해 봤지만 기본 토큰에는 사이트를

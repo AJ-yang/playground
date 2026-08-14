@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/*
+ * 이 서비스는 다크 배경 고정이라 스캐폴드가 만든 라이트/다크 변수는 쓰지 않는다.
+ * 배경과 글자색은 layout.tsx의 Tailwind 클래스가 정한다.
+ *
+ * 폰트는 본문이 대부분 한글이라 OS별 한글 폰트를 앞에 둔다.
+ * 스캐폴드 기본값인 Arial에는 한글 글리프가 없어 폴백 폰트로 밀린다.
+ */
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", Pretendard, "Segoe UI",
+    "Malgun Gothic", system-ui, sans-serif;
+}
