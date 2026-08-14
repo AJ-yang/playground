@@ -13,8 +13,12 @@
 | [`Games/casino-learning-game/`](Games/casino-learning-game/) | **카지노 게임 배우기** — 걸어다니며 룰을 익히는 학습용 카지노 | [배포됨](https://aj-yang.github.io/playground/casino-learning-game/) |
 | [`Services/gyeol/`](Services/gyeol/) | **결(gyeol)** — 영화·드라마 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/gyeol/) · 자체 저장소에서 배포 |
 
-저장소 루트의 `.claude/`·`.agents/`·`skills-lock.json`은 프로젝트가 아니라 이
-저장소에서 쓰는 도구 설정이다.
+갈래 폴더 밖의 것들은 프로젝트가 아니다.
+
+- [`site/`](site/) — <https://aj-yang.github.io/playground/> 로 배포되는 랜딩
+  페이지(`index.html` 한 장). 프로젝트를 추가하면 여기에 카드를 붙인다.
+- `.claude/`·`.agents/`·`skills-lock.json` — 이 저장소에서 쓰는 도구 설정
+- `.github/workflows/` — 검증(`verify.yml`)과 배포(`deploy.yml`)
 
 ## 조선 방어전
 
