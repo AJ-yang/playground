@@ -12,6 +12,7 @@
 | [`Games/joseon-defense/`](Games/joseon-defense/) | **조선 방어전** — 왜구의 노략에서 병자호란까지, 여섯 전쟁으로부터 성을 지키는 경로형 타워디펜스 | [배포됨](https://aj-yang.github.io/playground/joseon-defense/) |
 | [`Games/casino-learning-game/`](Games/casino-learning-game/) | **카지노 게임 배우기** — 걸어다니며 룰을 익히는 학습용 카지노 | [배포됨](https://aj-yang.github.io/playground/casino-learning-game/) |
 | [`Services/gyeol/`](Services/gyeol/) | **결(gyeol)** — 영화·드라마 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/playground/gyeol/) |
+| [`Services/volleyball-rotation/`](Services/volleyball-rotation/) | **배구 로테이션 보드** — 6인제 로테이션·대형을 코트 위에 놓고 보는 보드 | [배포됨](https://aj-yang.github.io/playground/volleyball-rotation/) |
 
 갈래 폴더 밖의 것들은 프로젝트가 아니다.
 
@@ -60,13 +61,14 @@ npm run balance    # 밸런스 회귀 게이트 — 설계 의도가 깨지면 �
 | `Games/joseon-defense/dist` | <https://aj-yang.github.io/playground/joseon-defense/> |
 | `Games/casino-learning-game/index.html` | <https://aj-yang.github.io/playground/casino-learning-game/> |
 | `Services/gyeol/out` | <https://aj-yang.github.io/playground/gyeol/> |
+| `Services/volleyball-rotation/index.html` | <https://aj-yang.github.io/playground/volleyball-rotation/> |
 
 **결은 앞의 셋과 달리 주소가 빌드 시점에 박힌다.** Next.js 정적
 내보내기라 `basePath`가 산출물 안에 문자열로 들어가서, 파일을 옮기는 것만으로는
 주소가 바뀌지 않는다. 배포 경로를 넣어 다시 굽는다 —
-[`Services/README.md`](Services/README.md)에 적어 뒀다. 결은 전에
-`aj-yang.github.io/gyeol`에서 서빙됐고, 옛 주소로 뿌려진 공유 링크를 어떻게
-할지는 남은 작업이다.
+[`Services/README.md`](Services/README.md)에 적어 뒀다. 결이 전에 쓰던 주소
+`aj-yang.github.io/gyeol`은 원본 저장소의 `gh-pages`에 리다이렉트만 남겨
+뒀으므로, 그동안 뿌려진 공유 링크는 그대로 산다.
 
 첫 칸(`/playground/`)은 저장소 이름이라 바꿀 수 없다. 대신 그 아래를 저장소
 구조와 맞춰 두면 주소에 프로젝트 이름이 드러나고, 프로젝트를 늘려도 서로
