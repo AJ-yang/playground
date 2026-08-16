@@ -402,4 +402,7 @@ Object.assign(window as unknown as Record<string, unknown>, {
   __game: () => game,
   __player: () => player,
   __stage: () => stage,
+  // 드로우콜·삼각형 수를 콘솔에서 바로 볼 수 있게. 적이 마흔 마리 넘게 깔릴 때
+  // 무엇이 비싼지는 추측하지 말고 이걸로 봐야 한다.
+  __render: () => renderer.info.render,
 })

@@ -307,11 +307,25 @@ export class World {
   }
 
   /**
-   * 맵 경계의 토성(土城).
+   * 맵 경계의 성벽(石城).
    *
    * 1인칭에서 보이지 않는 벽에 부딪히는 것만큼 나쁜 것이 없다. 걸어서 나갈 수
    * 없는 곳에는 반드시 눈에 보이는 물건이 서 있어야 한다. 길이 드나드는
    * 칸만 비워 두면 그 구멍이 곧 성문이 된다.
+   *
+   * **조선 성곽의 세 겹을 그대로 쌓는다.**
+   *   체성(體城)  아래가 넓고 위가 좁은 사다리꼴 몸통. 돌을 쌓아 올린 성벽은
+   *               수직이 아니라 안쪽으로 기울어 있다(規式). 반듯한 상자로 세우면
+   *               콘크리트 옹벽이 되고, 그 순간 전장이 공사장이 된다.
+   *   미석(眉石)  몸통 위에 한 겹 내밀어 두른 갓돌. 이 그림자 선 하나가
+   *               "쌓아 올린 것"과 "깎아 세운 것"을 가른다.
+   *   여장(女牆)  꼭대기의 담. 낱개로 끊어 세우면 그 틈이 곧 총안(銃眼)이다.
+   *               지평선에 톱니가 생겨 멀리서도 성이 성으로 읽힌다.
+   *
+   * 여기에 일정 간격으로 **치(雉)** 를 바깥으로 내민다. 성벽에 붙은 적을 옆에서
+   * 치려고 튀어나온 네모 돌출부인데, 밋밋하게 이어지던 벽면에 리듬이 생긴다.
+   *
+   * 조각이 넷으로 늘었지만 드로우콜은 여전히 넷이다 — 전부 인스턴스로 찍는다.
    */
   private buildWalls(game: Game): void {
     const { cols, rows } = game.grid
@@ -342,32 +356,134 @@ export class World {
     }
 
     const blocks = spots.filter((s) => !open.has(`${s.col},${s.row}`))
-    const geometry = this.track(new THREE.BoxGeometry(TILE_M, 3.4, TILE_M))
-    const material = this.track(
-      new THREE.MeshLambertMaterial({ color: C.wall, flatShading: true }),
+
+    const BODY_H = 3.6
+    const CAP_H = 0.22
+    const MERLON_H = 0.9
+
+    // 사각기둥은 CylinderGeometry(radialSegments=4)로 만든다 — 위아래 굵기를
+    // 다르게 줄 수 있는 것이 BoxGeometry에는 없는 성질이고, 그 기울기가
+    // 성벽을 성벽으로 보이게 하는 전부다. 45도 돌려 면이 축과 나란해지게 한다.
+    const half = TILE_M / 2
+    const bodyGeo = this.track(
+      new THREE.CylinderGeometry(half * 0.92 * Math.SQRT2, half * 1.06 * Math.SQRT2, BODY_H, 4)
+        .rotateY(Math.PI / 4),
     )
-    const mesh = new THREE.InstancedMesh(geometry, material, blocks.length)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
+    const capGeo = this.track(new THREE.BoxGeometry(TILE_M * 0.94, CAP_H, TILE_M * 0.94))
+    // 지대석(地臺石) — 성벽이 딛는 받침돌. 벽면이 땅에서 곧바로 솟으면 세워 둔
+    // 판때기로 보이고, 한 겹 내밀어 두면 그 위에 쌓아 올린 것으로 읽힌다.
+    const plinthGeo = this.track(new THREE.BoxGeometry(TILE_M * 1.08, 0.34, TILE_M * 1.08))
+    const merlonGeo = this.track(new THREE.BoxGeometry(TILE_M * 0.42, MERLON_H, TILE_M * 0.5))
+    const spurGeo = this.track(
+      new THREE.CylinderGeometry(half * 0.72 * Math.SQRT2, half * 0.88 * Math.SQRT2, BODY_H + CAP_H, 4)
+        .rotateY(Math.PI / 4),
+    )
+
+    const stone = this.track(new THREE.MeshLambertMaterial({ color: C.wall, flatShading: true }))
+    const capStone = this.track(
+      new THREE.MeshLambertMaterial({ color: C.wallDark, flatShading: true }),
+    )
+
+    // 치는 일곱 칸마다 하나. 촘촘하면 벽이 톱니처럼 보이고, 드물면 리듬이 안 생긴다.
+    const spurAt = blocks.map((b, i) => i % 7 === 3 && !this.isCorner(b, cols, rows))
+    const spurCount = spurAt.filter(Boolean).length
+
+    const body = new THREE.InstancedMesh(bodyGeo, stone, blocks.length)
+    const plinth = new THREE.InstancedMesh(plinthGeo, capStone, blocks.length)
+    const cap = new THREE.InstancedMesh(capGeo, capStone, blocks.length)
+    const merlons = new THREE.InstancedMesh(merlonGeo, stone, blocks.length * 2)
+    const spurs = new THREE.InstancedMesh(spurGeo, stone, Math.max(1, spurCount))
+    for (const m of [body, plinth, cap, merlons, spurs]) {
+      m.castShadow = true
+      m.receiveShadow = true
+    }
 
     const rng = new Rng(0xc0ffee)
     const matrix = new THREE.Matrix4()
     const pos = new THREE.Vector3()
     const quat = new THREE.Quaternion()
     const scale = new THREE.Vector3()
+    const tint = new THREE.Color()
+    let merlonIndex = 0
+    let spurIndex = 0
+
     for (let i = 0; i < blocks.length; i++) {
       const b = blocks[i]!
+      const yaw = this.wallYaw(b, cols, rows)
+      quat.setFromEuler(new THREE.Euler(0, yaw + rng.range(-0.02, 0.02), 0))
+      // 손으로 쌓은 것이라 높이가 조금씩 다르다. 반듯하면 압출한 물건이 된다.
+      const h = rng.range(0.94, 1.06)
+      const top = BODY_H * h - 0.3
+
       this.frame.tileCenter(b.col, b.row, 0, pos)
-      // 흙으로 쌓은 성이라 높이가 들쭉날쭉해야 한다. 반듯하면 콘크리트로 보인다.
-      const h = rng.range(0.85, 1.15)
-      pos.y = (3.4 * h) / 2 - 0.3
-      quat.setFromEuler(new THREE.Euler(0, rng.range(-0.05, 0.05), 0))
-      scale.set(1.02, h, 1.02)
-      matrix.compose(pos, quat, scale)
-      mesh.setMatrixAt(i, matrix)
+      const baseX = pos.x
+      const baseZ = pos.z
+
+      pos.y = top - (BODY_H * h) / 2
+      scale.set(1, h, 1)
+      body.setMatrixAt(i, matrix.compose(pos, quat, scale))
+      // 돌 색을 개체마다 살짝 흔든다. 한 색이면 벽 전체가 한 장의 판으로 보인다.
+      // 인스턴스 색은 **재질색에 곱해진다.** 여기에 벽 색을 한 번 더 넣으면
+      // 두 번 곱해져 벽이 통째로 시커메진다. 밝기만 흔든다.
+      const shade = rng.range(0.86, 1.12)
+      body.setColorAt(i, tint.setScalar(shade))
+
+      pos.y = top + CAP_H / 2
+      scale.set(1, 1, 1)
+      cap.setMatrixAt(i, matrix.compose(pos, quat, scale))
+
+      pos.y = 0.1
+      plinth.setMatrixAt(i, matrix.compose(pos, quat, scale))
+
+      // 여장 둘 — 그 사이가 총안이다. 바깥쪽 가장자리에 세운다.
+      for (const side of [-1, 1]) {
+        // 성벽 진행 방향(로컬 +X)으로 벌리고, 바깥(로컬 −Z)으로 붙인다.
+        const ox = Math.cos(yaw) * side * TILE_M * 0.26 + Math.sin(yaw) * -TILE_M * 0.22
+        const oz = -Math.sin(yaw) * side * TILE_M * 0.26 + Math.cos(yaw) * -TILE_M * 0.22
+        pos.set(baseX + ox, top + CAP_H + MERLON_H / 2, baseZ + oz)
+        merlons.setMatrixAt(merlonIndex, matrix.compose(pos, quat, scale))
+        merlons.setColorAt(merlonIndex, tint.setScalar(rng.range(0.9, 1.1)))
+        merlonIndex++
+      }
+
+      if (spurAt[i]) {
+        // 치 — 바깥으로 반 칸 내민다.
+        const ox = Math.sin(yaw) * -TILE_M * 0.62
+        const oz = Math.cos(yaw) * -TILE_M * 0.62
+        pos.set(baseX + ox, top - (BODY_H * h) / 2 + 0.1, baseZ + oz)
+        scale.set(1, h * 0.96, 1)
+        spurs.setMatrixAt(spurIndex, matrix.compose(pos, quat, scale))
+        spurs.setColorAt(spurIndex, tint.setScalar(rng.range(0.88, 1.08)))
+        spurIndex++
+      }
     }
-    mesh.instanceMatrix.needsUpdate = true
-    this.root.add(mesh)
+
+    merlons.count = merlonIndex
+    spurs.count = spurIndex
+    for (const m of [body, plinth, cap, merlons, spurs]) {
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+    }
+    this.root.add(body, plinth, cap, merlons, spurs)
+  }
+
+  /**
+   * 성벽 한 칸이 놓인 방향 — 로컬 +X가 벽을 따라가고 로컬 −Z가 성 바깥을 본다.
+   *
+   * 여장과 치를 어느 쪽에 붙일지가 전부 이 값에서 나온다. 안팎을 뒤집으면
+   * 총안이 성 안쪽을 겨누게 되어, 공성 쪽이 유리한 이상한 성이 된다.
+   */
+  private wallYaw(b: { col: number; row: number }, cols: number, rows: number): number {
+    if (b.row < 0) return 0
+    if (b.row >= rows) return Math.PI
+    if (b.col < 0) return Math.PI / 2
+    if (b.col >= cols) return -Math.PI / 2
+    return 0
+  }
+
+  /** 네 귀퉁이 — 두 방향을 동시에 면해 치를 내밀 자리가 아니다. */
+  private isCorner(b: { col: number; row: number }, cols: number, rows: number): boolean {
+    return (b.col < 0 || b.col >= cols) && (b.row < 0 || b.row >= rows)
   }
 
   /**
@@ -478,6 +594,16 @@ export class World {
 
     // 하늘/땅 반사광. 이게 없으면 달빛이 닿지 않는 면이 완전한 검정이 된다.
     this.root.add(new THREE.HemisphereLight(0x3d5273, 0x232619, 3.4))
+
+    // 채움광 — 달의 **반대편**에서 아주 약하게. 그림자를 만들지 않는다.
+    //
+    // 반구광만으로는 수직면이 살아나지 않는다. 하늘빛은 위에서 내려오므로
+    // 성벽의 안쪽 면이나 적의 등처럼 서 있는 면에는 거의 닿지 않아서, 달을
+    // 등진 쪽이 통째로 검은 판이 됐다. 방향이 반대인 약한 빛 하나가 그 면에
+    // 형태를 돌려준다 — 밝히는 것이 목적이 아니라 **면을 구분시키는** 것이다.
+    const fill = new THREE.DirectionalLight(0x8fa6c8, 1.5)
+    fill.position.set(70, 40, 90)
+    this.root.add(fill)
   }
 }
 
