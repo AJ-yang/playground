@@ -1,4 +1,4 @@
-import { DIFFICULTIES } from '../data/difficulty'
+import { DIFFICULTIES, getDifficulty } from '../data/difficulty'
 import { STAGES, type StageDef } from '../data/stages'
 import { TOWER_ORDER, buildCost, getTowerDef, type TowerLevelDef } from '../data/towers'
 import { DAMAGE_TYPE_LABEL, TARGET_PRIORITY_LABEL } from '../game/types'
@@ -81,6 +81,11 @@ export class Hud {
   private readonly toast = el('toast')
   private readonly palette = el('palette')
   private readonly vignette = el('vignette')
+  private readonly stagePanel = el('stagepanel')
+  private readonly stageFoot = el('sp-foot')
+  /** 전황판에서 매 프레임 갱신하는 유일한 줄 — 지금 판의 살아 있는 숫자. */
+  private stageLive: HTMLElement | null = null
+  private stagePanelSignature = ''
 
   private readonly screens: Record<Exclude<Screen, 'play'>, HTMLElement> = {
     select: el('screen-select'),
@@ -302,6 +307,116 @@ export class Hud {
 
     this.reticle.classList.toggle('build', aim.kind === 'build' && aim.ok)
     this.reticle.classList.toggle('blocked', aim.kind === 'build' && !aim.ok)
+  }
+
+  // ────────────────────────────── 전황판 (Tab) ──────────────────────────────
+
+  /**
+   * 스테이지별 진행 상태와 이번 판 요약.
+   *
+   * **시간은 멈추지 않는다.** 슈터의 스코어보드와 같은 규칙이다 — 누르고 있는
+   * 동안 웨이브는 계속 밀려오므로, 들여다보는 것 자체가 비용이다. 멈춰 놓고
+   * 봐도 되게 하면 그냥 두 번째 일시정지 화면이 되고, 그건 이미 Esc에 있다.
+   *
+   * 표가 답하는 질문은 둘이다 — **"여기까지 어떻게 왔는가"**(스테이지별 클리어와
+   * 최고 기록)와 **"지금 이 판은 어떤가"**(웨이브·생명·경제). 앞의 것은 진행도에서,
+   * 뒤의 것은 살아 있는 `Game`에서 온다.
+   *
+   * 목록은 열 때 한 번만 짓고, 매 프레임 갱신하는 것은 살아 있는 숫자 두 줄뿐이다.
+   * 60프레임마다 표 전체를 다시 그리면 그 자체로 프레임을 먹는다.
+   */
+  updateStagePanel(
+    open: boolean,
+    progress: Progress,
+    stage: StageDef,
+    game: Game,
+    elapsed: number,
+  ): void {
+    this.stagePanel.classList.toggle('hidden', !open)
+    if (!open) return
+
+    // 표의 내용이 달라지는 건 스테이지를 옮기거나 무언가를 깼을 때뿐이다.
+    const signature = `${stage.id}|${progress.difficulty}|${progress.clearedCount}`
+    if (signature !== this.stagePanelSignature) {
+      this.stagePanelSignature = signature
+      this.buildStagePanel(progress, stage)
+    }
+
+    if (this.stageLive) {
+      const waves = `${game.waves.waveNumber}/${game.waves.totalWaves}`
+      const phase = game.waves.running
+        ? `교전 · 남은 적 ${game.enemies.length}`
+        : `준비 ${Math.max(0, game.waves.prepRemaining).toFixed(0)}초`
+      this.set(
+        this.stageLive,
+        'spLive',
+        `웨이브 ${waves} · ${phase} · 생명 ${game.lives} · 골드 ${Math.floor(game.gold)}`,
+      )
+    }
+
+    const minutes = Math.floor(elapsed / 60)
+    const seconds = Math.floor(elapsed % 60)
+    this.set(
+      this.stageFoot,
+      'spFoot',
+      `처치 ${game.totalKills} · 유출 ${game.totalLeaked} · 획득 ${Math.floor(game.goldEarned)}G · ` +
+        `기물 ${game.towers.length}기 · 경과 ${minutes}:${String(seconds).padStart(2, '0')}`,
+    )
+  }
+
+  private buildStagePanel(progress: Progress, current: StageDef): void {
+    el('sp-diff').textContent = `난이도 ${getDifficulty(progress.difficulty).name} · ${progress.clearedCount}/${STAGES.length} 클리어`
+    this.stageLive = null
+
+    const rows = STAGES.map((stage) => {
+      const cleared = progress.isCleared(stage.id)
+      const unlocked = progress.isUnlocked(stage)
+      const isNow = stage.id === current.id
+      const best = progress.bestLivesFor(stage.id)
+
+      const row = document.createElement('div')
+      row.className = `sp-row${isNow ? ' now' : cleared ? ' done' : unlocked ? '' : ' locked'}`
+
+      const idx = document.createElement('div')
+      idx.className = 'idx'
+      idx.textContent = `S${stage.index}`
+
+      const name = document.createElement('div')
+      name.className = 'nm'
+      // 아직 못 깬 판에는 **무엇을 얻는지**를 같이 적는다. 진행 상태만 보여 주면
+      // "다음에 뭘 하지"에 답하지 못해, 표가 성적표로만 끝난다.
+      const reward =
+        !cleared && stage.unlocksTowers.length > 0
+          ? ` · 보상 ${stage.unlocksTowers.map((id) => getTowerDef(id).name).join('·')}`
+          : ''
+      name.innerHTML =
+        `<b>${stage.name}</b> <i>${stage.level.name} · 웨이브 ${stage.waves.length}${reward}</i>`
+
+      const state = document.createElement('div')
+      state.className = 'st'
+      state.textContent = isNow
+        ? '도전 중'
+        : cleared
+          ? best !== null
+            ? `클리어 · 생명 ${best} 남김`
+            : '클리어'
+          : unlocked
+            ? '미클리어'
+            : '잠김'
+
+      row.append(idx, name, state)
+
+      // 지금 판만 살아 있는 숫자를 한 줄 더 단다.
+      if (isNow) {
+        const live = document.createElement('div')
+        live.className = 'sp-live'
+        row.append(live)
+        this.stageLive = live
+      }
+      return row
+    })
+
+    el('sp-rows').replaceChildren(...rows)
   }
 
   /** 짧은 알림. 실패 사유처럼 즉시 사라져야 하는 것만 여기로 보낸다. */
