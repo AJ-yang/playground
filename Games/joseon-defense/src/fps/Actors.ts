@@ -192,9 +192,21 @@ export class Actors {
       if (turret) {
         // 보드의 조준각은 atan2(dy, dx)이고 모형의 정면은 +X다.
         turret.rotation.y = -tower.turretAngle
-        // 반동 — 쏜 직후 잠깐 뒤로 물러난다. 1인칭에서 발사를 느끼게 하는 것은
-        // 투사체가 아니라 이 움직임이다.
-        turret.position.x = -tower.recoil * 0.12
+      }
+
+      // 반동 — 쏜 직후 부품이 제자리로 돌아온다. 1인칭에서 발사를 느끼게 하는
+      // 것은 투사체가 아니라 이 움직임이다. 어느 부품이 어느 방향으로 얼마나
+      // 움직이는지는 모형이 정한다 — 총열은 뒤로, 시위는 앞으로, 칼은 앞으로.
+      for (const part of view.model.userData.recoil ?? []) {
+        part.node.position.x = part.rest + part.back * tower.recoil
+      }
+
+      // 숨. 전투가 없는 준비 시간에도 사람이 미세하게 흔들려야 한다 —
+      // 없으면 기물이 판때기 인형으로 굳는다.
+      for (const part of view.model.userData.idle ?? []) {
+        const t = elapsed * 1.2 + part.phase
+        part.node.rotation.z = Math.sin(t) * 0.018
+        part.node.position.y = Math.sin(t * 2) * 0.008
       }
       if (view.flash) {
         view.flash.visible = tower.recoil > 0.08

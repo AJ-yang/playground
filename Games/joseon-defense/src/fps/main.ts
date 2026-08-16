@@ -71,6 +71,8 @@ let screen: 'select' | 'play' | 'menu' | 'result' = 'select'
 let elapsed = 0
 let resultRecorded = false
 let showAllRanges = false
+/** Tab을 누르고 있는 동안 뜨는 전황판 */
+let showStages = false
 
 const player = new Player(
   camera,
@@ -188,6 +190,7 @@ function startStage(target: StageDef): void {
   elapsed = 0
   resultRecorded = false
   showAllRanges = false
+  showStages = false
   aim = { kind: 'none' }
   screen = 'play'
   hud.show('lock')
@@ -250,6 +253,7 @@ const loop = new GameLoop({
       actors.sync(game, camera, elapsed)
       cursor.update(game, aim, showAllRanges)
       hud.update(game, stage, aim)
+      hud.updateStagePanel(showStages && screen === 'play', progress, stage, game, elapsed)
       minimap.draw(game, player)
     }
     renderer.render(scene, camera)
@@ -356,11 +360,21 @@ window.addEventListener('keydown', (event) => {
     case 'KeyR':
       showAllRanges = true
       break
+    case 'Tab':
+      // 브라우저가 포커스를 옮기지 못하게 막는다. 잠금 중에는 옮길 곳도 없지만,
+      // 막지 않으면 HUD 버튼에 포커스 링이 켜지고 그다음 Space가 그 버튼을 누른다.
+      event.preventDefault()
+      showStages = true
+      break
   }
 })
 
 window.addEventListener('keyup', (event) => {
   if (event.code === 'KeyR') showAllRanges = false
+  if (event.code === 'Tab') {
+    event.preventDefault()
+    showStages = false
+  }
 })
 
 // 탭이 뒤로 가면 잠금을 풀어 자동으로 멈춘다. 돌아왔을 때 웨이브가 다 지나가
