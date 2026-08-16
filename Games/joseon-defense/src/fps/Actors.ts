@@ -29,6 +29,8 @@ interface EnemyView {
   enemy: Enemy
   /** 피격 번쩍임을 위해 원래 재질을 기억해 둔다 */
   skins: Array<{ mesh: THREE.Mesh; material: THREE.Material | THREE.Material[] }>
+  /** 걸음에 맞춰 흔들 관절 — 모형이 `userData.swing`으로 표시해 둔 것들 */
+  limbs: Array<{ node: THREE.Object3D; phase: number; amount: number }>
   flashing: boolean
   bar: THREE.Group
   barFill: THREE.Mesh
@@ -241,10 +243,17 @@ export class Actors {
 
       // 걸음. 실제 속도에 맞춰 흔들려야 감속이 눈에 보인다 — 거마작에 묶인
       // 적이 같은 박자로 걸으면 느려진 것이 화면에서 읽히지 않는다.
-      const gait = enemy.distance / TILE_SIZE
+      //
+      // **박자를 시간이 아니라 이동 거리에서 뽑는 이유가 여기 있다.** 감속에
+      // 걸린 적은 저절로 발도 천천히 놀리게 되고, 배속을 올리면 행군도 같이
+      // 빨라진다. 시간으로 재면 그 둘이 전부 어긋난다.
+      const gait = (enemy.distance / TILE_SIZE) * 3.4
       const bob = enemy.def.flying ? 0.09 : 0.045
-      view.group.position.y = Math.abs(Math.sin(gait * 3.4)) * bob
-      view.group.rotation.z = Math.sin(gait * 3.4) * 0.03
+      view.group.position.y = Math.abs(Math.sin(gait)) * bob
+      view.group.rotation.z = Math.sin(gait) * 0.03
+      for (const limb of view.limbs) {
+        limb.node.rotation.z = Math.sin(gait + limb.phase) * 0.5 * limb.amount
+      }
 
       // 피격 번쩍임 — 재질을 통째로 흰색으로 바꿨다가 되돌린다.
       const shouldFlash = enemy.flashTimer > 0
@@ -289,10 +298,16 @@ export class Actors {
   private spawnEnemyView(enemy: Enemy): EnemyView {
     const group = enemyTemplate(enemy.def).clone(true)
     const skins: EnemyView['skins'] = []
+    const limbs: EnemyView['limbs'] = []
     group.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         object.castShadow = true
         skins.push({ mesh: object, material: object.material })
+      }
+      const swing = object.userData['swing']
+      if (typeof swing === 'number') {
+        const amount = object.userData['swingAmount']
+        limbs.push({ node: object, phase: swing, amount: typeof amount === 'number' ? amount : 1 })
       }
     })
 
@@ -329,6 +344,7 @@ export class Actors {
       group,
       enemy,
       skins,
+      limbs,
       flashing: false,
       bar,
       barFill: fill,
