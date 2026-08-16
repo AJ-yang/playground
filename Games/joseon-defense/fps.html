@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>조선 방어전 — 1인칭 전장 (3D)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d10;
+        --panel: rgba(15, 20, 29, 0.86);
+        --edge: #1e2634;
+        --fg: #e6edf3;
+        --muted: #8b949e;
+        --dim: #5c6773;
+        --gold: #ecd06a;
+        --life: #ff6b6b;
+        --good: #8bd450;
+        --warn: #e0b341;
+        --accent: #5a9fd6;
+        --font: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic',
+          system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font);
+        user-select: none;
+      }
+      #scene { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+      .hidden { display: none !important; }
+
+      /* ── HUD ─────────────────────────────────────────────────────────── */
+      #hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+      }
+      #hud.hidden { display: none; }
+
+      .topbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 16px;
+      }
+      .plate {
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 8px 12px;
+        backdrop-filter: blur(6px);
+      }
+      .stage-name { font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
+      .stage-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+      .stats { display: flex; gap: 8px; }
+      .stat { font-size: 11px; color: var(--muted); text-align: center; min-width: 78px; }
+      .stat b { display: block; font-size: 19px; color: var(--fg); font-variant-numeric: tabular-nums; }
+      .stat.lives b { color: var(--life); }
+      .stat.gold b { color: var(--gold); }
+      .stat.danger { animation: pulse 0.9s ease-in-out infinite; }
+      @keyframes pulse { 50% { opacity: 0.45; } }
+
+      .phase { min-width: 190px; }
+      .phase-label { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+      .phase-label b { color: var(--fg); font-weight: 600; }
+      .phase-bar { height: 4px; margin-top: 6px; background: #1b2230; border-radius: 2px; overflow: hidden; }
+      .phase-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.1s linear; }
+      .phase-bar.running i { background: var(--warn); }
+
+      #minimap {
+        position: absolute;
+        top: 84px;
+        right: 16px;
+        width: 220px;
+        height: 148px;
+        border-radius: 8px;
+        border: 1px solid var(--edge);
+        background: rgba(10, 14, 20, 0.8);
+      }
+
+      #warning {
+        position: absolute;
+        top: 96px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #ffd7a0;
+        background: rgba(70, 30, 12, 0.72);
+        border: 1px solid rgba(224, 179, 65, 0.4);
+        padding: 7px 18px;
+        border-radius: 6px;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+      }
+      #warning.show { opacity: 1; }
+
+      /* ── 조준선 ──────────────────────────────────────────────────────── */
+      #reticle {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 26px;
+        height: 26px;
+        margin: -13px 0 0 -13px;
+      }
+      #reticle::before, #reticle::after {
+        content: '';
+        position: absolute;
+        background: rgba(230, 237, 243, 0.85);
+        box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+      }
+      #reticle::before { left: 50%; top: 0; width: 1px; height: 100%; margin-left: -0.5px; }
+      #reticle::after { top: 50%; left: 0; height: 1px; width: 100%; margin-top: -0.5px; }
+      #reticle .dot {
+        position: absolute;
+        left: 50%; top: 50%;
+        width: 5px; height: 5px;
+        margin: -2.5px 0 0 -2.5px;
+        border-radius: 50%;
+        background: var(--fg);
+      }
+      #reticle.build .dot { background: var(--good); }
+      #reticle.blocked .dot { background: var(--life); }
+
+      #focus {
+        position: absolute;
+        left: 50%;
+        top: calc(50% + 30px);
+        transform: translateX(-50%);
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.7;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+        min-width: 260px;
+      }
+      #focus .title { font-size: 14px; font-weight: 700; }
+      #focus .meta { color: var(--muted); font-size: 11px; }
+      #focus .act { color: var(--gold); font-size: 11px; }
+      #focus .bad { color: var(--life); font-size: 11px; }
+      #focus kbd { font-size: 10px; }
+
+      /* ── 기물 목록 ───────────────────────────────────────────────────── */
+      #palette {
+        margin-top: auto;
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        padding: 0 16px 12px;
+        flex-wrap: wrap;
+      }
+      .slot {
+        width: 86px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 7px 6px 8px;
+        text-align: center;
+        position: relative;
+        transition: border-color 0.12s ease, transform 0.12s ease;
+      }
+      .slot .key {
+        position: absolute;
+        top: 4px; left: 5px;
+        font-size: 9px;
+        color: var(--dim);
+      }
+      .slot .swatch { width: 22px; height: 5px; border-radius: 3px; margin: 4px auto 5px; }
+      .slot .name { font-size: 12px; font-weight: 600; }
+      .slot .cost { font-size: 11px; color: var(--gold); font-variant-numeric: tabular-nums; }
+      .slot .tag { font-size: 9px; color: var(--dim); margin-top: 2px; }
+      .slot.selected { border-color: var(--gold); transform: translateY(-3px); }
+      .slot.poor .cost { color: var(--life); }
+      .slot.locked { opacity: 0.32; }
+
+      /* 기물 목록이 가운데 아래를 차지하므로 그 위로 올린다 — 여덟 종이 다
+         열리면 목록이 화면 폭의 절반을 넘어 글자와 겹친다. */
+      #hint {
+        position: absolute;
+        left: 16px;
+        bottom: 106px;
+        max-width: 300px;
+        font-size: 11px;
+        color: var(--dim);
+        line-height: 1.9;
+      }
+      kbd {
+        background: #21262d;
+        border: 1px solid #30363d;
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-size: 10px;
+        font-family: inherit;
+        color: var(--fg);
+      }
+
+      #toast {
+        position: absolute;
+        left: 50%;
+        bottom: 132px;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        font-size: 12.5px;
+      }
+      #toast div {
+        background: rgba(15, 20, 29, 0.9);
+        border: 1px solid var(--edge);
+        border-radius: 6px;
+        padding: 5px 12px;
+        animation: rise 0.2s ease;
+      }
+      #toast div.bad { border-color: rgba(255, 107, 107, 0.5); color: #ffb3b3; }
+      #toast div.good { border-color: rgba(139, 212, 80, 0.45); color: #cdeaa8; }
+      @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+
+      #vignette {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(ellipse at center, transparent 42%, rgba(190, 30, 30, 0.62) 100%);
+      }
+
+      /* ── 전면 화면 ───────────────────────────────────────────────────── */
+      .screen {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 28px;
+        background: rgba(6, 9, 13, 0.82);
+        backdrop-filter: blur(3px);
+        overflow-y: auto;
+      }
+      .screen.hidden { display: none; }
+      .screen h1 { font-size: 26px; margin: 0; letter-spacing: 0.02em; }
+      .screen h1 small { display: block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 6px; letter-spacing: 0.14em; }
+      .screen h2 { font-size: 18px; margin: 0; }
+      .screen p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.8; text-align: center; }
+
+      .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+      button {
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--fg);
+        background: #161c26;
+        border: 1px solid var(--edge);
+        border-radius: 7px;
+        padding: 9px 16px;
+        cursor: pointer;
+        transition: background 0.12s ease, border-color 0.12s ease;
+      }
+      button:hover:not(:disabled) { background: #1e2734; border-color: #37455c; }
+      button:disabled { opacity: 0.35; cursor: default; }
+      button.primary { background: #1d3247; border-color: #33587c; }
+      button.primary:hover:not(:disabled) { background: #244062; }
+      button.on { border-color: var(--gold); color: var(--gold); }
+
+      .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; width: min(940px, 96vw); }
+      .stage-card {
+        text-align: left;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .stage-card .idx { font-size: 10px; color: var(--dim); letter-spacing: 0.14em; }
+      .stage-card .ttl { font-size: 14px; font-weight: 700; }
+      .stage-card .sub { font-size: 11px; color: var(--muted); line-height: 1.6; }
+      .stage-card .best { font-size: 10.5px; color: var(--good); }
+      .stage-card.locked .ttl::after { content: ' 🔒'; font-size: 11px; }
+
+      .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+      .keys b { color: var(--fg); font-weight: 500; }
+
+      .result-title { font-size: 34px; font-weight: 800; letter-spacing: 0.04em; }
+      .result-title.win { color: var(--good); }
+      .result-title.lose { color: var(--life); }
+      .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(84px, 1fr)); gap: 10px; text-align: center; }
+      .stats-grid div span { display: block; font-size: 11px; color: var(--muted); }
+      .stats-grid div b { font-size: 19px; }
+
+      .unlocks { color: var(--gold); font-size: 13px; }
+      .settings { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+      input[type='range'] { accent-color: var(--accent); }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="topbar">
+        <div class="plate">
+          <div class="stage-name" id="stage-name">—</div>
+          <div class="stage-sub" id="stage-sub"></div>
+        </div>
+        <div class="plate stats">
+          <div class="stat lives" id="stat-lives">생명<b>0</b></div>
+          <div class="stat gold">골드<b id="stat-gold">0</b></div>
+          <div class="stat">웨이브<b id="stat-wave">0</b></div>
+          <div class="stat">처치<b id="stat-kills">0</b></div>
+        </div>
+        <div class="plate phase">
+          <div class="phase-label"><b id="phase-label">준비</b><span id="phase-detail"></span></div>
+          <div class="phase-bar" id="phase-bar"><i></i></div>
+        </div>
+      </div>
+
+      <canvas id="minimap"></canvas>
+      <div id="warning"></div>
+      <div id="reticle"><span class="dot"></span></div>
+      <div id="focus"></div>
+      <div id="toast"></div>
+
+      <div id="hint">
+        <kbd>WASD</kbd> 이동 · <kbd>Shift</kbd> 달리기 · <kbd>1</kbd>–<kbd>8</kbd> 기물 ·
+        <kbd>좌클릭</kbd> 건설/선택 · <kbd>F</kbd> 강화 · <kbd>X</kbd> 철수 · <kbd>T</kbd> 타겟팅<br />
+        <kbd>Space</kbd> 다음 웨이브 · <kbd>R</kbd> 사거리 보기 · <kbd>Esc</kbd> 메뉴
+      </div>
+      <div id="palette"></div>
+    </div>
+
+    <div id="vignette"></div>
+
+    <!-- 스테이지 선택 -->
+    <div class="screen" id="screen-select">
+      <h1>조선 방어전<small>1인칭 전장 · 3D</small></h1>
+      <p>
+        직접 전장을 걸어 다니며 병(兵)·기(器)·책(柵)을 세운다.<br />
+        같은 판, 같은 수치 — 보는 눈높이만 사람의 것이 된다.
+      </p>
+      <div class="row" id="difficulty-row"></div>
+      <div class="stages" id="stage-list"></div>
+      <div class="row">
+        <button id="btn-reset">진행도 초기화</button>
+        <button id="btn-to2d">2D 지휘관 시점으로</button>
+      </div>
+    </div>
+
+    <!-- 조준 잠금 안내 -->
+    <div class="screen hidden" id="screen-lock">
+      <h2>전장에 들어갑니다</h2>
+      <p>화면을 클릭하면 시선이 마우스에 묶입니다. <kbd>Esc</kbd>로 언제든 빠져나올 수 있습니다.</p>
+      <button class="primary" id="btn-enter">들어가기</button>
+    </div>
+
+    <!-- 일시정지 메뉴 -->
+    <div class="screen hidden" id="screen-menu">
+      <h2>잠시 멈춤</h2>
+      <div class="keys">
+        <b>WASD / 화살표</b><span>이동</span>
+        <b>Shift</b><span>달리기</span>
+        <b>마우스</b><span>시선</span>
+        <b>1 – 8</b><span>기물 선택 (다시 누르면 해제)</span>
+        <b>좌클릭</b><span>건설 · 기물 선택</span>
+        <b>우클릭</b><span>선택 해제</span>
+        <b>F / X / T</b><span>강화 · 철수 · 타겟팅 전환</span>
+        <b>Space</b><span>다음 웨이브 조기 소환 (남은 준비 시간만큼 골드)</span>
+        <b>R</b><span>모든 기물의 사거리 보기</span>
+      </div>
+      <div class="settings">
+        <label for="sens">마우스 감도</label>
+        <input type="range" id="sens" min="4" max="40" step="1" />
+        <span id="sens-value"></span>
+      </div>
+      <div class="row">
+        <button class="primary" id="btn-resume">이어하기</button>
+        <button id="btn-restart">처음부터</button>
+        <button id="btn-quit">스테이지 선택</button>
+        <button id="btn-to2d-2">2D 지휘관 시점</button>
+      </div>
+    </div>
+
+    <!-- 결과 -->
+    <div class="screen hidden" id="screen-result">
+      <div class="result-title" id="result-title">승리</div>
+      <div class="stats-grid" id="result-stats"></div>
+      <div class="unlocks" id="result-unlocks"></div>
+      <div class="row">
+        <button class="primary hidden" id="btn-next">다음 스테이지</button>
+        <button id="btn-again">다시 도전</button>
+        <button id="btn-select">스테이지 선택</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/fps/main.ts"></script>
+  </body>
+</html>
