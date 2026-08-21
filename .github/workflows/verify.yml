@@ -53,6 +53,33 @@ jobs:
       - name: 밸런스 회귀 게이트
         run: npm run balance
 
+  # 족장은 아직 밸런스 게이트가 없다 — v1이 알아내려는 것이 밸런스가 아니라
+  # "사람이 스스로 강림하는가"라서, 정밀한 수치를 지킬 근거가 아직 없기
+  # 때문이다(GDD 6.4). 대신 타입 검사와 빌드는 지킨다. 배포가 main에서만
+  # 도는 탓에 빌드가 깨지면 그때야 알게 되는 것을 막는다.
+  chieftain:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Games/chieftain
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Games/chieftain/package-lock.json
+
+      - run: npm ci
+
+      # npm run build가 tsc --noEmit을 먼저 돌리므로 타입 검사도 여기 포함된다.
+      - name: 빌드
+        run: npm run build
+
   # 결의 배포가 이 저장소로 넘어왔으므로 결이 깨지면 배포도 깨진다.
   # deploy.yml은 main에서만 도는데 그때 알면 늦어서, 여기서 먼저 잡는다.
   gyeol:
