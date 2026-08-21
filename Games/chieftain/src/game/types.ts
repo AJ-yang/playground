@@ -33,6 +33,64 @@ export interface Unit {
   /** 중립 수비대는 자기 칸을 떠나지 않는다. */
   anchorTile: number
   facing: number
+
+  // ── 전투 (아래 넷은 전부 "지금 무슨 일이 일어나는지"를 보이게 하는 값이다)
+
+  /** 다음 타격까지 남은 시간. 끊어 쳐야 전투에 리듬이 생긴다. */
+  swingIn: number
+  /** 내지르는 연출. 1에서 0으로 줄며 몸이 앞으로 나갔다 돌아온다. */
+  lunge: number
+  /** 맞은 직후. 1에서 0으로 줄며 몸이 하얗게 번쩍인다. */
+  flash: number
+  /** 방패벽이 실제로 막아낸 순간. 반경 안 방패병만 켜진다 — **이 빛이
+   *  지휘 반경의 값어치를 화면에 증명하는 유일한 장치다**(GDD 3.1). */
+  guard: number
+  /** 집중 공격 대상. 반경 안 유닛만 따른다. -1이면 알아서 고른다. */
+  focusId: number
+}
+
+/**
+ * 타격 자국과 시신. **판정에 관여하지 않는 순수한 흔적**이다.
+ *
+ * `Game`이 들고 있는 이유는 렌더러가 프레임을 건너뛰어도 놓치지 않게 하기
+ * 위해서다. 타격은 한 순간의 사건이라 그 프레임에 렌더러가 안 보면 사라진다.
+ */
+export interface Hit {
+  pos: Vec2
+  /** 남은 수명 0~1. */
+  life: number
+  /** 큰 타격(반경 안 도끼병 등)이면 크게 튄다. */
+  big: boolean
+  /** 막아낸 타격이면 색이 다르다. */
+  guarded: boolean
+}
+
+export interface Corpse {
+  pos: Vec2
+  facing: number
+  kind: UnitKind
+  faction: Faction
+  /** 1에서 0으로. 쓰러지며 가라앉는다. */
+  life: number
+}
+
+/**
+ * 건물 (전진 기지).
+ *
+ * 본진은 `PlayerState.keepHp`가 따로 들고 있고, 여기 있는 것은 플레이어가
+ * 판 위에 **직접 세우는 것**뿐이다. 세우려면 아바타가 그 칸에 서 있어야
+ * 한다 — 생산을 아바타의 위치에 묶는 것이, 건물을 그냥 RTS 부품으로
+ * 두지 않고 이 게임의 규칙 안으로 끌어들이는 방법이다(GDD 3.1).
+ */
+export interface Building {
+  id: number
+  side: Side
+  tile: number
+  pos: Vec2
+  hp: number
+  maxHp: number
+  /** 다 지어질 때까지 남은 초. 0이면 완성. */
+  raising: number
 }
 
 export interface Avatar {
@@ -83,6 +141,8 @@ export interface PlayerState {
   avatar: Avatar
   keepHp: number
   keepTile: number
+  /** 집중 공격 대상. 반경 안 부대가 이놈부터 친다. */
+  focusId: number
 }
 
 export type Phase = 'playing' | 'over'

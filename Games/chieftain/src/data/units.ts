@@ -18,8 +18,19 @@ export interface UnitDef {
   /** 생산에 걸리는 초. */
   readonly buildSeconds: number
   readonly hp: number
-  /** 초당 피해량. */
+  /** 초당 피해량. 실제 타격은 아래 간격마다 뭉쳐서 들어간다. */
   readonly dps: number
+  /**
+   * 한 번 휘두르는 간격(초).
+   *
+   * 예전에는 매 프레임 `dps * dt`를 흘려보냈다. 숫자로는 같지만 **화면에는
+   * 아무 일도 일어나지 않았다** — 휘두르는 동작도, 맞는 순간도 없이 상대가
+   * 조용히 줄어들 뿐이었다. 끊어 치면 리듬이 생기고, 그제서야 "지휘 반경 안의
+   * 방패병이 덜 맞는다"가 눈에 보인다(GDD 6.2).
+   *
+   * 초당 피해량은 그대로다 — 한 대에 `dps * swing`이 들어간다.
+   */
+  readonly swing: number
   /** 받는 피해에 곱해지는 값. 낮을수록 단단하다. */
   readonly damageTaken: number
   /** 월드 단위 / 초. */
@@ -39,6 +50,8 @@ export const UNITS: Record<UnitKind, UnitDef> = {
     buildSeconds: 5,
     hp: 130,
     dps: 9,
+    // 방패병은 느리고 무겁게 친다.
+    swing: 1.15,
     damageTaken: 1,
     speed: 7.5,
     range: 3.2,
@@ -52,6 +65,9 @@ export const UNITS: Record<UnitKind, UnitDef> = {
     buildSeconds: 6,
     hp: 85,
     dps: 17,
+    // 도끼병은 빠르게 몰아친다. 반경 안에서 공격이 오르는 유닛이라
+    // 타격이 잦아야 그 차이가 보인다.
+    swing: 0.7,
     damageTaken: 1.25,
     speed: 10.5,
     range: 2.6,

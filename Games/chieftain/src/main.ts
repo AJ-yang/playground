@@ -128,6 +128,8 @@ addEventListener('keydown', (e) => {
   }
   if (k === '1') s.game.enqueue(HUMAN, 'shield')
   if (k === '2') s.game.enqueue(HUMAN, 'axe')
+  // 3 — 아바타가 선 자리에 전진 기지. 부감·1인칭 어디서나 같은 키다.
+  if (k === '3') s.game.build(HUMAN)
   if (k === 'escape' && s.firstPerson) toggleFirstPerson()
 })
 
@@ -246,14 +248,14 @@ const loop = new GameLoop({
   render() {
     const s = session
     if (!s) return
-    s.world.sync(s.game, HUMAN)
-    s.actors.sync(s.game, HUMAN, s.firstPerson)
-
     const cam = s.firstPerson ? s.cameras.first : s.cameras.overhead
     if (s.firstPerson) {
       const a = s.game.players[HUMAN].avatar
       s.cameras.placeFirst(a.pos, a.yaw)
     }
+    s.world.sync(s.game, HUMAN)
+    // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
+    s.actors.sync(s.game, HUMAN, s.firstPerson, cam)
     renderer.render(s.scene, cam)
     hud.render(s.game, s.firstPerson)
   },

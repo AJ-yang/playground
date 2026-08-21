@@ -28,6 +28,7 @@ export class Hud {
     const army = game.countUnits(me)
     const tiles = game.board.ownedBy(me)
     const foeTiles = game.board.ownedBy(foe)
+    const forges = game.forgesOf(me).length
 
     const queue = p.queue
       .map((it) => `<span class="muted">${UNITS[it.kind].name[0]}</span>`)
@@ -43,6 +44,7 @@ export class Hud {
           <b style="color:${commanded > 0 ? '#ffe08a' : '#8b949e'}">${commanded}명</b>
         </div>
         ${queue ? `<div class="row"><span>생산</span><span>${queue}</span></div>` : ''}
+        ${forges > 0 ? `<div class="row"><span>전진 기지</span><b>${forges}</b></div>` : ''}
       </div>
 
       <div class="panel top-right">
@@ -70,16 +72,17 @@ export class Hud {
 }
 
 const OVERHEAD_KEYS = `
-  <span class="k">좌클릭</span> 부대를 그 칸으로 &nbsp;·&nbsp;
-  <span class="k">우클릭</span> 내가 그 칸으로 <span class="muted">(느리다)</span> &nbsp;·&nbsp;
-  <span class="k">1</span> 방패병 <span class="k">2</span> 도끼병 &nbsp;·&nbsp;
+  <span class="k">좌클릭</span> 부대 <span class="muted">(적을 짚으면 집중)</span> &nbsp;·&nbsp;
+  <span class="k">우클릭</span> 나 <span class="muted">(느리다)</span> &nbsp;·&nbsp;
+  <span class="k">1</span><span class="k">2</span> 병력 &nbsp;<span class="k">3</span> 기지 &nbsp;·&nbsp;
   <span class="k">Tab</span> <b>강림</b>
 `
 
 const FIRST_PERSON_KEYS = `
   <span class="k">WASD</span> 직접 걷는다 <span class="muted">(빠르다)</span> &nbsp;·&nbsp;
-  <span class="k">마우스</span> 둘러본다 <span class="muted">(안 되면 끌어서 / <span class="k">Q</span><span class="k">E</span>)</span> &nbsp;·&nbsp;
+  <span class="k">마우스</span> 둘러본다 <span class="muted">(끌어도 된다)</span> &nbsp;·&nbsp;
   <span class="k">좌클릭</span> 부대를 앞으로 &nbsp;·&nbsp;
+  <span class="k">3</span> 여기에 <b>기지</b> &nbsp;·&nbsp;
   <span class="k">Tab</span> <b>부감으로</b>
 `
 
@@ -113,7 +116,7 @@ export class Banner {
         <button id="start">시작</button>
         <div class="keys">
           <div><b>Tab</b> — 내 몸으로 들어간다</div>
-          <div><b>좌클릭</b> 부대 / <b>우클릭</b> 나 / <b>1</b>·<b>2</b> 생산</div>
+          <div><b>좌클릭</b> 부대 / <b>우클릭</b> 나 / <b>1</b>·<b>2</b> 병력 / <b>3</b> 기지</div>
         </div>
       </div>
     `

@@ -1,7 +1,7 @@
 import { dist, type Vec2 } from '../core/vec2'
 import { TUNING } from '../data/tuning'
 import type { UnitKind } from '../data/units'
-import type { Game } from './Game'
+import { FORGE, type Game } from './Game'
 import { NOBODY, type Side } from './types'
 
 /** 생각을 고치는 주기. 매 틱 다시 재면 부대가 갈팡질팡한다. */
@@ -43,6 +43,7 @@ export class Ai {
     if (this.thinkIn <= 0) {
       this.thinkIn = THINK
       this.produce()
+      this.buildIfWorth()
       this.decide()
     }
     this.moveAvatar(dt)
@@ -66,6 +67,29 @@ export class Ai {
     }
     const want: UnitKind = shields <= axes ? 'shield' : 'axe'
     if (!g.enqueue(this.side, want)) g.enqueue(this.side, want === 'shield' ? 'axe' : 'shield')
+  }
+
+  /**
+   * 전진 기지를 세울 만한가.
+   *
+   * **사람과 같은 조건으로 짓는다** — 아바타가 선 칸이 내 땅이고 은이 있을 때.
+   * AI가 이걸 못 쓰면 사람만 앞에서 병력을 뽑게 되어, 기지가 실제로 값어치가
+   * 있는지 판단할 수가 없다.
+   *
+   * 본진에서 먼 칸일수록 값이 크다. 코앞에 지으면 걸어오는 거리가 안 줄어서
+   * 은만 날린다.
+   */
+  private buildIfWorth(): void {
+    const g = this.game
+    const p = g.players[this.side]
+    if (p.silver < FORGE.cost + 60) return
+    if (g.forgesOf(this.side).length >= 2) return
+
+    const here = g.board.tileAt(p.avatar.pos)
+    if (g.board.at(here).owner !== this.side) return
+    if (g.board.tilePath(p.keepTile, here).length < 2) return
+
+    g.build(this.side)
   }
 
   // ─────────────────────────────────────────────────────────── 판단
