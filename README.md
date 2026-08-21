@@ -61,6 +61,7 @@ npm run balance    # 밸런스 회귀 게이트 — 설계 의도가 깨지면 �
 | `site/index.html` | <https://aj-yang.github.io/playground/> |
 | `Games/joseon-defense/dist` | <https://aj-yang.github.io/playground/joseon-defense/> |
 | `Games/casino-learning-game/index.html` | <https://aj-yang.github.io/playground/casino-learning-game/> |
+| `Games/chieftain/dist` | <https://aj-yang.github.io/playground/chieftain/> |
 | `Services/gyeol/out` | <https://aj-yang.github.io/playground/gyeol/> |
 | `Services/volleyball-rotation/index.html` | <https://aj-yang.github.io/playground/volleyball-rotation/> |
 
