@@ -79,20 +79,42 @@ function start(seed = Math.floor(Math.random() * 0x7fffffff)): void {
 /**
  * 강림·복귀.
  *
- * 1인칭에서는 포인터 락을 건다. 락이 걸려야 시선이 화면 밖으로 안 나가고,
- * 무엇보다 **지금 내가 몸 안에 있다**는 것이 몸으로 느껴진다.
+ * 포인터 락을 걸되 **의존하지는 않는다.** 락이 걸리면 시선이 화면 밖으로 안
+ * 나가서 제일 좋지만, 샌드박스된 iframe이나 권한을 막아둔 브라우저에서는
+ * 요청이 조용히 거절된다. 1인칭 시선은 이 게임의 핵심이라 거기서 죽으면
+ * 안 되므로, 락이 없으면 **드래그로 둘러보는 방식**으로 물러선다.
  */
 function toggleFirstPerson(): void {
   const s = session
   if (!s || s.ended) return
   s.firstPerson = !s.firstPerson
   s.game.setDriving(HUMAN, s.firstPerson)
+  lookDrag = false
   if (s.firstPerson) {
-    renderer.domElement.requestPointerLock()
+    // 거절되면 Promise가 reject되거나 예외가 난다. 어느 쪽이든 삼킨다 —
+    // 실패해도 드래그 조작이 살아 있으므로 알릴 것이 없다.
+    try {
+      const r = renderer.domElement.requestPointerLock() as unknown
+      if (r instanceof Promise) r.catch(() => {})
+    } catch {
+      /* 락 없이 간다 */
+    }
   } else if (document.pointerLockElement) {
     document.exitPointerLock()
   }
 }
+
+/**
+ * 포인터 락이 없을 때 시선을 돌리는 길.
+ *
+ * 1인칭에서 누른 채 끌면 둘러보고, 끌지 않고 떼면 부대 명령이 된다. 둘을
+ * 가르는 것은 **끈 거리**다(`DRAG_SLOP`). 이렇게 겹쳐 두면 조작 안내를 한
+ * 줄 더 늘리지 않아도 되고, 규칙 모르는 사람은 그냥 마우스를 움직여 보다가
+ * 알아챈다.
+ */
+let lookDrag = false
+let dragDist = 0
+const DRAG_SLOP = 6
 
 addEventListener('keydown', (e) => {
   const s = session
@@ -124,11 +146,31 @@ document.addEventListener('pointerlockchange', () => {
 
 addEventListener('mousemove', (e) => {
   const s = session
-  if (!s || !s.firstPerson || !document.pointerLockElement) return
+  if (!s || !s.firstPerson) return
+  const locked = document.pointerLockElement === renderer.domElement
+  if (!locked && !lookDrag) return
+  if (lookDrag) dragDist += Math.abs(e.movementX) + Math.abs(e.movementY)
   const a = s.game.players[HUMAN].avatar
   a.yaw -= e.movementX * TUNING.lookSensitivity
   s.cameras.addPitch(e.movementY * TUNING.lookSensitivity)
 })
+
+addEventListener('mouseup', (e) => {
+  const s = session
+  if (!s || e.button !== 0 || !lookDrag) return
+  lookDrag = false
+  // 끌지 않고 뗐으면 클릭으로 친다 — 보는 쪽으로 부대를 보낸다.
+  if (dragDist < DRAG_SLOP && s.firstPerson && !s.ended) rallyAhead(s)
+})
+
+/** 1인칭의 부대 명령 — 아바타가 보고 있는 앞쪽으로 보낸다. */
+function rallyAhead(s: Session): void {
+  const a = s.game.players[HUMAN].avatar
+  s.game.setRally(HUMAN, {
+    x: a.pos.x + Math.sin(a.yaw) * 14,
+    z: a.pos.z + Math.cos(a.yaw) * 14,
+  })
+}
 
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault())
 
@@ -139,13 +181,13 @@ renderer.domElement.addEventListener('mousedown', (e) => {
   if (s.firstPerson) {
     // 1인칭의 좌클릭 — 보고 있는 쪽으로 부대를 보낸다. 눈으로 본 곳을
     // 가리키는 것이라, 부감에서 칸을 고르는 것과는 다른 감각이 된다.
-    if (e.button === 0) {
-      const a = s.game.players[HUMAN].avatar
-      const ahead = {
-        x: a.pos.x + Math.sin(a.yaw) * 14,
-        z: a.pos.z + Math.cos(a.yaw) * 14,
-      }
-      s.game.setRally(HUMAN, ahead)
+    if (e.button !== 0) return
+    if (document.pointerLockElement === renderer.domElement) {
+      rallyAhead(s)
+    } else {
+      // 락이 없다 — 지금부터 끄는 것은 시선이고, 안 끌고 떼면 명령이다.
+      lookDrag = true
+      dragDist = 0
     }
     return
   }
@@ -172,6 +214,9 @@ function walkDir(keys: Set<string>, yaw: number): Vec2 {
   return norm({ x: fx * f + fz * r, z: fz * f - fx * r })
 }
 
+/** Q·E로 돌 때의 각속도(라디안/초). */
+const TURN_RATE = 2.1
+
 const loop = new GameLoop({
   update(dt) {
     const s = session
@@ -179,6 +224,9 @@ const loop = new GameLoop({
 
     if (s.firstPerson) {
       const a = s.game.players[HUMAN].avatar
+      // Q·E로도 돌아본다. 마우스가 아예 안 먹는 환경에서의 마지막 길이다.
+      if (s.keys.has('q')) a.yaw += TURN_RATE * dt
+      if (s.keys.has('e')) a.yaw -= TURN_RATE * dt
       const dir = walkDir(s.keys, a.yaw)
       if (dir.x !== 0 || dir.z !== 0) s.game.driveAvatar(HUMAN, dir, dt)
     }

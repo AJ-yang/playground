@@ -78,8 +78,8 @@ const OVERHEAD_KEYS = `
 
 const FIRST_PERSON_KEYS = `
   <span class="k">WASD</span> 직접 걷는다 <span class="muted">(빠르다)</span> &nbsp;·&nbsp;
+  <span class="k">마우스</span> 둘러본다 <span class="muted">(안 되면 끌어서 / <span class="k">Q</span><span class="k">E</span>)</span> &nbsp;·&nbsp;
   <span class="k">좌클릭</span> 부대를 앞으로 &nbsp;·&nbsp;
-  <span class="k">1</span> <span class="k">2</span> 생산 &nbsp;·&nbsp;
   <span class="k">Tab</span> <b>부감으로</b>
 `
 
