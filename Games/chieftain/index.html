@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>족장 — Chieftain</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f14;
+        --fg: #e6edf3;
+        --muted: #8b949e;
+        --p0: #7fb2ff;
+        --p1: #ff8a6b;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'Malgun Gothic', system-ui, sans-serif;
+        user-select: none;
+      }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+      /* HUD는 캔버스 위에 얹는 DOM이다. 3D 안에 글자를 그리는 것보다
+         읽기 쉽고, 부감/1인칭 어느 쪽에서도 같은 코드로 쓸 수 있다. */
+      #hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      #hud .panel {
+        position: absolute;
+        background: rgba(10, 14, 20, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 8px;
+        padding: 10px 12px;
+        backdrop-filter: blur(6px);
+      }
+      #hud .top-left { top: 12px; left: 12px; min-width: 190px; }
+      #hud .top-right { top: 12px; right: 12px; text-align: right; }
+      #hud .bottom-left { bottom: 12px; left: 12px; }
+      #hud .bottom-center {
+        bottom: 12px; left: 50%; transform: translateX(-50%);
+        text-align: center; color: var(--muted);
+      }
+      #hud b { font-weight: 600; }
+      #hud .k {
+        display: inline-block;
+        min-width: 18px;
+        padding: 0 5px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 4px;
+        font-size: 11px;
+        text-align: center;
+      }
+      #hud .row { display: flex; justify-content: space-between; gap: 14px; }
+      #hud .muted { color: var(--muted); }
+      #hud .p0 { color: var(--p0); }
+      #hud .p1 { color: var(--p1); }
+      #hud .btn { pointer-events: auto; cursor: pointer; }
+
+      #banner {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(6, 9, 13, 0.82);
+        text-align: center;
+      }
+      #banner.show { display: grid; }
+      #banner h1 { margin: 0 0 8px; font-size: 40px; letter-spacing: -0.02em; }
+      #banner p { margin: 0 0 20px; color: var(--muted); max-width: 32em; }
+      #banner button {
+        font: inherit;
+        color: var(--fg);
+        background: rgba(255, 255, 255, 0.09);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 10px 22px;
+        cursor: pointer;
+      }
+      #banner button:hover { background: rgba(255, 255, 255, 0.16); }
+      #banner .keys { margin-top: 22px; color: var(--muted); font-size: 13px; }
+      #banner .keys div { margin: 3px 0; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud"></div>
+    <div id="banner"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
