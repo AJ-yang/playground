@@ -4,6 +4,8 @@ import { TILE_LAND } from '../data/fjord'
 import type { Game } from '../game/Game'
 import { bakeGround, GROUND_EXTENT } from './ground'
 import { C } from './palette'
+import { castShadows } from './shadows'
+import { SUN_DIR } from './sky'
 
 /**
  * 한 판 동안 변하지 않는 것 전부 — 물·땅·다리·롱하우스·나무·바위·중립 캠프.
@@ -13,6 +15,15 @@ import { C } from './palette'
  * 때문이다. 여기까지 매 프레임 훑으면 유닛이 서른 마리 붙는 순간 프레임이
  * 무너진다(GDD 7.3).
  */
+/**
+ * 그림자 카메라가 덮을 반경. 아홉 칸이 ±48 안에 들어오고 나무·바위가 조금 더
+ * 나가므로 여유를 조금만 준다. 넓힐수록 같은 맵에 더 성긴 그림자가 된다.
+ */
+const SHADOW_HALF = 62
+
+/** 수평선까지 채우는 바깥 바다의 반경. 안개가 끝나는 거리보다 멀면 된다. */
+const SEA_EXTENT = 900
+
 export class World {
   readonly root = new THREE.Group()
   /** 지면 레이캐스트용 평면. 마우스가 가리키는 칸을 찾을 때 이것만 때린다. */
@@ -45,23 +56,50 @@ export class World {
     this.buildKeeps(game)
     this.buildScatter(game, seed)
     this.buildCamps(game)
+    // 칸 위에 세운 것들만 훑는다 — 지면은 위에서 따로 받기만 하도록 잡았다.
+    for (const g of this.tileGroups.values()) castShadows(g)
   }
 
   private tileGroup(id: number): THREE.Group {
     return this.tileGroups.get(id)!
   }
 
+  /**
+   * 북유럽 해안의 낮은 해.
+   *
+   * **그림자를 켰다.** 전에는 "아홉 칸짜리 맵에서 그림자맵 비용이 값어치보다
+   * 크다"고 보고 껐는데, 그 판단이 틀렸다. 그림자는 장식이 아니라 물체를 땅에
+   * 붙이는 유일한 단서다 — 없으면 유닛이 지면 위에 떠 있는 스티커로 보인다.
+   * 맵이 ±48 안에 다 들어오므로 그림자 카메라를 딱 그만큼만 덮게 잘라 두면
+   * 2048 맵 한 장으로 충분히 선명하다.
+   *
+   * 반구광을 오히려 **낮췄다.** 반구광은 모든 면을 고르게 밝히는 빛이라,
+   * 세면 셀수록 형태가 페인트칠한 판때기처럼 납작해진다. 밝기는 태양이 내고
+   * 반구광은 그림자 속을 죽지 않게 받쳐 주는 역할만 맡는다.
+   */
   private buildLights(): void {
-    // 북유럽 해안의 낮은 해. 그림자를 켜지 않은 것은 아홉 칸짜리 맵에서
-    // 그림자맵 비용이 화면에 주는 값어치보다 크기 때문이다.
-    const hemi = new THREE.HemisphereLight(0xa8c8de, 0x24352c, 1.35)
+    const hemi = new THREE.HemisphereLight(0x93b6cf, 0x2b3a30, 0.9)
     this.root.add(hemi)
 
-    const sun = new THREE.DirectionalLight(0xdfe9f0, 1.3)
-    sun.position.set(-40, 70, 30)
-    this.root.add(sun)
+    const sun = new THREE.DirectionalLight(0xffe9c9, 2.9)
+    sun.position.copy(SUN_DIR).multiplyScalar(90)
+    sun.castShadow = true
+    sun.shadow.mapSize.set(2048, 2048)
+    const cam = sun.shadow.camera
+    cam.left = -SHADOW_HALF
+    cam.right = SHADOW_HALF
+    cam.top = SHADOW_HALF
+    cam.bottom = -SHADOW_HALF
+    cam.near = 10
+    cam.far = 200
+    cam.updateProjectionMatrix()
+    // 넓고 평평한 지면에서는 bias만으로 여드름이 안 잡힌다. 법선 방향으로
+    // 밀어내는 normalBias가 이런 지형에 훨씬 잘 듣는다.
+    sun.shadow.bias = -0.0004
+    sun.shadow.normalBias = 0.6
+    this.root.add(sun, sun.target)
 
-    const rim = new THREE.DirectionalLight(0x5f86a8, 0.4)
+    const rim = new THREE.DirectionalLight(0x6f97bd, 0.55)
     rim.position.set(50, 20, -40)
     this.root.add(rim)
   }
@@ -78,6 +116,9 @@ export class World {
 
     const mesh = new THREE.Mesh(geo, mat)
     mesh.rotation.x = -Math.PI / 2
+    // 지면은 **받기만** 한다. 스스로에게 그림자를 드리우면 넓은 평면 전체에
+    // 여드름이 뜬다.
+    mesh.receiveShadow = true
     this.root.add(mesh)
 
     // 물 아래로 한 겹 더. 카메라가 낮게 깔릴 때 지면이 종이처럼 보이지 않게 한다.
@@ -87,6 +128,25 @@ export class World {
     const under = new THREE.Mesh(underGeo, underMat)
     under.position.y = -3.2
     this.root.add(under)
+
+    /**
+     * 바깥 바다.
+     *
+     * 하늘을 검정에서 그라디언트로 바꾸자 **구운 지면의 네모난 끝이 드러났다** —
+     * 1인칭으로 보면 세상이 직선으로 뚝 끊기고 그 너머가 하늘이었다. 전에는
+     * 배경이 거의 검정이라 끝이 안 보였을 뿐, 원래 있던 구멍이다.
+     *
+     * 지면 텍스처를 키우면 해상도가 낭비되므로, 단색 판 한 장을 훨씬 넓게
+     * 깔아 수평선까지 물을 채운다. 안개가 이걸 지평선 색으로 녹여서 끝을
+     * 지운다. 드로우콜 하나면 된다.
+     */
+    const seaGeo = new THREE.PlaneGeometry(SEA_EXTENT * 2, SEA_EXTENT * 2)
+    const seaMat = new THREE.MeshStandardMaterial({ color: C.deepWater, roughness: 0.72 })
+    this.disposables.push(seaGeo, seaMat)
+    const sea = new THREE.Mesh(seaGeo, seaMat)
+    sea.rotation.x = -Math.PI / 2
+    sea.position.y = -0.12
+    this.root.add(sea)
   }
 
   /** 롱하우스 — 긴 몸통 위에 삼각 지붕. 프리미티브 셋이면 충분히 읽힌다. */

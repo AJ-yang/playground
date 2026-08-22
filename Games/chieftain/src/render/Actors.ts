@@ -5,6 +5,7 @@ import { UNITS } from '../data/units'
 import type { Game } from '../game/Game'
 import { NEUTRAL, NOBODY, type Side, type Unit } from '../game/types'
 import { C } from './palette'
+import { castShadows } from './shadows'
 
 /**
  * 매 프레임 바뀌는 것 — 유닛·아바타·지휘 반경·소유권·안개.
@@ -213,6 +214,7 @@ export class Actors {
       beam.scale.y = 1
       g.add(beam)
 
+      castShadows(g)
       this.avatarNodes.push(g)
       this.root.add(g)
     }
@@ -289,6 +291,10 @@ export class Actors {
     bar.renderOrder = 5
     bar.visible = false
     group.add(bar)
+
+    // 몸과 장비만 그림자를 진다. 발밑 링과 체력바는 규칙을 그리는 표식이라
+    // `MeshBasicMaterial`이고, `castShadows`가 재질을 보고 알아서 거른다.
+    castShadows(group)
 
     const node: UnitNode = { group, body, foot, bodyMat, footMat, bar, barFill }
     this.unitNodes.set(u.id, node)
@@ -550,6 +556,8 @@ export class Actors {
     const banner = new THREE.Mesh(bannerGeo, bannerMat)
     banner.position.set(0, 6, 4.6)
     g.add(banner)
+
+    castShadows(g)
     return g
   }
 

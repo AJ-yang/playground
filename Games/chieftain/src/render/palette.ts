@@ -6,9 +6,12 @@
  * 것은 지형이 아니라 **누구의 땅이고 내 반경이 어디까지인가**이기 때문이다.
  */
 export const C = {
-  deepWater: 0x10222c,
-  water: 0x17323f,
-  shallow: 0x1f4553,
+  // 바다를 한 단계 올렸다. 부감에서 바다가 화면의 절반을 차지하는데 전에는
+  // 거의 검정이라 판이 검은 종이 위에 놓인 것처럼 보였다. 하늘이 밝아진
+  // 지금은 그 대비가 더 튄다. 색조는 그대로 두고 명도만 올린다.
+  deepWater: 0x142935,
+  water: 0x1c3c4b,
+  shallow: 0x24505f,
   shore: 0x4a5b52,
   grass: 0x3d5442,
   grassDry: 0x4a5744,
@@ -19,8 +22,19 @@ export const C = {
   tree: 0x2b4436,
   treeDark: 0x203528,
   snow: 0xdfe7ea,
-  sky: 0x0b0f14,
   fog: 0x05080b,
+
+  /**
+   * 하늘. 천정에서 지평선까지 네 단계로 내려온다(`sky.ts`).
+   *
+   * 전에는 `sky` 하나(0x0b0f14, 거의 검정)로 배경과 안개를 같이 썼다. 검은
+   * 배경은 지평선을 지워서 화면을 납작하게 만든다 — 안개 색을 지평선에
+   * 맞추면 먼 지형이 하늘로 녹아들고, 그것만으로 거리가 생긴다.
+   */
+  skyZenith: 0x152233,
+  skyMid: 0x2b4258,
+  skyHorizon: 0x7d95a4,
+  skyUnder: 0x2c3d48,
 
   /** 진영. 파랑이 사람(0번), 주황이 컴퓨터(1번)다. */
   side: [0x7fb2ff, 0xff8a6b] as const,

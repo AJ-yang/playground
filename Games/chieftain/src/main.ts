@@ -8,6 +8,7 @@ import type { Side } from './game/types'
 import { Actors } from './render/Actors'
 import { Cameras } from './render/Cameras'
 import { C } from './render/palette'
+import { bakeSky } from './render/sky'
 import { World } from './render/World'
 import { Banner, Hud } from './ui/Hud'
 
@@ -28,8 +29,27 @@ const bannerRoot = document.getElementById('banner')!
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
-renderer.setClearColor(C.sky)
+renderer.setClearColor(C.skyHorizon)
+
+/**
+ * 톤매핑을 켠다.
+ *
+ * 기본값은 `NoToneMapping`이라 밝은 값이 1에서 그냥 잘린다. 그러면 빛을 받는
+ * 면이 전부 같은 밝기로 뭉개져서, 단색 프리미티브가 **페인트칠한 판때기처럼**
+ * 보인다. ACES는 그 위쪽을 눌러 계조를 남기므로 같은 지오메트리·같은 조명에도
+ * 면이 둥글게 읽힌다. 이 한 줄이 "딱딱하다"의 절반이다.
+ */
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.15
+
+// 그림자. 아홉 칸 맵이라 태양 하나에 2048 맵 한 장이면 된다(World.buildLights).
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+
 app.appendChild(renderer.domElement)
+
+/** 하늘은 판이 바뀌어도 그대로다. 한 번 굽고 계속 쓴다. */
+const sky = bakeSky()
 
 const hud = new Hud(hudRoot)
 const banner = new Banner(bannerRoot)
@@ -54,7 +74,10 @@ function start(seed = Math.floor(Math.random() * 0x7fffffff)): void {
 
   const game = new Game({ seed, humanSide: HUMAN })
   const scene = new THREE.Scene()
-  scene.fog = new THREE.Fog(C.sky, 120, 320)
+  scene.background = sky
+  // 안개 색은 지평선에 맞춘다. 먼 지형이 하늘로 녹아들어야 거리가 생긴다.
+  // 거리(near/far)는 매 프레임 시점에 따라 갈아 끼운다 — `applyFog`.
+  scene.fog = new THREE.Fog(C.skyHorizon, FOG_OVERHEAD[0], FOG_OVERHEAD[1])
 
   const world = new World(game, seed)
   const actors = new Actors(game)
@@ -253,6 +276,7 @@ const loop = new GameLoop({
       const a = s.game.players[HUMAN].avatar
       s.cameras.placeFirst(a.pos, a.yaw)
     }
+    applyFog(s.scene, s.firstPerson)
     s.world.sync(s.game, HUMAN)
     // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
     s.actors.sync(s.game, HUMAN, s.firstPerson, cam)
@@ -260,6 +284,24 @@ const loop = new GameLoop({
     hud.render(s.game, s.firstPerson)
   },
 })
+
+/**
+ * 안개 거리는 **시점마다 다르다.**
+ *
+ * 부감 카메라는 판에서 140 넘게 떨어져 있고 1인칭은 판 위에 서 있다. 하나의
+ * 거리로 둘을 맞추면 한쪽이 반드시 망가진다 — 부감이 멀쩡하면 1인칭에 안개가
+ * 없고, 1인칭이 멀쩡하면 부감에서 맵 전체가 뿌예진다. 그래서 시점이 바뀔 때
+ * 거리만 갈아 끼운다. 색은 지평선 하나로 공유한다.
+ */
+const FOG_OVERHEAD: readonly [number, number] = [170, 400]
+const FOG_FIRST: readonly [number, number] = [45, 165]
+
+function applyFog(scene: THREE.Scene, firstPerson: boolean): void {
+  const fog = scene.fog as THREE.Fog
+  const [near, far] = firstPerson ? FOG_FIRST : FOG_OVERHEAD
+  fog.near = near
+  fog.far = far
+}
 
 // ────────────────────────────────────────────────────────────── 창
 
