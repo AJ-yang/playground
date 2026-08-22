@@ -18,7 +18,9 @@
 
 - [`site/`](site/) — <https://aj-yang.github.io/playground/> 로 배포되는 랜딩
   페이지(`index.html` 한 장). 프로젝트를 추가하면 여기에 카드를 붙인다.
-- `.claude/`·`.agents/`·`skills-lock.json` — 이 저장소에서 쓰는 도구 설정
+- `.claude/`·`.agents/`·`skills-lock.json` — 이 저장소에서 쓰는 도구 설정.
+  `.claude/agents/`에 게임을 만드는 다섯 역할(기획·구현·밸런스·플레이테스트·배선)이
+  있고, 규약은 [`Games/CONTRIBUTING.md`](Games/CONTRIBUTING.md)에 적혀 있다
 - `.github/workflows/` — 검증(`verify.yml`)과 배포(`deploy.yml`)
 
 ## 조선 방어전
