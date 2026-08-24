@@ -2,10 +2,12 @@ import * as THREE from 'three'
 import { Rng } from '../core/rng'
 import { TILE_LAND } from '../data/fjord'
 import type { Game } from '../game/Game'
-import { bakeGround, GROUND_EXTENT } from './ground'
+import { bakeGround, bakeGroundNormals, GROUND_EXTENT } from './ground'
 import { C } from './palette'
 import { castShadows } from './shadows'
 import { SUN_DIR } from './sky'
+import { Terrain } from './terrain'
+import { buildWater, type Water } from './water'
 
 /**
  * 한 판 동안 변하지 않는 것 전부 — 물·땅·다리·롱하우스·나무·바위·중립 캠프.
@@ -24,10 +26,22 @@ const SHADOW_HALF = 62
 /** 수평선까지 채우는 바깥 바다의 반경. 안개가 끝나는 거리보다 멀면 된다. */
 const SEA_EXTENT = 900
 
+/**
+ * 지면 격자의 분할 수.
+ *
+ * 한 칸이 약 0.9 월드 단위가 된다. 더 잘게 쪼개도 눈에 안 보이는데 정점만
+ * 늘고, 더 성기면 해안선이 각지게 꺾인다. 잔 요철은 여기서 만들지 않고
+ * 법선맵이 맡는다(`bakeGroundNormals`).
+ */
+const GROUND_SEGMENTS = 128
+
 export class World {
   readonly root = new THREE.Group()
-  /** 지면 레이캐스트용 평면. 마우스가 가리키는 칸을 찾을 때 이것만 때린다. */
-  readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+  /**
+   * 땅의 높이. 화면 밖에서도 쓰인다 — 유닛도 시신도 반경 링도 전부 이걸
+   * 물어서 제 높이를 찾는다. **시뮬레이션은 이걸 모른다**(`terrain.ts`).
+   */
+  readonly terrain: Terrain
 
   /** 돌성채를 점령하면 켜지는 전초 탑. 미리 만들고 보이기만 토글한다. */
   private readonly outposts = new Map<number, THREE.Object3D>()
@@ -44,15 +58,17 @@ export class World {
   private readonly tileGroups = new Map<number, THREE.Group>()
 
   private readonly disposables: { dispose(): void }[] = []
+  private water: Water | null = null
 
-  constructor(game: Game, seed: number) {
+  constructor(game: Game, seed: number, sky: THREE.Texture) {
+    this.terrain = new Terrain(game.board.defs, seed)
     for (const d of game.board.defs) {
       const g = new THREE.Group()
       this.tileGroups.set(d.id, g)
       this.root.add(g)
     }
     this.buildLights()
-    this.buildGround(game, seed)
+    this.buildGround(game, seed, sky)
     this.buildKeeps(game)
     this.buildScatter(game, seed)
     this.buildCamps(game)
@@ -62,6 +78,19 @@ export class World {
 
   private tileGroup(id: number): THREE.Group {
     return this.tileGroups.get(id)!
+  }
+
+  /**
+   * 칸 한가운데를 기준으로 한 그 자리의 높이 차.
+   *
+   * 캠프 표식들은 칸 중심에 놓인 그룹의 자식이라 좌표가 이미 상대값이다.
+   * 절대 높이를 넣으면 두 번 더해진다.
+   */
+  private localRise(cx: number, cz: number, a: number, r: number): number {
+    return (
+      this.terrain.heightAt(cx + Math.cos(a) * r, cz + Math.sin(a) * r) -
+      this.terrain.heightAt(cx, cz)
+    )
   }
 
   /**
@@ -104,49 +133,68 @@ export class World {
     this.root.add(rim)
   }
 
-  private buildGround(game: Game, seed: number): void {
-    const tex = new THREE.CanvasTexture(bakeGround(game.board.defs, seed))
+  private buildGround(game: Game, seed: number, sky: THREE.Texture): void {
+    const painted = bakeGround(game.board.defs, seed, this.terrain)
+    const tex = new THREE.CanvasTexture(painted)
     tex.colorSpace = THREE.SRGBColorSpace
     tex.anisotropy = 8
-    this.disposables.push(tex)
+    // 칠한 그림의 밝기 변화를 잔 요철로 되돌려 받는다. 격자 한 칸(0.9)보다
+    // 잘게는 메시로 못 만드는 결이라, 없으면 가까이서 땅이 매끈해진다.
+    const nrm = new THREE.CanvasTexture(bakeGroundNormals(painted))
+    nrm.colorSpace = THREE.NoColorSpace
+    this.disposables.push(tex, nrm)
 
-    const geo = new THREE.PlaneGeometry(GROUND_EXTENT * 2, GROUND_EXTENT * 2)
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0 })
+    // 눕혀 놓고 다룬다. 세워 둔 채로 눌러 붙이면 높이 축이 z가 되어 헷갈린다.
+    const geo = new THREE.PlaneGeometry(
+      GROUND_EXTENT * 2,
+      GROUND_EXTENT * 2,
+      GROUND_SEGMENTS,
+      GROUND_SEGMENTS,
+    )
+    geo.rotateX(-Math.PI / 2)
+    this.terrain.displace(geo)
+
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex,
+      normalMap: nrm,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.95,
+      metalness: 0,
+    })
     this.disposables.push(geo, mat)
 
     const mesh = new THREE.Mesh(geo, mat)
-    mesh.rotation.x = -Math.PI / 2
-    // 지면은 **받기만** 한다. 스스로에게 그림자를 드리우면 넓은 평면 전체에
-    // 여드름이 뜬다.
+    /**
+     * 지면은 여전히 **받기만** 한다.
+     *
+     * 굴곡이 생겼으니 스스로에게도 드리우게 해봤는데, 그림자 패스에 정점
+     * 만 개짜리 메시가 한 번 더 들어가는 값에 비해 얻는 것이 거의 없었다 —
+     * 기복이 완만해서 자기 그림자가 지는 자리가 별로 없다. 굴곡은 그림자가
+     * 아니라 **경사에 따라 바위가 드러나는 색**(`bakeGround`)과 법선맵이
+     * 읽어 준다.
+     */
     mesh.receiveShadow = true
     this.root.add(mesh)
 
-    // 물 아래로 한 겹 더. 카메라가 낮게 깔릴 때 지면이 종이처럼 보이지 않게 한다.
-    const underGeo = new THREE.BoxGeometry(GROUND_EXTENT * 2, 6, GROUND_EXTENT * 2)
-    const underMat = new THREE.MeshStandardMaterial({ color: C.deepWater, roughness: 1 })
-    this.disposables.push(underGeo, underMat)
-    const under = new THREE.Mesh(underGeo, underMat)
-    under.position.y = -3.2
-    this.root.add(under)
-
     /**
-     * 바깥 바다.
-     *
-     * 하늘을 검정에서 그라디언트로 바꾸자 **구운 지면의 네모난 끝이 드러났다** —
-     * 1인칭으로 보면 세상이 직선으로 뚝 끊기고 그 너머가 하늘이었다. 전에는
-     * 배경이 거의 검정이라 끝이 안 보였을 뿐, 원래 있던 구멍이다.
+     * 수평선까지 채우는 바깥 바닥.
      *
      * 지면 텍스처를 키우면 해상도가 낭비되므로, 단색 판 한 장을 훨씬 넓게
-     * 깔아 수평선까지 물을 채운다. 안개가 이걸 지평선 색으로 녹여서 끝을
-     * 지운다. 드로우콜 하나면 된다.
+     * 깔아 수평선까지 채운다. 수면은 이 위에 따로 깔리고, 안개가 둘 다
+     * 지평선 색으로 녹여서 끝을 지운다.
      */
     const seaGeo = new THREE.PlaneGeometry(SEA_EXTENT * 2, SEA_EXTENT * 2)
-    const seaMat = new THREE.MeshStandardMaterial({ color: C.deepWater, roughness: 0.72 })
+    seaGeo.rotateX(-Math.PI / 2)
+    const seaMat = new THREE.MeshStandardMaterial({ color: C.deepWater, roughness: 1 })
     this.disposables.push(seaGeo, seaMat)
     const sea = new THREE.Mesh(seaGeo, seaMat)
-    sea.rotation.x = -Math.PI / 2
-    sea.position.y = -0.12
+    sea.position.y = -3.6
     this.root.add(sea)
+
+    // 수면. 하늘을 비추는 것이 물을 물로 만든다(`water.ts`).
+    this.water = buildWater(SEA_EXTENT, GROUND_EXTENT + 30, sky)
+    this.disposables.push(...this.water.disposables)
+    this.root.add(this.water.root)
   }
 
   /** 롱하우스 — 긴 몸통 위에 삼각 지붕. 프리미티브 셋이면 충분히 읽힌다. */
@@ -154,7 +202,7 @@ export class World {
     for (const p of game.players) {
       const d = game.board.defs[p.keepTile]!
       const g = new THREE.Group()
-      g.position.set(d.x, 0, d.z)
+      g.position.set(d.x, this.terrain.heightAt(d.x, d.z), d.z)
       // 칸 한 변이 28인데 예전에는 롱하우스가 15×12였다 — 1인칭으로 내려가면
       // 시야를 통째로 막았다. 칸의 3분의 1을 넘지 않게 줄인다.
       g.scale.setScalar(0.62)
@@ -178,17 +226,19 @@ export class World {
       const poleGeo = new THREE.CylinderGeometry(0.22, 0.22, 12, 6)
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x4b4438 })
       const pole = new THREE.Mesh(poleGeo, poleMat)
-      pole.position.set(7.5, 6, 4.4)
+      pole.position.set(7.5, 7.5, 4.4)
       g.add(pole)
 
-      const flagGeo = new THREE.PlaneGeometry(4.4, 2.6)
+      // 깃발은 높이 단다. 낮게 달면 아바타가 본진 옆에서 강림했을 때 화면
+      // 절반을 파란 판때기가 덮는다.
+      const flagGeo = new THREE.PlaneGeometry(3.8, 2.3)
       const flagMat = new THREE.MeshStandardMaterial({
         color: C.side[p.side],
         side: THREE.DoubleSide,
         roughness: 0.8,
       })
       const flag = new THREE.Mesh(flagGeo, flagMat)
-      flag.position.set(9.8, 10.2, 4.4)
+      flag.position.set(9.5, 12.4, 4.4)
       g.add(flag)
 
       this.disposables.push(wallGeo, wallMat, roofGeo, roofMat, poleGeo, poleMat, flagGeo, flagMat)
@@ -221,13 +271,16 @@ export class World {
         // 칸 한가운데는 비워 둔다 — 부대가 모이고 싸우는 자리다.
         if (Math.hypot(x - d.x, z - d.z) < 6) continue
         const s = rng.range(0.75, 1.25)
+        // 나무는 제가 선 자리의 높이 위에 선다. 이걸 빼면 언덕에 심은 나무가
+        // 허리까지 땅에 묻힌다.
+        const y = this.terrain.heightAt(x, z)
         const trunk = new THREE.Mesh(trunkGeo, trunkMat)
-        trunk.position.set(x, 1.2 * s, z)
+        trunk.position.set(x, y + 1.2 * s, z)
         trunk.scale.setScalar(s)
         this.tileGroup(d.id).add(trunk)
 
         const cone = new THREE.Mesh(coneGeo, rng.next() < 0.5 ? treeMat : treeMat2)
-        cone.position.set(x, (2.4 + 2.7) * s, z)
+        cone.position.set(x, y + (2.4 + 2.7) * s, z)
         cone.scale.setScalar(s)
         cone.rotation.y = rng.range(0, Math.PI)
         this.tileGroup(d.id).add(cone)
@@ -239,7 +292,7 @@ export class World {
         if (Math.hypot(x - d.x, z - d.z) < 5) continue
         const rock = new THREE.Mesh(rockGeo, rockMat)
         const s = rng.range(0.5, 1.5)
-        rock.position.set(x, s * 0.4, z)
+        rock.position.set(x, this.terrain.heightAt(x, z) + s * 0.4, z)
         rock.scale.set(s, s * 0.6, s)
         rock.rotation.set(rng.range(0, 3), rng.range(0, 3), rng.range(0, 3))
         this.tileGroup(d.id).add(rock)
@@ -258,7 +311,7 @@ export class World {
       const camp = t.neutral
       if (!camp) continue
       const g = new THREE.Group()
-      g.position.set(t.def.x, 0, t.def.z)
+      g.position.set(t.def.x, this.terrain.heightAt(t.def.x, t.def.z), t.def.z)
 
       if (camp.kind === 'mercenary') {
         // 창을 원형으로 꽂아 둔 야영지.
@@ -268,7 +321,7 @@ export class World {
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2
           const s = new THREE.Mesh(spearGeo, spearMat)
-          s.position.set(Math.cos(a) * 4.5, 3.2, Math.sin(a) * 4.5)
+          s.position.set(Math.cos(a) * 4.5, 3.2 + this.localRise(t.def.x, t.def.z, a, 4.5), Math.sin(a) * 4.5)
           s.rotation.z = Math.cos(a) * 0.18
           s.rotation.x = -Math.sin(a) * 0.18
           g.add(s)
@@ -297,7 +350,7 @@ export class World {
         for (let i = 0; i < 4; i++) {
           const b = new THREE.Mesh(boneGeo, boneMat)
           const a = (i / 4) * Math.PI * 2 + 0.4
-          b.position.set(Math.cos(a) * 5, 0.25, Math.sin(a) * 5)
+          b.position.set(Math.cos(a) * 5, 0.25 + this.localRise(t.def.x, t.def.z, a, 5), Math.sin(a) * 5)
           b.rotation.z = Math.PI / 2
           b.rotation.y = a
           g.add(b)
@@ -313,7 +366,7 @@ export class World {
           this.disposables.push(geo)
           const m = new THREE.Mesh(geo, colMat)
           const a = (i / 4) * Math.PI * 2 + Math.PI / 4
-          m.position.set(Math.cos(a) * 4.6, h / 2, Math.sin(a) * 4.6)
+          m.position.set(Math.cos(a) * 4.6, h / 2 + this.localRise(t.def.x, t.def.z, a, 4.6), Math.sin(a) * 4.6)
           m.rotation.y = a
           g.add(m)
         }
@@ -325,7 +378,7 @@ export class World {
       // 전초는 성채 칸에만 생긴다. 미리 세워두고 숨긴다.
       if (camp.kind === 'ruin') {
         const tower = this.buildOutpost()
-        tower.position.set(t.def.x, 0, t.def.z)
+        tower.position.set(t.def.x, this.terrain.heightAt(t.def.x, t.def.z), t.def.z)
         tower.visible = false
         this.outposts.set(t.def.id, tower)
         this.tileGroup(t.def.id).add(tower)
@@ -359,6 +412,10 @@ export class World {
    * 그리고 **한 번도 못 본 칸은 통째로 숨긴다** — 안개의 실제 구현이다.
    */
   sync(game: Game, viewer: 0 | 1): void {
+    // 물은 시뮬레이션 시각으로 흐른다. 프레임 간격을 쓰면 탭을 잠깐 떠났다
+    // 돌아왔을 때 물결이 튄다.
+    this.water?.tick(game.telemetry.elapsed)
+
     for (const t of game.board.tiles) {
       this.tileGroup(t.def.id).visible = t.seen[viewer]
     }

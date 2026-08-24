@@ -4,6 +4,7 @@ import { clamp } from '../core/vec2'
 import { TILE_LAND } from '../data/fjord'
 import { COLS, ROWS } from '../data/fjord'
 import { TILE } from '../data/tuning'
+import { PLATEAU, type Terrain } from './terrain'
 
 /**
  * 카메라 둘 — 부감과 1인칭.
@@ -23,11 +24,10 @@ export class Cameras {
   pitch = 0
 
   private readonly raycaster = new THREE.Raycaster()
-  private readonly plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
   private readonly hit = new THREE.Vector3()
   private readonly ndc = new THREE.Vector2()
 
-  constructor(aspect: number) {
+  constructor(aspect: number, private readonly terrain: Terrain) {
     this.overhead = new THREE.PerspectiveCamera(42, aspect, 1, 600)
     this.first = new THREE.PerspectiveCamera(74, aspect, 0.2, 600)
     this.layout(aspect)
@@ -50,8 +50,9 @@ export class Cameras {
 
     // 45도보다 눕히면 앞쪽 칸이 뒤쪽 칸을 가린다. 60도쯤이 균형점이다.
     const tilt = (60 * Math.PI) / 180
-    this.overhead.position.set(0, Math.sin(tilt) * d, Math.cos(tilt) * d)
-    this.overhead.lookAt(0, 0, 0)
+    // 판이 해수면보다 `PLATEAU`만큼 올라앉았으므로 겨누는 곳도 같이 올린다.
+    this.overhead.position.set(0, PLATEAU + Math.sin(tilt) * d, Math.cos(tilt) * d)
+    this.overhead.lookAt(0, PLATEAU, 0)
     this.overhead.aspect = aspect
     this.overhead.updateProjectionMatrix()
 
@@ -61,7 +62,9 @@ export class Cameras {
 
   /** 1인칭 카메라를 아바타에 붙인다. 눈높이는 유닛보다 조금 높다. */
   placeFirst(pos: Vec2, yaw: number): void {
-    this.first.position.set(pos.x, 4.1, pos.z)
+    // 눈높이는 **발밑 땅에서부터** 잰다. 절대 높이로 두면 언덕에 올라섰을 때
+    // 머리가 땅에 묻힌다.
+    this.first.position.set(pos.x, this.terrain.heightAt(pos.x, pos.z) + 4.1, pos.z)
     this.first.rotation.set(0, 0, 0)
     this.first.rotateY(yaw)
     this.first.rotateX(this.pitch)
@@ -74,14 +77,16 @@ export class Cameras {
   /**
    * 화면 좌표 → 지면 위의 한 점.
    *
-   * 부감에서 클릭한 곳이 어느 칸인지 알아내는 유일한 경로다. 지면을 무한
-   * 평면으로 두고 광선 하나만 때린다 — 메시를 레이캐스트하면 나무와 바위에
-   * 먼저 맞아서 클릭이 엉뚱한 데로 간다.
+   * 부감에서 클릭한 곳이 어느 칸인지 알아내는 유일한 경로다. 메시를
+   * 레이캐스트하지 않는 것은 나무와 바위에 먼저 맞아서 클릭이 엉뚱한 데로
+   * 가기 때문이고, 지형이 생긴 지금은 대신 **높이를 몇 번 되물어** 맞춘다
+   * (`Terrain.raise`). 부감이 60도로 누워 있어서 높이 2가 곧 수평 1의
+   * 오차가 되므로, 평면 하나로 때리면 클릭이 한 칸 밀리기도 한다.
    */
   screenToGround(x: number, y: number, w: number, h: number): Vec2 | null {
     this.ndc.set((x / w) * 2 - 1, -(y / h) * 2 + 1)
     this.raycaster.setFromCamera(this.ndc, this.overhead)
-    const p = this.raycaster.ray.intersectPlane(this.plane, this.hit)
+    const p = this.terrain.raise(this.raycaster.ray, this.hit)
     return p ? { x: p.x, z: p.z } : null
   }
 }

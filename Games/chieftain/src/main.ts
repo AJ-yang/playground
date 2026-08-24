@@ -79,8 +79,8 @@ function start(seed = Math.floor(Math.random() * 0x7fffffff)): void {
   // 거리(near/far)는 매 프레임 시점에 따라 갈아 끼운다 — `applyFog`.
   scene.fog = new THREE.Fog(C.skyHorizon, FOG_OVERHEAD[0], FOG_OVERHEAD[1])
 
-  const world = new World(game, seed)
-  const actors = new Actors(game)
+  const world = new World(game, seed, sky)
+  const actors = new Actors(game, world.terrain)
   scene.add(world.root, actors.root)
 
   session = {
@@ -89,7 +89,7 @@ function start(seed = Math.floor(Math.random() * 0x7fffffff)): void {
     scene,
     world,
     actors,
-    cameras: new Cameras(innerWidth / innerHeight),
+    cameras: new Cameras(innerWidth / innerHeight, world.terrain),
     firstPerson: false,
     keys: new Set(),
     ended: false,

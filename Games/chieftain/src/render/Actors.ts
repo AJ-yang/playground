@@ -6,6 +6,7 @@ import type { Game } from '../game/Game'
 import { NOBODY, type Side, type Unit } from '../game/types'
 import { C } from './palette'
 import { castShadows } from './shadows'
+import type { Terrain } from './terrain'
 import { buildRig, fallenGeometry, poseRig, type Rig, type WarriorRole } from './warrior'
 
 /**
@@ -55,7 +56,7 @@ export class Actors {
     bar: new THREE.PlaneGeometry(1, 1),
   }
 
-  constructor(game: Game) {
+  constructor(game: Game, private readonly terrain: Terrain) {
     for (const g of Object.values(this.geo)) this.disposables.push(g)
 
     this.buildTiles(game)
@@ -70,11 +71,23 @@ export class Actors {
 
   // ─────────────────────────────────────────────────────────── 만들기
 
-  private buildTiles(game: Game): void {
-    const tintGeo = new THREE.PlaneGeometry(TILE_LAND, TILE_LAND)
-    const fogGeo = new THREE.PlaneGeometry(TILE_LAND + 6, TILE_LAND + 6)
-    this.disposables.push(tintGeo, fogGeo)
+  /**
+   * 칸을 덮는 판을 지형에 눌러 붙인 지오메트리로 만든다.
+   *
+   * 평평한 판 한 장으로 두면 언덕에서는 땅속에 박히고 골짜기에서는 공중에
+   * 뜬다. 소유권과 안개는 **땅에 칠한 것처럼** 보여야 하는 표식이라 그러면
+   * 규칙이 안 읽힌다. 격자로 쪼개 높이를 먹인다 — 칸당 17×17이면 충분하고,
+   * 판을 시작할 때 한 번만 만든다.
+   */
+  private hugGeo(size: number, cx: number, cz: number, lift: number): THREE.BufferGeometry {
+    const geo = new THREE.PlaneGeometry(size, size, 16, 16)
+    geo.rotateX(-Math.PI / 2)
+    this.terrain.displace(geo, lift, cx, cz)
+    this.disposables.push(geo)
+    return geo
+  }
 
+  private buildTiles(game: Game): void {
     for (const d of game.board.defs) {
       const tintMat = new THREE.MeshBasicMaterial({
         color: C.side[0],
@@ -83,10 +96,9 @@ export class Actors {
         depthWrite: false,
       })
       this.disposables.push(tintMat)
-      const tint = new THREE.Mesh(tintGeo, tintMat)
-      tint.rotation.x = -Math.PI / 2
-      tint.position.set(d.x, 0.06, d.z)
-      tint.renderOrder = 1
+      const tint = new THREE.Mesh(this.hugGeo(TILE_LAND, d.x, d.z, 0.06), tintMat)
+      tint.position.set(d.x, 0, d.z)
+      tint.renderOrder = 2
       this.tileTint.push(tint)
       this.root.add(tint)
 
@@ -97,32 +109,51 @@ export class Actors {
         depthWrite: false,
       })
       this.disposables.push(fogMat)
-      const fog = new THREE.Mesh(fogGeo, fogMat)
-      fog.rotation.x = -Math.PI / 2
-      fog.position.set(d.x, 0.5, d.z)
+      // 판을 칸의 평지에 딱 맞춘다. 전에는 칸보다 6 넓었는데, 지형이 생긴
+      // 뒤로는 그 여분이 벼랑을 타고 내려가 **검은 벽**이 되었다.
+      const fog = new THREE.Mesh(this.hugGeo(TILE_LAND + 1.5, d.x, d.z, 0.55), fogMat)
+      fog.position.set(d.x, 0, d.z)
       fog.renderOrder = 6
       this.tileFog.push(fog)
       this.root.add(fog)
     }
   }
 
-  /** 지휘 반경 링. 이 게임에서 가장 중요한 한 줄의 그림이다. */
+  /**
+   * 지휘 반경 링. 이 게임에서 가장 중요한 한 줄의 그림이다.
+   *
+   * 반지름이 21이라 지형의 굴곡을 통째로 가로지른다 — 평평한 고리로 두면
+   * 반쯤은 땅에 잠기고 반쯤은 떠서, 하필 **가장 중요한 선**이 제일 지저분해
+   * 진다. 그래서 이것만은 매 프레임 지형을 다시 물어 굽힌다. 정점이 144개뿐
+   * 이라 값이 싸다.
+   */
   private buildRadiusRing(): THREE.Mesh {
     const r = TUNING.commandRadius
     const geo = new THREE.RingGeometry(r - 0.7, r, 72)
+    geo.rotateX(-Math.PI / 2)
     const mat = new THREE.MeshBasicMaterial({
       color: C.radius,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.8,
       side: THREE.DoubleSide,
       depthWrite: false,
     })
     this.disposables.push(geo, mat)
     const m = new THREE.Mesh(geo, mat)
-    m.rotation.x = -Math.PI / 2
-    m.position.y = 0.12
-    m.renderOrder = 3
+    m.renderOrder = 4
+    // 링은 제자리에 두고 정점만 옮긴다. 그룹을 옮기면 높이를 두 번 더한다.
+    m.frustumCulled = false
     return m
+  }
+
+  /** 반경 링의 정점을 아바타 자리에 맞춰 지형 위로 다시 얹는다. */
+  private bendRing(cx: number, cz: number): void {
+    const pos = this.radiusRing.geometry.attributes.position as THREE.BufferAttribute
+    for (let i = 0; i < pos.count; i++) {
+      pos.setY(i, this.terrain.heightAt(pos.getX(i) + cx, pos.getZ(i) + cz) + 0.18)
+    }
+    pos.needsUpdate = true
+    this.radiusRing.position.set(cx, 0, cz)
   }
 
   private buildRallyMark(): THREE.Group {
@@ -138,8 +169,8 @@ export class Actors {
     this.disposables.push(geo, mat)
     const ring = new THREE.Mesh(geo, mat)
     ring.rotation.x = -Math.PI / 2
-    ring.position.y = 0.14
-    ring.renderOrder = 3
+    ring.position.y = 0.16
+    ring.renderOrder = 4
     g.add(ring)
     return g
   }
@@ -162,8 +193,7 @@ export class Actors {
     this.disposables.push(geo, mat)
     const m = new THREE.Mesh(geo, mat)
     m.rotation.x = -Math.PI / 2
-    m.position.y = 0.16
-    m.renderOrder = 3
+    m.renderOrder = 4
     m.visible = false
     return m
   }
@@ -302,7 +332,7 @@ export class Actors {
   ): void {
     this.syncUnits(game, viewer, camera, dt)
     this.syncAvatars(game, viewer, firstPerson, dt)
-    this.syncTiles(game, viewer)
+    this.syncTiles(game, viewer, firstPerson)
     this.syncRally(game, viewer)
     this.syncForges(game, viewer)
     this.syncHits(game, viewer)
@@ -331,11 +361,9 @@ export class Actors {
 
       // 휘두를 때 앞으로 내지른다. 한 대 한 대가 눈에 보이는 유일한 이유다.
       const lunge = u.lunge * u.lunge * 1.1
-      node.group.position.set(
-        u.pos.x + Math.sin(u.facing) * lunge,
-        0,
-        u.pos.z + Math.cos(u.facing) * lunge,
-      )
+      const gx = u.pos.x + Math.sin(u.facing) * lunge
+      const gz = u.pos.z + Math.cos(u.facing) * lunge
+      node.group.position.set(gx, this.terrain.heightAt(gx, gz), gz)
       node.group.rotation.y = u.facing
 
       poseRig(node.rig, {
@@ -404,7 +432,11 @@ export class Actors {
           ? !(firstPerson && p.side === viewer) // 내 몸 안에 있으면 내 몸은 안 그린다
           : game.visible[viewer].has(game.board.tileAt(p.avatar.pos))
       node.group.visible = visible
-      node.group.position.set(p.avatar.pos.x, 0, p.avatar.pos.z)
+      node.group.position.set(
+        p.avatar.pos.x,
+        this.terrain.heightAt(p.avatar.pos.x, p.avatar.pos.z),
+        p.avatar.pos.z,
+      )
       node.group.rotation.y = p.avatar.yaw
       if (!visible) continue
 
@@ -423,10 +455,19 @@ export class Actors {
 
     // 반경 링은 보는 쪽의 것만 그린다. 상대 반경까지 보이면 정보가 과해진다.
     const me = game.players[viewer].avatar
-    this.radiusRing.position.set(me.pos.x, 0.12, me.pos.z)
+    this.bendRing(me.pos.x, me.pos.z)
   }
 
-  private syncTiles(game: Game, viewer: Side): void {
+  private syncTiles(game: Game, viewer: Side, firstPerson: boolean): void {
+    /**
+     * 소유권 색은 **부감의 정보**다.
+     *
+     * 1인칭에서 같은 세기로 깔면 눈앞의 풀밭이 통째로 하늘색 막에 덮여서,
+     * 애써 만든 지형과 풀색이 도로 페인트칠한 판때기가 된다. 여기서는 내가
+     * 세상 안에 서 있는 것이고, 누구 땅인지는 깃발과 건물이 말해야 한다.
+     * 지워 버리지는 않고 흔적만 남긴다.
+     */
+    const strength = firstPerson ? 0.28 : 1
     for (const t of game.board.tiles) {
       const tint = this.tileTint[t.def.id]!
       const mat = tint.material as THREE.MeshBasicMaterial
@@ -434,7 +475,7 @@ export class Actors {
       const side: Side = hold >= 0 ? 0 : 1
       mat.color.setHex(C.side[side])
       // 점유도가 곧 진하기다. 점령이 차오르는 것이 그대로 보인다.
-      mat.opacity = Math.min(0.42, Math.abs(hold) * 0.42)
+      mat.opacity = Math.min(0.42, Math.abs(hold) * 0.42) * strength
 
       const fog = this.tileFog[t.def.id]!
       const fogMat = fog.material as THREE.MeshBasicMaterial
@@ -447,7 +488,7 @@ export class Actors {
 
   private syncRally(game: Game, viewer: Side): void {
     const p = game.players[viewer]
-    this.rallyMark.position.set(p.rally.x, 0, p.rally.z)
+    this.rallyMark.position.set(p.rally.x, this.terrain.heightAt(p.rally.x, p.rally.z), p.rally.z)
     const ring = this.rallyMark.children[0] as THREE.Mesh
     ;(ring.material as THREE.MeshBasicMaterial).color.setHex(C.side[viewer])
   }
@@ -478,7 +519,11 @@ export class Actors {
       mat.opacity = h.life * 0.9
       const s0 = (h.big ? 2.4 : 1.6) * (1.5 - h.life * 0.5)
       m.scale.setScalar(s0)
-      m.position.set(h.pos.x, 2.2 + (1 - h.life) * 1.4, h.pos.z)
+      m.position.set(
+        h.pos.x,
+        this.terrain.heightAt(h.pos.x, h.pos.z) + 2.2 + (1 - h.life) * 1.4,
+        h.pos.z,
+      )
       m.rotation.y = h.life * 5
     }
     for (let i = game.hits.length; i < this.hitPool.length; i++) {
@@ -527,7 +572,7 @@ export class Actors {
       const fall = Math.min(1, (1 - c.life) * 6)
       const k = UNITS[c.kind].radius * Actors.VIEW_SCALE
       m.scale.setScalar(k)
-      m.position.set(c.pos.x, 0.05, c.pos.z)
+      m.position.set(c.pos.x, this.terrain.heightAt(c.pos.x, c.pos.z) + 0.05, c.pos.z)
       m.rotation.set(-(1 - fall) * Math.PI * 0.5, c.facing, 0)
     }
     for (let i = game.corpses.length; i < this.corpsePool.length; i++) {
@@ -548,7 +593,7 @@ export class Actors {
       let node = this.forgeNodes.get(b.id)
       if (!node) {
         node = this.buildForge(b.side)
-        node.position.set(b.pos.x, 0, b.pos.z)
+        node.position.set(b.pos.x, this.terrain.heightAt(b.pos.x, b.pos.z), b.pos.z)
         this.forgeNodes.set(b.id, node)
         this.root.add(node)
       }
@@ -611,7 +656,11 @@ export class Actors {
     const show = !!target && game.visible[viewer].has(target.tile)
     this.focusMark.visible = show
     if (!show || !target) return
-    this.focusMark.position.set(target.pos.x, 0.16, target.pos.z)
+    this.focusMark.position.set(
+      target.pos.x,
+      this.terrain.heightAt(target.pos.x, target.pos.z) + 0.2,
+      target.pos.z,
+    )
     this.focusMark.rotation.z = game.telemetry.elapsed * 2.2
   }
 
