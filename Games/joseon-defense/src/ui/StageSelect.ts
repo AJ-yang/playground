@@ -224,6 +224,8 @@ export class StageSelect {
           w: cardW - 24,
           h: 34,
           label: cleared ? '다시 도전' : '시작',
+          // 카드가 여섯 장이라 '시작'만으로는 어느 스테이지인지 구분되지 않는다.
+          hotspotLabel: `S${stage.index} ${stage.name} — ${cleared ? '다시 도전' : '시작'}`,
           enabled: true,
           primary: !cleared,
         })
@@ -232,12 +234,21 @@ export class StageSelect {
         ctx.font = FONT.tiny
         ctx.fillStyle = PALETTE.textDim
         ctx.textAlign = 'center'
-        ctx.fillText(
-          prev ? `${prev.name} 클리어 필요` : '잠김',
-          x + cardW / 2,
-          y + cardH - 27,
-        )
+        const lock = prev ? `${prev.name} 클리어 필요` : '잠김'
+        ctx.fillText(lock, x + cardW / 2, y + cardH - 27)
         ctx.textAlign = 'left'
+        // 잠긴 카드도 히트 영역으로 남긴다 — 조작 훅이 "여기 있는데 안 눌린다"를
+        // 보여줄 수 있어야 한다. 판정에는 영향이 없다: 입력 쪽은 enabled가
+        // 거짓이면 아무것도 안 하고, 원래도 이 자리는 아무 일도 안 했다.
+        this.buttons.push({
+          id: `stage:${stage.id}`,
+          x: x + 12,
+          y: y + cardH - 44,
+          w: cardW - 24,
+          h: 34,
+          enabled: false,
+          label: `S${stage.index} ${stage.name} — 잠김 · ${lock}`,
+        })
       }
     })
   }
@@ -432,6 +443,8 @@ export class StageSelect {
     enabled: boolean
     primary?: boolean
     subtle?: boolean
+    /** 조작 훅에 내보낼 이름. 버튼 글자만으로는 무엇에 대한 것인지 모를 때 쓴다. */
+    hotspotLabel?: string
   }): void {
     const { ctx } = this
     const { x, y, w, h, label, primary, subtle } = opts
@@ -463,6 +476,14 @@ export class StageSelect {
     ctx.fillText(label, x + w / 2, y + h / 2)
     ctx.textAlign = 'left'
 
-    this.buttons.push({ id: opts.id, x, y, w, h, enabled: opts.enabled })
+    this.buttons.push({
+      id: opts.id,
+      x,
+      y,
+      w,
+      h,
+      enabled: opts.enabled,
+      label: opts.hotspotLabel ?? label,
+    })
   }
 }

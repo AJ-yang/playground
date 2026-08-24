@@ -119,7 +119,15 @@ export class TitleScreen {
       ctx.fillStyle = active ? PALETTE.textMuted : PALETTE.textDim
       ctx.fillText(diff.desc, x + cardW / 2, y + 72)
 
-      this.buttons.push({ id: `difficulty:${diff.id}`, x, y, w: cardW, h: cardH, enabled: true })
+      this.buttons.push({
+        id: `difficulty:${diff.id}`,
+        x,
+        y,
+        w: cardW,
+        h: cardH,
+        enabled: true,
+        label: `${diff.name} — ${diff.desc}`,
+      })
       x += cardW + gap
     }
 
@@ -644,6 +652,6 @@ export class TitleScreen {
     ctx.textBaseline = 'middle'
     ctx.fillText(label, x + w / 2, y + h / 2)
 
-    this.buttons.push({ id: opts.id, x, y, w, h, enabled: true })
+    this.buttons.push({ id: opts.id, x, y, w, h, enabled: true, label })
   }
 }

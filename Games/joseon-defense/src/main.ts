@@ -10,6 +10,7 @@ import { Hud } from './ui/Hud'
 import { StageSelect } from './ui/StageSelect'
 import { TitleScreen } from './ui/TitleScreen'
 import { computeLayout, hitTest } from './ui/layout'
+import { installPlaytest } from './ui/playtest'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement | null
 if (!canvas) throw new Error('#game 캔버스를 찾을 수 없습니다')
@@ -49,6 +50,8 @@ let elapsed = 0
 let unlockBanner: string[] = []
 /** 이번 판의 승패를 이미 진행도에 반영했는가 */
 let resultRecorded = false
+/** 첫 프레임을 그렸는가. 조작 훅의 ready 판정에만 쓴다. */
+let firstFrameDrawn = false
 
 const loop = new GameLoop({
   update(dt) {
@@ -63,26 +66,38 @@ const loop = new GameLoop({
       resultRecorded = true
     }
   },
-  render() {
-    if (screen === 'title') {
-      titleScreen.draw(progress, elapsed)
-      return
-    }
-    if (screen === 'select') {
-      stageSelect.draw(progress)
-      return
-    }
-    ctx.fillStyle = PALETTE.bg
-    ctx.fillRect(0, 0, layout.width, layout.height)
-    renderer.drawBoard(game, elapsed)
-    const unlock = unlockBanner.map(getTowerDef)
-    const resultBottom = renderer.drawGameOver(game, unlock)
-    hud.draw(game, speed, paused)
-    // 결과 화면 버튼은 오버레이 위에 그려야 하므로 HUD 다음이다.
-    hud.drawResultActions(game, nextStage() !== null, resultBottom)
-    drawPlayChrome()
-  },
+  render: drawFrame,
 })
+
+/**
+ * 이번 프레임 그리기.
+ *
+ * 루프 밖에서도 부를 수 있게 이름 있는 함수로 뺐다. 클릭 영역은 **그리면서**
+ * 만들어지므로(`Hud`·`StageSelect`·`TitleScreen`), 조작 훅이 "지금" 누를 수
+ * 있는 것을 물으면 마지막 프레임이 아니라 지금 상태로 한 번 더 그려야
+ * 답이 한 프레임 밀리지 않는다. 그리기는 게임 상태를 바꾸지 않으므로
+ * 여러 번 불러도 안전하다.
+ */
+function drawFrame(): void {
+  firstFrameDrawn = true
+  if (screen === 'title') {
+    titleScreen.draw(progress, elapsed)
+    return
+  }
+  if (screen === 'select') {
+    stageSelect.draw(progress)
+    return
+  }
+  ctx!.fillStyle = PALETTE.bg
+  ctx!.fillRect(0, 0, layout.width, layout.height)
+  renderer.drawBoard(game, elapsed)
+  const unlock = unlockBanner.map(getTowerDef)
+  const resultBottom = renderer.drawGameOver(game, unlock)
+  hud.draw(game, speed, paused)
+  // 결과 화면 버튼은 오버레이 위에 그려야 하므로 HUD 다음이다.
+  hud.drawResultActions(game, nextStage() !== null, resultBottom)
+  drawPlayChrome()
+}
 
 /** 플레이 화면 상단 좌측의 스테이지 표시와 나가기 버튼. */
 function drawPlayChrome(): void {
@@ -327,6 +342,28 @@ document.addEventListener('visibilitychange', () => {
 
 applyTimeScale()
 loop.start()
+
+// 조작 훅 (표준 계약 4.2). 프로덕션 빌드에서도 남는다 — 배포본을 그대로
+// 검증할 수 있어야 한다. 게임 상태는 읽기만 하고, 화면별 히트 영역을
+// 그리는 쪽에서 그대로 받아 CSS 픽셀 좌표로 환산해 내보낸다.
+installPlaytest({
+  canvas,
+  layout,
+  screen: () => screen,
+  game: () => game,
+  stage: () => stage,
+  progress: () => progress,
+  paused: () => paused,
+  speed: () => speed,
+  redraw: drawFrame,
+  uiButtons: () =>
+    screen === 'title'
+      ? titleScreen.hitAreas
+      : screen === 'select'
+        ? stageSelect.hitAreas
+        : hud.hitAreas,
+  rendered: () => firstFrameDrawn,
+})
 
 // 개발 편의: 콘솔에서 상태를 들여다볼 수 있게 노출한다.
 Object.assign(window as unknown as Record<string, unknown>, {

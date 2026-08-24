@@ -138,6 +138,7 @@ export class Hud {
       w: pauseW,
       h: 28,
       label: paused ? '▶' : '❚❚',
+      hotspotLabel: paused ? '▶ 재개' : '❚❚ 일시정지',
       active: paused,
       enabled: true,
     })
@@ -425,6 +426,8 @@ export class Hud {
         h: cardH,
         enabled: !game.isOver,
         payload: towerId,
+        // 카드에 실제로 찍히는 두 글자 덩어리("1. 사수"와 "70G")를 그대로 잇는다.
+        label: `${i + 1}. ${def.name} ${cost}G`,
       })
       y += cardH + 6
     })
@@ -679,6 +682,8 @@ export class Hud {
     active?: boolean
     primary?: boolean
     danger?: boolean
+    /** 조작 훅에 내보낼 이름. 버튼 글자만으로는 무엇에 대한 것인지 모를 때만 쓴다. */
+    hotspotLabel?: string
   }): void {
     const { ctx } = this
     const { x, y, w, h, label, enabled, active, primary, danger } = opts
@@ -718,6 +723,6 @@ export class Hud {
     ctx.fillText(label, x + w / 2, y + h / 2)
     ctx.textAlign = 'left'
 
-    this.buttons.push({ id: opts.id, x, y, w, h, enabled })
+    this.buttons.push({ id: opts.id, x, y, w, h, enabled, label: opts.hotspotLabel ?? label })
   }
 }

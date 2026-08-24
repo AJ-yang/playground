@@ -65,6 +65,18 @@ export function backdropMapImage(): HTMLImageElement | null {
   return ready(mapEl) ? mapEl : null
 }
 
+/**
+ * 시작한 디코드가 전부 결론이 났는가 (성공·실패 무관).
+ *
+ * 조작 훅의 `ready`가 쓴다. "그릴 수 있는가"(`backdropMapImage`)와 달리 실패한
+ * 것도 끝난 것으로 친다 — 깨진 자산 하나가 ready를 영원히 붙잡으면 안 된다.
+ */
+export function backdropImagesSettled(): boolean {
+  if (!started) return true
+  if (mapEl && !mapEl.complete) return false
+  return plateEls.every((plate) => plate.img.complete)
+}
+
 /** 이번 프레임에 그릴 수 있는 유물 사진들. 먼저 준비된 것부터 나온다. */
 export function backdropPlateImages(): readonly LoadedPlate[] {
   return plateEls.filter((plate) => ready(plate.img))

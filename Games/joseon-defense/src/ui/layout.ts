@@ -45,6 +45,11 @@ export interface UiButton {
   enabled: boolean
   /** 자유 데이터 — 어떤 타워인지 같은 정보를 실어 보낸다. */
   payload?: string
+  /**
+   * **화면에 보이는 그대로**의 글자. 조작 훅(`window.__playtest`)이 이걸 그대로
+   * 내보낸다 — 히트 영역을 만드는 자리에서 함께 적어야 그림과 어긋나지 않는다.
+   */
+  label?: string
 }
 
 export function hitTest(buttons: readonly UiButton[], x: number, y: number): UiButton | null {
