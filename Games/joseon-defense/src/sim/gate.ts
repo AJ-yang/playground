@@ -38,6 +38,20 @@ const MONO = STRATEGIES.filter((s) => s.id.endsWith('-only')).map((s) => s.id)
 /** S3~S6. 튜토리얼(S1)과 "총통 몰빵이 정답"인 S2는 규칙이 다르다. */
 const LATE = ['fork', 'highlands', 'anju', 'gate']
 
+/** S2 삼포왜란. 이 판만 몰빵 규칙이 다르다 — 아래 `MONO_NO_GUNPOWDER` 참고. */
+const RAMPARTS = 'ramparts'
+
+/**
+ * S2에서 **화약을 쓰지 못하는** 몰빵.
+ *
+ * GDD 4.5의 설계 규칙은 "새로 열린 기물은 다음 스테이지에서 곧바로 필요해야
+ * 한다"이고, S1의 보상인 총통이 그 규칙의 첫 사례다. 그래서 S2는 총통 몰빵이
+ * 100%인 것이 **의도**이고(그 판의 교훈이 "갑주에는 화약"이다), 나머지 몰빵이
+ * 못 넘는 것도 같은 의도의 뒷면이다. 총통만 빼고 이름 규칙으로 모으므로
+ * 몰빵 전략을 늘리면 저절로 검사 대상이 된다.
+ */
+const MONO_NO_GUNPOWDER = MONO.filter((id) => id !== 'mage-only')
+
 type Rule =
   /** 이 전략들은 이 스테이지에서 `max`를 넘으면 안 된다. */
   | { kind: 'ceiling'; what: string; stages: string[]; strategies: string[]; max: number }
@@ -52,6 +66,13 @@ const RULES: readonly Rule[] = [
     what: '한 종만 지어서는 후반을 못 넘는다',
     stages: LATE,
     strategies: MONO,
+    max: 0.1,
+  },
+  {
+    kind: 'ceiling',
+    what: 'S1이 준 총통은 S2에서 곧바로 필요하다 — 화약 없는 한 종으로는 못 넘는다',
+    stages: [RAMPARTS],
+    strategies: MONO_NO_GUNPOWDER,
     max: 0.1,
   },
   {
@@ -74,6 +95,36 @@ const RULES: readonly Rule[] = [
     stages: LATE,
     strategy: 'balanced',
     vs: 'balanced-no-frost',
+    slack: 0.05,
+  },
+  /**
+   * 아래 두 규칙은 **종류**가 아니라 **개수** 축이다.
+   *
+   * 이 저장소에서 밸런스가 무너진 세 번 중 첫 번째가 "거마작을 넣은 빌드가 안
+   * 넣은 빌드보다 나쁘다"였는데, 그때 그 사실을 잡아낸 대조군이 적응형 · 거마작
+   * N기다(BALANCE 6·8장). 위의 `balanced` 계열 규칙은 같은 성질을 「균형 순환」
+   * 한 가지 빌드에서만 지키고 있어서, 배치 규칙이나 감속 수치를 만져 적응형
+   * 쪽만 뒤집히면 게이트가 초록인 채로 지나간다.
+   *
+   * **3기는 일부러 넣지 않았다.** GDD 4.2는 감속이 중첩되지 않으므로 "1~2기가
+   * 최적이고 과투자는 손해"라고 못 박는다 — 3기가 2기보다 나쁜 것은 의도된
+   * 결과지 회귀가 아니다. 지켜야 하는 것은 **최적 구간(1~2기)이 실제로
+   * 최적인가**뿐이다.
+   */
+  {
+    kind: 'notWorse',
+    what: 'S2가 준 거마작은 1기만 섞어도 값을 한다 (적응형 빌드)',
+    stages: LATE,
+    strategy: 'adaptive-frost1',
+    vs: 'adaptive-frost0',
+    slack: 0.05,
+  },
+  {
+    kind: 'notWorse',
+    what: '거마작 2기는 최적 구간이다 — 0기보다 나쁘면 안 된다 (적응형 빌드)',
+    stages: LATE,
+    strategy: 'adaptive-frost2',
+    vs: 'adaptive-frost0',
     slack: 0.05,
   },
   {
