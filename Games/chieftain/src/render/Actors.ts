@@ -3,9 +3,10 @@ import { TILE_LAND } from '../data/fjord'
 import { TUNING } from '../data/tuning'
 import { UNITS } from '../data/units'
 import type { Game } from '../game/Game'
-import { NEUTRAL, NOBODY, type Side, type Unit } from '../game/types'
+import { NOBODY, type Side, type Unit } from '../game/types'
 import { C } from './palette'
 import { castShadows } from './shadows'
+import { buildRig, fallenGeometry, poseRig, type Rig, type WarriorRole } from './warrior'
 
 /**
  * 매 프레임 바뀌는 것 — 유닛·아바타·지휘 반경·소유권·안개.
@@ -21,7 +22,7 @@ export class Actors {
   private readonly unitNodes = new Map<number, UnitNode>()
   private readonly tileTint: THREE.Mesh[] = []
   private readonly tileFog: THREE.Mesh[] = []
-  private readonly avatarNodes: THREE.Group[] = []
+  private readonly avatarNodes: AvatarNode[] = []
   /** 타격 불꽃·시신·기지·집중 표식 — 매 프레임 수가 바뀌는 것들. */
   private readonly hitPool: THREE.Mesh[] = []
   private readonly corpsePool: THREE.Mesh[] = []
@@ -43,16 +44,15 @@ export class Actors {
    */
   private static readonly VIEW_SCALE = 1.75
 
+  /**
+   * 몸은 더 이상 여기 없다. 팔다리가 있는 뼈대는 `warrior.ts`가 굽고, 그
+   * 지오메트리는 (역할 × 진영)마다 한 벌씩 캐시되어 모든 개체가 공유한다.
+   * 여기 남은 것은 **규칙을 그리는 표식**뿐이다.
+   */
   private readonly geo = {
-    body: new THREE.CapsuleGeometry(0.85, 1.6, 4, 8),
-    shield: new THREE.BoxGeometry(0.35, 2.3, 1.9),
-    haft: new THREE.CylinderGeometry(0.14, 0.14, 2.8, 5),
-    axe: new THREE.BoxGeometry(0.32, 1.0, 0.95),
     foot: new THREE.RingGeometry(1.1, 1.62, 20),
     spark: new THREE.IcosahedronGeometry(1, 0),
     bar: new THREE.PlaneGeometry(1, 1),
-    cloak: new THREE.ConeGeometry(1.6, 3.6, 8),
-    head: new THREE.SphereGeometry(0.66, 10, 8),
   }
 
   constructor(game: Game) {
@@ -180,21 +180,13 @@ export class Actors {
       const g = new THREE.Group()
       const color = C.side[p.side]
 
-      const cloakMat = new THREE.MeshStandardMaterial({ color, roughness: 0.65 })
-      const headMat = new THREE.MeshStandardMaterial({ color: 0xe4d7c2, roughness: 0.8 })
-      this.disposables.push(cloakMat, headMat)
-
       // 아바타는 유닛보다 한 뼘 더 크다. 부감에서 누가 나인지 바로 보여야 한다.
-      g.scale.setScalar(Actors.VIEW_SCALE * 1.15)
+      const scale = Actors.VIEW_SCALE * 1.15
+      g.scale.setScalar(scale)
 
-      const cloak = new THREE.Mesh(this.geo.cloak, cloakMat)
-      cloak.position.y = 1.7
-      cloak.scale.set(1, 1.35, 1)
-      g.add(cloak)
-
-      const head = new THREE.Mesh(this.geo.head, headMat)
-      head.position.y = 4.3
-      g.add(head)
+      // 뿔 달린 투구와 망토를 두른 족장. 부하와 같은 뼈대에 장식만 다르다.
+      const rig = buildRig('chief', p.side, p.side * 0.5 + 0.17)
+      g.add(rig.root)
 
       // 빛기둥. 반투명 원기둥이라 유닛을 가리지 않는다.
       const beamGeo = new THREE.CylinderGeometry(0.8, 1.5, 17, 10, 1, true)
@@ -205,17 +197,17 @@ export class Actors {
         depthWrite: false,
         side: THREE.DoubleSide,
       })
-      this.disposables.push(beamGeo, beamMat)
+      this.disposables.push(beamGeo, beamMat, rig.mat)
       const beam = new THREE.Mesh(beamGeo, beamMat)
       beam.position.y = 9.5
       beam.renderOrder = 4
       // 그룹 스케일을 되돌린다 — 몸만 커지고 빛기둥은 가늘게 유지한다.
-      beam.scale.setScalar(1 / (Actors.VIEW_SCALE * 1.15))
+      beam.scale.setScalar(1 / scale)
       beam.scale.y = 1
       g.add(beam)
 
       castShadows(g)
-      this.avatarNodes.push(g)
+      this.avatarNodes.push({ group: g, rig, px: p.avatar.pos.x, pz: p.avatar.pos.z })
       this.root.add(g)
     }
   }
@@ -224,13 +216,6 @@ export class Actors {
     const found = this.unitNodes.get(u.id)
     if (found) return found
 
-    const color =
-      u.faction === NEUTRAL ? C.neutral : C.side[u.faction as Side]
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 })
-    const gearMat = new THREE.MeshStandardMaterial({
-      color: u.faction === NEUTRAL ? C.neutralDark : C.sideDim[u.faction as Side],
-      roughness: 0.8,
-    })
     const footMat = new THREE.MeshBasicMaterial({
       color: C.radius,
       transparent: true,
@@ -238,28 +223,18 @@ export class Actors {
       side: THREE.DoubleSide,
       depthWrite: false,
     })
-    this.disposables.push(bodyMat, gearMat, footMat)
+    this.disposables.push(footMat)
 
     const group = new THREE.Group()
-    const body = new THREE.Mesh(this.geo.body, bodyMat)
-    body.position.y = 1.6
-    group.add(body)
 
-    // 방패병은 방패를, 도끼병은 도끼를 든다. 실루엣만으로 구분되어야
-    // "누구를 반경에 넣을 것인가"가 결정이 된다(GDD 6.2).
-    if (u.kind === 'shield') {
-      const sh = new THREE.Mesh(this.geo.shield, gearMat)
-      sh.position.set(0, 1.7, 1.05)
-      group.add(sh)
-    } else {
-      const haft = new THREE.Mesh(this.geo.haft, gearMat)
-      haft.position.set(0.85, 2.2, 0.2)
-      haft.rotation.x = 0.35
-      group.add(haft)
-      const head = new THREE.Mesh(this.geo.axe, gearMat)
-      head.position.set(0.85, 3.4, 0.55)
-      group.add(head)
-    }
+    // 방패병은 창과 둥근 방패를, 도끼병은 양손도끼를 든다. 실루엣만으로
+    // 구분되어야 "누구를 반경에 넣을 것인가"가 결정이 된다(GDD 6.2).
+    // 자세까지 다르다 — 방패병은 막고 도끼병은 내려찍는다.
+    //
+    // 씨앗은 id에서 뽑는다. 같은 자리에 선 부대가 한 몸처럼 숨쉬면
+    // 사람이 아니라 인형으로 보이기 때문에, 숨쉬기 위상만 조금씩 어긋낸다.
+    const rig = buildRig(u.kind as WarriorRole, u.faction, (u.id % 17) / 17)
+    group.add(rig.root)
 
     // 발밑 링 — 지휘받는 동안만 켜진다.
     const foot = new THREE.Mesh(this.geo.foot, footMat)
@@ -296,7 +271,16 @@ export class Actors {
     // `MeshBasicMaterial`이고, `castShadows`가 재질을 보고 알아서 거른다.
     castShadows(group)
 
-    const node: UnitNode = { group, body, foot, bodyMat, footMat, bar, barFill }
+    const node: UnitNode = {
+      group,
+      rig,
+      foot,
+      footMat,
+      bar,
+      barFill,
+      px: u.pos.x,
+      pz: u.pos.z,
+    }
     this.unitNodes.set(u.id, node)
     this.root.add(group)
     return node
@@ -304,9 +288,20 @@ export class Actors {
 
   // ─────────────────────────────────────────────────────────── 갱신
 
-  sync(game: Game, viewer: Side, firstPerson: boolean, camera: THREE.Camera): void {
-    this.syncUnits(game, viewer, camera)
-    this.syncAvatars(game, viewer, firstPerson)
+  /**
+   * `dt`는 **렌더 프레임 간격**이지 시뮬레이션 스텝이 아니다. 애니메이션은
+   * 판정에 관여하지 않으므로 가변 dt를 써도 되고, 오히려 써야 한다 — 고정
+   * 스텝에 묶으면 프레임이 밀릴 때 동작이 같이 끊긴다.
+   */
+  sync(
+    game: Game,
+    viewer: Side,
+    firstPerson: boolean,
+    camera: THREE.Camera,
+    dt: number,
+  ): void {
+    this.syncUnits(game, viewer, camera, dt)
+    this.syncAvatars(game, viewer, firstPerson, dt)
     this.syncTiles(game, viewer)
     this.syncRally(game, viewer)
     this.syncForges(game, viewer)
@@ -315,11 +310,20 @@ export class Actors {
     this.syncFocus(game, viewer)
   }
 
-  private syncUnits(game: Game, viewer: Side, camera: THREE.Camera): void {
+  private syncUnits(game: Game, viewer: Side, camera: THREE.Camera, dt: number): void {
     const alive = new Set<number>()
     for (const u of game.units) {
       alive.add(u.id)
       const node = this.nodeFor(u)
+
+      // 걸음 위상은 **지나온 거리**에 묶는다. 그래서 매 프레임 실제로 얼마나
+      // 움직였는지를 여기서 잰다 — 지휘 반경 보너스로 속도가 바뀌는 게임이라
+      // 명목 속도를 쓰면 반경에 들어간 순간부터 발이 미끄러진다.
+      const dx = u.pos.x - node.px
+      const dz = u.pos.z - node.pz
+      node.px = u.pos.x
+      node.pz = u.pos.z
+
       // 안개 밖의 남은 보이지 않는다. 부감을 켜 두었다고 다 아는 것은 아니다.
       const visible = u.faction === viewer || game.canSee(viewer, u)
       node.group.visible = visible
@@ -334,20 +338,29 @@ export class Actors {
       )
       node.group.rotation.y = u.facing
 
-      const hpRatio = Math.max(0.15, u.hp / u.maxHp)
-      node.body.scale.y = 0.85 + hpRatio * 0.15
+      poseRig(node.rig, {
+        dt,
+        speed: Math.hypot(dx, dz) / dt,
+        lunge: u.lunge,
+        windup: windupOf(u),
+        guard: u.guard,
+        flash: u.flash,
+        fighting: u.fighting,
+        time: game.telemetry.elapsed,
+      })
 
       // 맞으면 하얗게, **방패벽이 막아내면 반경과 같은 금색으로** 번쩍인다.
       // 색을 나눈 것이 이 게임에서 가장 중요한 한 줄의 연출이다 — 지휘 반경
       // 안에 있다는 것이 전투에서 무엇을 바꾸는지, 글자 없이 이걸로만 말한다.
+      const mat = node.rig.mat
       if (u.guard > 0) {
-        node.bodyMat.emissive.setHex(C.radius)
-        node.bodyMat.emissiveIntensity = u.guard * 1.5
+        mat.emissive.setHex(C.radius)
+        mat.emissiveIntensity = u.guard * 1.5
       } else if (u.flash > 0) {
-        node.bodyMat.emissive.setHex(0xffffff)
-        node.bodyMat.emissiveIntensity = u.flash * 0.9
+        mat.emissive.setHex(0xffffff)
+        mat.emissiveIntensity = u.flash * 0.9
       } else {
-        node.bodyMat.emissiveIntensity = 0
+        mat.emissiveIntensity = 0
       }
 
       // 발밑 링 = 지휘받는 중. 링이 지나갈 때 발밑이 켜지는 것을 보아야
@@ -372,22 +385,40 @@ export class Actors {
     for (const [id, node] of this.unitNodes) {
       if (alive.has(id)) continue
       this.root.remove(node.group)
-      node.bodyMat.dispose()
+      node.rig.mat.dispose()
       node.footMat.dispose()
       this.unitNodes.delete(id)
     }
   }
 
-  private syncAvatars(game: Game, viewer: Side, firstPerson: boolean): void {
+  private syncAvatars(game: Game, viewer: Side, firstPerson: boolean, dt: number): void {
     for (const p of game.players) {
       const node = this.avatarNodes[p.side]!
+      const dx = p.avatar.pos.x - node.px
+      const dz = p.avatar.pos.z - node.pz
+      node.px = p.avatar.pos.x
+      node.pz = p.avatar.pos.z
+
       const visible =
         p.side === viewer
           ? !(firstPerson && p.side === viewer) // 내 몸 안에 있으면 내 몸은 안 그린다
           : game.visible[viewer].has(game.board.tileAt(p.avatar.pos))
-      node.visible = visible
-      node.position.set(p.avatar.pos.x, 0, p.avatar.pos.z)
-      node.rotation.y = p.avatar.yaw
+      node.group.visible = visible
+      node.group.position.set(p.avatar.pos.x, 0, p.avatar.pos.z)
+      node.group.rotation.y = p.avatar.yaw
+      if (!visible) continue
+
+      // 아바타는 싸우지 않는다(무적이고 공격도 없다). 걷기와 숨쉬기뿐이다.
+      poseRig(node.rig, {
+        dt,
+        speed: Math.hypot(dx, dz) / dt,
+        lunge: 0,
+        windup: 0,
+        guard: 0,
+        flash: 0,
+        fighting: false,
+        time: game.telemetry.elapsed,
+      })
     }
 
     // 반경 링은 보는 쪽의 것만 그린다. 상대 반경까지 보이면 정보가 과해진다.
@@ -464,9 +495,19 @@ export class Actors {
         // 조명을 받지 않는 재질을 쓴다. 누워 버린 몸은 빛을 거의 못 받아
         // 조명 재질로 그리면 **검은 막대**가 되고, 그러면 누가 죽었는지
         // 진영조차 안 읽힌다. 시신은 정보이지 사물이 아니다.
-        const mat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })
+        //
+        // 정점색을 쓰므로 재질 색은 **곱해지는 값**이다. 어둡게 눌러 두면
+        // 투구도 옷도 같은 비율로 어두워지고 진영색은 남는다.
+        const mat = new THREE.MeshBasicMaterial({
+          vertexColors: true,
+          transparent: true,
+          depthWrite: false,
+        })
         this.disposables.push(mat)
-        m = new THREE.Mesh(this.geo.body, mat)
+        m = new THREE.Mesh(fallenGeometry('axe', 0), mat)
+        // 진영(y)을 먼저 먹이고 쓰러짐(x)을 나중에 먹인다. 기본 순서로 두면
+        // 넘어진 몸이 방향에 따라 옆으로 돈다.
+        m.rotation.order = 'YXZ'
         m.renderOrder = 2
         this.corpsePool.push(m)
         this.root.add(m)
@@ -475,17 +516,19 @@ export class Actors {
       m.visible = visible
       if (!visible) continue
       const mat = m.material as THREE.MeshBasicMaterial
-      const base = c.faction === NEUTRAL ? C.neutral : C.side[c.faction as Side]
       // 산 유닛보다 어둡게 — 죽은 것과 산 것이 같은 색이면 전황을 잘못 읽는다.
-      mat.color.setHex(base)
-      mat.color.multiplyScalar(0.45)
+      mat.color.setScalar(0.5)
       mat.opacity = Math.min(0.85, c.life * 1.6)
+
+      // 지오메트리는 이미 **누운 자세**로 구워져 있다(팔다리가 벌어져 있다).
+      // 서 있는 몸을 통째로 눕히면 각목이 넘어지는 것처럼 보이기 때문이다.
+      // 쓰러지는 동작은 그 누운 몸을 세웠다가 도로 눕히는 것으로 만든다.
+      m.geometry = fallenGeometry(c.kind as WarriorRole, c.faction)
       const fall = Math.min(1, (1 - c.life) * 6)
-      // 눕히면서 납작하게 눌러 둔다. 통나무처럼 길게 누우면 지형지물로 보인다.
       const k = UNITS[c.kind].radius * Actors.VIEW_SCALE
-      m.scale.set(k, k * (1 - fall * 0.45), k)
-      m.position.set(c.pos.x, 1.0 - fall * 0.55, c.pos.z)
-      m.rotation.set(fall * Math.PI * 0.5, c.facing, 0)
+      m.scale.setScalar(k)
+      m.position.set(c.pos.x, 0.05, c.pos.z)
+      m.rotation.set(-(1 - fall) * Math.PI * 0.5, c.facing, 0)
     }
     for (let i = game.corpses.length; i < this.corpsePool.length; i++) {
       this.corpsePool[i]!.visible = false
@@ -586,15 +629,41 @@ export class Actors {
 
   dispose(): void {
     for (const d of this.disposables) d.dispose()
+    // 살아 있는 채로 판이 끝난 유닛의 재질은 죽음 처리를 못 거쳤다.
+    // 지오메트리는 (역할 × 진영) 캐시에 있어 다음 판이 그대로 쓰므로 놔둔다.
+    for (const node of this.unitNodes.values()) node.rig.mat.dispose()
+    this.unitNodes.clear()
   }
 }
 
 interface UnitNode {
   group: THREE.Group
-  body: THREE.Mesh
+  rig: Rig
   foot: THREE.Mesh
-  bodyMat: THREE.MeshStandardMaterial
   footMat: THREE.MeshBasicMaterial
   bar: THREE.Group
   barFill: THREE.Mesh
+  /** 지난 프레임의 자리. 걸음 속도를 재는 데만 쓴다. */
+  px: number
+  pz: number
+}
+
+interface AvatarNode {
+  group: THREE.Group
+  rig: Rig
+  px: number
+  pz: number
+}
+
+/**
+ * 예비 동작의 진행도 0~1.
+ *
+ * `swingIn`은 **교전 중에만** 줄어들기 때문에(`Game.engage`), 그냥 읽으면
+ * 걷는 중인 유닛도 "곧 때릴 참"으로 보인다. `fighting` 깃발과 같이 봐야
+ * 예비 동작이 제자리에서 터지지 않는다.
+ */
+function windupOf(u: Unit): number {
+  if (!u.fighting) return 0
+  const lead = Math.min(0.3, UNITS[u.kind].swing * 0.5)
+  return Math.max(0, Math.min(1, (lead - u.swingIn) / lead))
 }

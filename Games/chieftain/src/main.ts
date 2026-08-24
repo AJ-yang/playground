@@ -242,6 +242,15 @@ function walkDir(keys: Set<string>, yaw: number): Vec2 {
 /** Q·E로 돌 때의 각속도(라디안/초). */
 const TURN_RATE = 2.1
 
+/**
+ * 렌더 프레임 간격을 재는 시계.
+ *
+ * 시뮬레이션은 고정 1/60초로 돌지만(`GameLoop`), **애니메이션은 실제 프레임
+ * 간격으로 돌아야 한다.** 걷는 동작을 고정 스텝에 묶으면 프레임이 밀릴 때
+ * 다리가 같이 끊긴다. 판정에 관여하지 않는 값이라 결정론도 안 깨진다.
+ */
+const renderClock = new THREE.Clock()
+
 const loop = new GameLoop({
   update(dt) {
     const s = session
@@ -279,7 +288,7 @@ const loop = new GameLoop({
     applyFog(s.scene, s.firstPerson)
     s.world.sync(s.game, HUMAN)
     // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
-    s.actors.sync(s.game, HUMAN, s.firstPerson, cam)
+    s.actors.sync(s.game, HUMAN, s.firstPerson, cam, renderClock.getDelta())
     renderer.render(s.scene, cam)
     hud.render(s.game, s.firstPerson)
   },

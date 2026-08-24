@@ -192,6 +192,7 @@ export class Game {
       lunge: 0,
       flash: 0,
       guard: 0,
+      fighting: false,
       focusId: -1,
     }
   }
@@ -221,6 +222,7 @@ export class Game {
       lunge: 0,
       flash: 0,
       guard: 0,
+      fighting: false,
       focusId: -1,
     }
     this.units.push(u)
@@ -460,6 +462,8 @@ export class Game {
     for (const u of this.units) {
       if (u.hp <= 0) continue
       u.tile = this.board.tileAt(u.pos)
+      // 교전 깃발은 매 틱 지우고, 실제로 사거리 안에서 칠 때만 다시 켠다.
+      u.fighting = false
 
       const target = this.pickTarget(u)
       if (target) {
@@ -561,6 +565,7 @@ export class Game {
       return
     }
 
+    u.fighting = true
     u.swingIn -= dt
     if (u.swingIn > 0) return
 
@@ -608,6 +613,7 @@ export class Game {
    * 성을 칠 때만 갑자기 매끄럽게 깎이면 그게 더 이상하다.
    */
   private swingAt(u: Unit, dt: number, at: Vec2): boolean {
+    u.fighting = true
     u.swingIn -= dt
     if (u.swingIn > 0) return false
     u.swingIn = UNITS[u.kind].swing
