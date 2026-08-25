@@ -80,6 +80,40 @@ jobs:
       - name: 빌드
         run: npm run build
 
+  # 족장의 C# 결정론 코어. Unity로 옮길 때 그대로 들어갈 조각이고, 값어치는
+  # **TS 원본과 비트까지 같은 판을 굴린다**는 것 하나다(GDD 7.2의 락스텝).
+  #
+  # 이 검사가 없으면 그 성질은 조용히 깨진다 — TS 쪽 시뮬레이션을 한 줄 고치고
+  # C# 쪽을 안 고치면 컴파일은 멀쩡히 되고 화면도 멀쩡하지만, 두 판은 30초 뒤에
+  # 다른 판이 되어 있다. 그런 종류의 회귀는 사람 눈으로는 절대 안 잡힌다.
+  chieftain-core:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Games/chieftain/package-lock.json
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 의존성 (TS 쪽 — 트레이스를 esbuild로 묶는다)
+        working-directory: Games/chieftain
+        run: npm ci
+
+      # 5개 시드 × 3600틱(각 60초). 유닛 좌표·체력·점령도·은·안개·건물까지
+      # 매 틱 비교하고, 부동소수는 비트 패턴으로 찍어서 마지막 1비트도 잡는다.
+      - name: TS ↔ C# 결정론 대조
+        working-directory: Games/chieftain-unity
+        run: ./verify.sh
+
   # 결의 배포가 이 저장소로 넘어왔으므로 결이 깨지면 배포도 깨진다.
   # deploy.yml은 main에서만 도는데 그때 알면 늦어서, 여기서 먼저 잡는다.
   gyeol:

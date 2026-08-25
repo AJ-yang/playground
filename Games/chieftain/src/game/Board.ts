@@ -1,3 +1,4 @@
+import { hypot } from '../core/det'
 import { clamp, type Vec2 } from '../core/vec2'
 import {
   bridgeBetween,
@@ -31,7 +32,7 @@ function pointNearSegment(
   t = clamp(t, 0, 1)
   const cx = a.x + dx * t
   const cz = a.z + dz * t
-  return Math.hypot(p.x - cx, p.z - cz) <= half
+  return hypot(p.x - cx, p.z - cz) <= half
 }
 
 /**
@@ -231,7 +232,7 @@ export class Board {
         // 다리 쪽으로 나가야 한다 — 그게 탐험이다.
         const dx = Math.max(0, Math.abs(s.pos.x - d.x) - half)
         const dz = Math.max(0, Math.abs(s.pos.z - d.z) - half)
-        if (Math.hypot(dx, dz) <= s.radius) {
+        if (hypot(dx, dz) <= s.radius) {
           vis.add(d.id)
           break
         }

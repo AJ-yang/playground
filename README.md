@@ -12,6 +12,7 @@
 | [`Games/joseon-defense/`](Games/joseon-defense/) | **조선 방어전** — 왜구의 노략에서 병자호란까지, 여섯 전쟁으로부터 성을 지키는 경로형 타워디펜스 | [배포됨](https://aj-yang.github.io/playground/joseon-defense/) |
 | [`Games/casino-learning-game/`](Games/casino-learning-game/) | **카지노 게임 배우기** — 걸어다니며 룰을 익히는 학습용 카지노 | [배포됨](https://aj-yang.github.io/playground/casino-learning-game/) |
 | [`Games/chieftain/`](Games/chieftain/) | **족장** — 지휘관이 맵 위에 서 있는 RTS. 내 주변 부대만 세밀 명령을 받고, 언제든 그 몸으로 강림한다 | [배포됨](https://aj-yang.github.io/playground/chieftain/) |
+| [`Games/chieftain-unity/`](Games/chieftain-unity/) | **족장의 결정론 코어(C#)** — Unity로 옮길 때 그대로 들어갈 시뮬레이션. TS 원본과 비트까지 같은 판을 굴리는지 CI가 본다 | 배포 없음 |
 | [`Services/gyeol/`](Services/gyeol/) | **결(gyeol)** — 영화·드라마 취향에 이름을 붙여주는 서비스 | [배포됨](https://aj-yang.github.io/playground/gyeol/) |
 | [`Services/volleyball-rotation/`](Services/volleyball-rotation/) | **배구 로테이션 보드** — 6인제 로테이션·대형을 코트 위에 놓고 보는 보드 | [배포됨](https://aj-yang.github.io/playground/volleyball-rotation/) |
 

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    대조 하네스. Unity에는 들어가지 않는다 — TS 원본과 C# 포팅이 같은 시드에서
+    같은 상태를 내는지 확인하는 것이 유일한 목적이다.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Chieftain.Trace</AssemblyName>
+    <RootNamespace>Chieftain.Trace</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Core/Chieftain.Core.csproj" />
+  </ItemGroup>
+
+</Project>

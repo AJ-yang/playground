@@ -1,0 +1,3 @@
+# dotnet 빌드 산출물. 소스와 verify.sh만 저장소에 둔다.
+bin/
+obj/

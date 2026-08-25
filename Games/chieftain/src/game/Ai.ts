@@ -1,3 +1,4 @@
+import { atan2, hypot } from '../core/det'
 import { dist, type Vec2 } from '../core/vec2'
 import { TUNING } from '../data/tuning'
 import type { UnitKind } from '../data/units'
@@ -215,12 +216,12 @@ export class Ai {
     g.setDriving(this.side, true)
     const dx = next.x - a.pos.x
     const dz = next.z - a.pos.z
-    const l = Math.hypot(dx, dz)
+    const l = hypot(dx, dz)
     if (l < WAYPOINT_REACH) {
       this.route.shift()
       return
     }
-    a.yaw = Math.atan2(dx, dz)
+    a.yaw = atan2(dx, dz)
     g.driveAvatar(this.side, { x: dx / l, z: dz / l }, dt)
   }
 

@@ -1,3 +1,4 @@
+import { atan2, cos, hypot, sin } from '../core/det'
 import { Rng } from '../core/rng'
 import { clamp, dist, dist2, moveToward, norm, type Vec2 } from '../core/vec2'
 import { CENTER, KEEP_P0, KEEP_P1, TILE_LAND } from '../data/fjord'
@@ -178,7 +179,7 @@ export class Game {
       faction: NEUTRAL,
       // 중립도 유닛 틀을 그대로 쓴다. 생김새만 다르고 규칙은 같다.
       kind: 'axe',
-      pos: { x: d.x + Math.cos(a) * 5, z: d.z + Math.sin(a) * 5 },
+      pos: { x: d.x + cos(a) * 5, z: d.z + sin(a) * 5 },
       hp: def.guardHp,
       maxHp: def.guardHp,
       tile: tileId,
@@ -206,8 +207,8 @@ export class Game {
       faction: side,
       kind,
       pos: this.board.clampToLand(tileId, {
-        x: d.x + Math.cos(a) * r,
-        z: d.z + Math.sin(a) * r,
+        x: d.x + cos(a) * r,
+        z: d.z + sin(a) * r,
       }),
       hp: UNITS[kind].hp,
       maxHp: UNITS[kind].hp,
@@ -434,7 +435,7 @@ export class Game {
       const step = TUNING.avatarSpeedCommanded * dt
       const moved = moveToward(a.pos, next, step)
       const d = { x: moved.x - a.pos.x, z: moved.z - a.pos.z }
-      if (Math.hypot(d.x, d.z) > 1e-4) a.yaw = Math.atan2(d.x, d.z)
+      if (hypot(d.x, d.z) > 1e-4) a.yaw = atan2(d.x, d.z)
       a.pos = moved
       if (dist(a.pos, a.moveTarget) < 0.4) a.moveTarget = null
     }
@@ -554,7 +555,7 @@ export class Game {
     const def = UNITS[u.kind]
     const d = dist(u.pos, target.pos)
     const reach = def.range + (def.radius + UNITS[target.kind].radius) * BODY_SPACING
-    u.facing = Math.atan2(target.pos.x - u.pos.x, target.pos.z - u.pos.z)
+    u.facing = atan2(target.pos.x - u.pos.x, target.pos.z - u.pos.z)
 
     if (d > reach) {
       const speed = def.speed * (u.commanded ? COMMANDED_BONUS.speed : 1)
@@ -597,7 +598,7 @@ export class Game {
 
   /** 건물을 친다. 유닛을 칠 때와 같은 리듬으로 끊어 친다. */
   private hitBuilding(u: Unit, b: Building, dt: number): void {
-    u.facing = Math.atan2(b.pos.x - u.pos.x, b.pos.z - u.pos.z)
+    u.facing = atan2(b.pos.x - u.pos.x, b.pos.z - u.pos.z)
     if (!this.swingAt(u, dt, b.pos)) return
     b.hp -= this.damageFrom(u) * UNITS[u.kind].swing
     if (b.hp <= 0) {
@@ -682,7 +683,7 @@ export class Game {
     const speed = def.speed * (u.commanded ? COMMANDED_BONUS.speed : 1)
     const moved = moveToward(u.pos, next, speed * dt)
     const d = { x: moved.x - u.pos.x, z: moved.z - u.pos.z }
-    if (Math.hypot(d.x, d.z) > 1e-4) u.facing = Math.atan2(d.x, d.z)
+    if (hypot(d.x, d.z) > 1e-4) u.facing = atan2(d.x, d.z)
     u.pos = moved
     if (dist(u.pos, next) < 0.5) u.path.shift()
   }
