@@ -229,14 +229,25 @@ function torsoGeo(k: Skin, role: WarriorRole): THREE.BufferGeometry {
     .add(SRC.sphere, k.cloth, { s: [0.44, 0.32, 0.44], p: [SHOULDER_X, SHOULDER_Y - 0.02, 0] })
     .add(SRC.sphere, k.cloth, { s: [0.44, 0.32, 0.44], p: [-SHOULDER_X, SHOULDER_Y - 0.02, 0] })
 
-  if (role === 'chief') {
-    // 족장의 망토는 길다. 부감에서 "저게 나다"를 만드는 것의 절반이 이 실루엣이다.
-    p.add(SRC.cone8, k.cloth, { s: [1.5, 1.7, 1.1], r: [0.12, 0, 0], p: [0, 0.42, -0.22] })
-  } else {
+  if (role !== 'chief') {
     // 부하는 어깨만 덮는 짧은 망토. 위에서 봤을 때 진영색 면적을 만든다.
+    // 족장의 긴 망토는 여기 없다 — 따로 떼어 `cloakGeo`가 만든다.
     p.add(SRC.cone8, k.cloth, { s: [1.16, 0.92, 0.86], r: [0.18, 0, 0], p: [0, 0.62, -0.16] })
   }
   return p.merge()
+}
+
+/**
+ * 족장의 긴 망토. **몸통에 합치지 않고 따로 둔다.**
+ *
+ * 1인칭에서 내 몸을 그리기 시작하면서 필요해졌다. 카메라가 눈 자리에 있는데
+ * 이 원뿔의 꼭짓점이 딱 그 높이라, 합쳐 두면 강림해서 아래를 볼 때마다 **화면
+ * 절반이 망토 안쪽**이 된다. 머리와 같은 이유로 끌 수 있어야 한다.
+ */
+function cloakGeo(k: Skin): THREE.BufferGeometry {
+  return new Parts()
+    .add(SRC.cone8, k.cloth, { s: [1.5, 1.7, 1.1], r: [0.12, 0, 0], p: [0, 0.42, -0.22] })
+    .merge()
 }
 
 /** 머리 — 원점이 목. 투구·코가리개·수염까지 한 덩어리. */
@@ -344,6 +355,8 @@ interface GeoSet {
   upper: THREE.BufferGeometry
   foreL: THREE.BufferGeometry
   foreR: THREE.BufferGeometry
+  /** 족장만 있다. 1인칭에서 꺼야 해서 몸통과 따로 둔다. */
+  cloak: THREE.BufferGeometry | null
   fallen: THREE.BufferGeometry
 }
 
@@ -362,6 +375,7 @@ function geoSet(role: WarriorRole, faction: Faction): GeoSet {
     upper: upperArmGeo(k),
     foreL: foreArmGeo(k, role === 'shield' ? 'shield' : 'none'),
     foreR: foreArmGeo(k, role === 'shield' ? 'spear' : 'axe'),
+    cloak: role === 'chief' ? cloakGeo(k) : null,
     fallen: fallenGeo(k, role),
   }
   CACHE.set(key, set)
@@ -444,7 +458,7 @@ export function fallenGeometry(role: WarriorRole, faction: Faction): THREE.Buffe
 /** 페이지가 끝날 때까지 캐시는 살려 둔다. 판을 다시 시작해도 다시 굽지 않는다. */
 export function disposeWarriorCache(): void {
   for (const set of CACHE.values()) {
-    for (const g of Object.values(set)) g.dispose()
+    for (const g of Object.values(set)) g?.dispose()
   }
   CACHE.clear()
   for (const g of Object.values(SRC)) g.dispose()
@@ -463,6 +477,8 @@ export interface Rig {
   body: THREE.Group
   torso: THREE.Group
   head: THREE.Group
+  /** 족장의 망토. 1인칭에서 끈다. 부하는 null이다. */
+  cloak: THREE.Mesh | null
   legL: Limb
   legR: Limb
   /** 왼팔 — 방패병은 여기에 방패가 붙는다. */
@@ -503,6 +519,98 @@ function limb(
   return { upper, lower }
 }
 
+/**
+ * 1인칭 시야에 드는 팔 — 도끼를 든 오른팔 하나.
+ *
+ * ## 왜 진짜 몸을 안 쓰는가
+ *
+ * 처음엔 아바타의 실제 몸을 그리고 머리만 숨겼다. 안 됐다 — 이 뼈대는 **부감에서
+ * 4~6픽셀로 읽히라고** 머리를 키우고 목을 짧게 잡은 비율이라, 눈높이가 어깨보다
+ * 겨우 0.5 위다. 안에서 내려다보면 자기 가슴 윗면과 어깨판이 화면을 덮는다.
+ * 카메라를 얼굴 앞으로 밀어도 마찬가지였다.
+ *
+ * 그래서 FPS가 실제로 쓰는 방법을 쓴다. 시야에 드는 팔은 **몸의 일부가 아니라
+ * 따로 만든 소품**이고, 카메라에 매달려 화면 오른쪽 아래에 놓인다. 비율을
+ * 몸과 맞출 필요가 없으니 부감 가독성과 1인칭 실감이 서로를 안 잡아먹는다.
+ *
+ * 걷는 위상은 아바타 뼈대에서 그대로 빌려 온다(`poseViewArm`) — 발과 팔이
+ * 어긋날 수가 없다.
+ */
+export interface ViewArm {
+  root: THREE.Group
+  upper: THREE.Group
+  lower: THREE.Group
+  mat: THREE.MeshStandardMaterial
+}
+
+/**
+ * 시야의 팔이 쉬는 자리. 흔들림은 여기를 기준으로 오르내린다.
+ *
+ * **작고 구석에 있어야 한다.** 처음엔 0.62배로 뒀는데 도끼날이 화면 높이의
+ * 60%를 먹고 한가운데를 막았다. 뷰모델은 "내가 몸을 갖고 있다"만 말하면 되고,
+ * 그 말을 하는 데 화면을 가릴 필요는 없다.
+ */
+const VIEW_ARM_HOME = { x: 0.84, y: -0.62 }
+const VIEW_ARM_SCALE = 0.34
+const VIEW_ARM_ROLL = -2.5
+const VIEW_ARM_ELBOW = -0.42
+
+export function buildViewArm(faction: Faction): ViewArm {
+  const k = skinFor(faction)
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.66,
+    metalness: 0.08,
+  })
+
+  // 뷰모델은 **전용으로 조립한다.** 몸에 쓰는 `foreR`은 도끼가 정해진 각도로
+  // 구워져 있어서, 화면 오른쪽 아래에서 올라오는 구도로는 도끼가 밖으로 나간다.
+  const upperGeo = upperArmGeo(k)
+  const lowerGeo = foreArmGeo(k, 'none')
+  // 도끼는 손 기준으로 **뒤집어** 단다. 팔뚝이 위를 향하므로, 그냥 달면
+  // 도끼가 팔뚝 반대편(아래)으로 뻗어 화면 밖으로 나간다.
+  const axeGeo = axeParts(k).merge()
+  axeGeo.rotateX(Math.PI)
+  axeGeo.rotateZ(0.5)
+  axeGeo.translate(0, -FOREARM - 0.02, 0)
+
+  const root = new THREE.Group()
+  const upper = new THREE.Group()
+  upper.add(new THREE.Mesh(upperGeo, mat))
+  root.add(upper)
+
+  const lower = new THREE.Group()
+  lower.position.y = -UPPER_ARM
+  lower.add(new THREE.Mesh(lowerGeo, mat), new THREE.Mesh(axeGeo, mat))
+  upper.add(lower)
+
+  // 팔은 화면 밖 오른쪽 아래에서 시작해 가운데로 올라온다. 어깨를 화면 밖에
+  // 두어야 "몸에 달린 팔"로 읽히고, 팔꿈치만 보이면 붕 뜬 소품이 된다.
+  root.position.set(VIEW_ARM_HOME.x, VIEW_ARM_HOME.y, -1.0)
+  root.rotation.set(0.22, 0, VIEW_ARM_ROLL)
+  root.scale.setScalar(VIEW_ARM_SCALE)
+  lower.rotation.x = VIEW_ARM_ELBOW
+
+  return { root, upper, lower, mat }
+}
+
+/**
+ * 시야의 팔을 걸음에 맞춰 흔든다.
+ *
+ * `phase`와 `gait`는 아바타 뼈대의 것을 그대로 받는다. 카메라 흔들림과 같은
+ * 위상이되 **반대로** 움직이게 해서, 화면이 내려갈 때 팔이 올라온다 — 그래야
+ * 팔이 화면에 붙어 있지 않고 몸에 달린 것처럼 보인다.
+ */
+export function poseViewArm(a: ViewArm, phase: number, gait: number, t: number): void {
+  const sw = Math.sin(phase)
+  const idle = 1 - gait
+  a.root.position.x = VIEW_ARM_HOME.x + Math.cos(phase) * 0.025 * gait
+  a.root.position.y =
+    VIEW_ARM_HOME.y - sw * 0.045 * gait + Math.sin(t * 1.7) * 0.011 * idle
+  a.root.rotation.z = VIEW_ARM_ROLL + sw * 0.06 * gait
+  a.lower.rotation.x = VIEW_ARM_ELBOW - sw * 0.1 * gait
+}
+
 export function buildRig(role: WarriorRole, faction: Faction, seed: number): Rig {
   const g = geoSet(role, faction)
   // 유닛마다 재질 하나. 색은 정점에 있으므로 흰색으로 두고, 이 재질이 하는
@@ -530,6 +638,9 @@ export function buildRig(role: WarriorRole, faction: Faction, seed: number): Rig
   head.add(new THREE.Mesh(g.head, mat))
   torso.add(head)
 
+  const cloak = g.cloak ? new THREE.Mesh(g.cloak, mat) : null
+  if (cloak) torso.add(cloak)
+
   const armL = limb(torso, g.upper, g.foreL, mat, [SHOULDER_X, SHOULDER_Y, 0], -UPPER_ARM)
   const armR = limb(torso, g.upper, g.foreR, mat, [-SHOULDER_X, SHOULDER_Y, 0], -UPPER_ARM)
 
@@ -538,6 +649,7 @@ export function buildRig(role: WarriorRole, faction: Faction, seed: number): Rig
     body,
     torso,
     head,
+    cloak,
     legL,
     legR,
     armL,

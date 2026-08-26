@@ -7,7 +7,16 @@ import { NOBODY, type Side, type Unit } from '../game/types'
 import { C } from './palette'
 import { castShadows } from './shadows'
 import type { Terrain } from './terrain'
-import { buildRig, fallenGeometry, poseRig, type Rig, type WarriorRole } from './warrior'
+import {
+  buildRig,
+  buildViewArm,
+  fallenGeometry,
+  poseRig,
+  poseViewArm,
+  type Rig,
+  type ViewArm,
+  type WarriorRole,
+} from './warrior'
 
 /**
  * 매 프레임 바뀌는 것 — 유닛·아바타·지휘 반경·소유권·안개.
@@ -24,6 +33,20 @@ export class Actors {
   private readonly tileTint: THREE.Mesh[] = []
   private readonly tileFog: THREE.Mesh[] = []
   private readonly avatarNodes: AvatarNode[] = []
+  /**
+   * 1인칭 카메라에 먹일 걸음 흔들림. `sync`가 채우고 `main`이 카메라에 얹는다.
+   *
+   * 카메라를 먼저 자리잡고 `sync`를 부르는 순서라(체력바가 카메라를 향해야 한다)
+   * 흔들림만 뒤에 한 번 더 얹는다.
+   */
+  readonly viewerBob = { y: 0, roll: 0 }
+
+  /**
+   * 1인칭 시야에 드는 팔. `main`이 카메라에 매달고, 여기서 자세만 먹인다.
+   *
+   * 몸을 통째로 그려 보려다 접었다 — 자세한 이유는 `warrior.ts`의 `ViewArm`에 있다.
+   */
+  readonly viewArm: ViewArm
   /** 타격 불꽃·시신·기지·집중 표식 — 매 프레임 수가 바뀌는 것들. */
   private readonly hitPool: THREE.Mesh[] = []
   private readonly corpsePool: THREE.Mesh[] = []
@@ -67,6 +90,10 @@ export class Actors {
     this.focusMark = this.buildFocusMark()
     this.root.add(this.focusMark)
     this.buildAvatars(game)
+
+    this.viewArm = buildViewArm(game.humanSide)
+    this.viewArm.root.visible = false
+    this.disposables.push(this.viewArm.mat)
   }
 
   // ─────────────────────────────────────────────────────────── 만들기
@@ -237,7 +264,13 @@ export class Actors {
       g.add(beam)
 
       castShadows(g)
-      this.avatarNodes.push({ group: g, rig, px: p.avatar.pos.x, pz: p.avatar.pos.z })
+      this.avatarNodes.push({
+        group: g,
+        rig,
+        beam,
+        px: p.avatar.pos.x,
+        pz: p.avatar.pos.z,
+      })
       this.root.add(g)
     }
   }
@@ -427,10 +460,20 @@ export class Actors {
       node.px = p.avatar.pos.x
       node.pz = p.avatar.pos.z
 
-      const visible =
-        p.side === viewer
-          ? !(firstPerson && p.side === viewer) // 내 몸 안에 있으면 내 몸은 안 그린다
-          : game.visible[viewer].has(game.board.tileAt(p.avatar.pos))
+      /**
+       * 1인칭에서 내 몸은 안 그린다. 대신 **자세는 계속 굴린다.**
+       *
+       * 이 구분이 핵심이다. 예전에는 안 보이면 자세 계산까지 건너뛰었는데,
+       * 그러면 강림한 동안 걸음 위상이 멈춰서 시야 흔들림도 시야의 팔도 발과
+       * 어긋난다. 안 그리는 것과 안 굴리는 것은 다른 일이다.
+       *
+       * 몸을 그려 보려던 시도는 접었다 — 이유는 `warrior.ts`의 `ViewArm`에 있다.
+       */
+      const mine = p.side === viewer
+      const inBody = firstPerson && mine
+      const visible = mine
+        ? !inBody
+        : game.visible[viewer].has(game.board.tileAt(p.avatar.pos))
       node.group.visible = visible
       node.group.position.set(
         p.avatar.pos.x,
@@ -438,7 +481,8 @@ export class Actors {
         p.avatar.pos.z,
       )
       node.group.rotation.y = p.avatar.yaw
-      if (!visible) continue
+      // 안 보여도 굴린다 — 위의 주석을 볼 것.
+      if (!visible && !inBody) continue
 
       // 아바타는 싸우지 않는다(무적이고 공격도 없다). 걷기와 숨쉬기뿐이다.
       poseRig(node.rig, {
@@ -451,6 +495,26 @@ export class Actors {
         fighting: false,
         time: game.telemetry.elapsed,
       })
+
+      /**
+       * 걸음에 맞춰 시야를 흔든다.
+       *
+       * 몸을 그려도 앞만 보고 걸으면 여전히 미끄러지는 느낌이다 — 사람은 걸을 때
+       * 눈높이가 오르내리고 몸이 좌우로 기운다. 뼈대가 이미 굴리고 있는 위상을
+       * 그대로 빌려 쓰므로 발과 어긋날 수가 없다.
+       */
+      if (inBody) {
+        const g = node.rig.gait
+        this.viewerBob.y = Math.abs(Math.sin(node.rig.phase)) * 0.3 * g
+        this.viewerBob.roll = Math.sin(node.rig.phase) * 0.016 * g
+        poseViewArm(this.viewArm, node.rig.phase, g, game.telemetry.elapsed)
+      }
+    }
+
+    this.viewArm.root.visible = firstPerson
+    if (!firstPerson) {
+      this.viewerBob.y = 0
+      this.viewerBob.roll = 0
     }
 
     // 반경 링은 보는 쪽의 것만 그린다. 상대 반경까지 보이면 정보가 과해진다.
@@ -700,6 +764,8 @@ interface UnitNode {
 interface AvatarNode {
   group: THREE.Group
   rig: Rig
+  /** 빛기둥. 1인칭에서는 눈앞을 가리므로 끈다. */
+  beam: THREE.Mesh
   px: number
   pz: number
 }

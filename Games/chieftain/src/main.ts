@@ -83,13 +83,24 @@ function start(seed = Math.floor(Math.random() * 0x7fffffff)): void {
   const actors = new Actors(game, world.terrain)
   scene.add(world.root, actors.root)
 
+  const cameras = new Cameras(innerWidth / innerHeight, world.terrain)
+  /**
+   * 시야에 드는 팔은 **카메라에 매단다.** 그래야 시선을 돌려도 손이 따라온다.
+   *
+   * three는 씬 그래프에 들어 있는 카메라의 자식만 그리므로, 카메라 자체를
+   * 씬에 넣어야 한다. 카메라는 그리는 대상이 아니라 아무것도 안 보이지만
+   * 자식은 이걸로 살아난다.
+   */
+  scene.add(cameras.first)
+  cameras.first.add(actors.viewArm.root)
+
   session = {
     game,
     ai: new Ai(game, (1 - HUMAN) as Side),
     scene,
     world,
     actors,
-    cameras: new Cameras(innerWidth / innerHeight, world.terrain),
+    cameras,
     firstPerson: false,
     keys: new Set(),
     ended: false,
@@ -289,6 +300,8 @@ const loop = new GameLoop({
     s.world.sync(s.game, HUMAN)
     // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
     s.actors.sync(s.game, HUMAN, s.firstPerson, cam, renderClock.getDelta())
+    // 걸음 흔들림은 뼈대가 굴린 위상에서 나오므로 sync 뒤에 얹는다.
+    if (s.firstPerson) s.cameras.applyFirstBob(s.actors.viewerBob)
     renderer.render(s.scene, cam)
     hud.render(s.game, s.firstPerson)
   },

@@ -60,14 +60,43 @@ export class Cameras {
     this.first.updateProjectionMatrix()
   }
 
-  /** 1인칭 카메라를 아바타에 붙인다. 눈높이는 유닛보다 조금 높다. */
+  /**
+   * 1인칭 카메라를 아바타에 붙인다.
+   *
+   * 눈높이는 **발밑 땅에서부터** 잰다. 절대 높이로 두면 언덕에 올라섰을 때
+   * 머리가 땅에 묻힌다.
+   *
+   * 값이 4.1에서 EYE로 올라간 이유: 1인칭에서 내 몸을 그리기 시작했는데,
+   * 아바타의 실제 키가 6.8이라 4.1은 **가슴 높이**였다. 거기에 카메라를 두면
+   * 내 어깨가 화면을 가로지른다. 어깨(4.9)보다 위, 투구 아래에 둔다.
+   */
   placeFirst(pos: Vec2, yaw: number): void {
-    // 눈높이는 **발밑 땅에서부터** 잰다. 절대 높이로 두면 언덕에 올라섰을 때
-    // 머리가 땅에 묻힌다.
-    this.first.position.set(pos.x, this.terrain.heightAt(pos.x, pos.z) + 4.1, pos.z)
+    // 눈은 머리 한가운데가 아니라 **얼굴 앞면**에 있다. 이 한 뼘을 안 밀면
+    // 아래를 볼 때마다 자기 가슴 윗면이 화면을 덮는다 — 부감에서 잘 읽히라고
+    // 머리를 키우고 목을 짧게 잡은 비율이라 특히 심하다.
+    const x = pos.x + Math.sin(yaw) * Cameras.EYE_FORWARD
+    const z = pos.z + Math.cos(yaw) * Cameras.EYE_FORWARD
+    this.first.position.set(x, this.terrain.heightAt(pos.x, pos.z) + Cameras.EYE, z)
     this.first.rotation.set(0, 0, 0)
     this.first.rotateY(yaw)
     this.first.rotateX(this.pitch)
+  }
+
+  /** 아바타 눈높이. 어깨 위, 투구 아래. */
+  private static readonly EYE = 5.35
+  /** 눈이 얼굴 앞면에 놓이도록 앞으로 미는 거리. */
+  private static readonly EYE_FORWARD = 1.15
+
+  /**
+   * 걸음 흔들림을 얹는다.
+   *
+   * `placeFirst` 다음에 부른다 — 흔들림의 위상은 아바타 뼈대가 굴리고 있고,
+   * 그 뼈대는 `Actors.sync`에서야 갱신되기 때문이다. 발과 눈이 같은 위상을
+   * 쓰므로 어긋날 수가 없다.
+   */
+  applyFirstBob(bob: { y: number; roll: number }): void {
+    this.first.position.y += bob.y
+    this.first.rotateZ(bob.roll)
   }
 
   addPitch(delta: number): void {
