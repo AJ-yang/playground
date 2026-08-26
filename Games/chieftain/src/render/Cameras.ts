@@ -32,12 +32,16 @@ export class Cameras {
   /** 1인칭 시선. yaw는 Game의 아바타와 공유하고, pitch는 여기만 안다. */
   pitch = 0
 
-  /** 부감이 지금 겨누는 곳. 아바타를 따라가되 손으로 밀 수 있다. */
+  /**
+   * 부감이 지금 겨누는 곳.
+   *
+   * **이제 이것이 유일한 기준이다.** 예전에는 아바타를 따라다니고 손으로 민
+   * 양이 0으로 돌아왔는데, 신이 판 밖으로 나가면서 따라갈 몸이 없어졌다.
+   * 부감은 이제 그냥 자유롭게 도는 카메라다 — 손으로 밀고, 미니맵을 짚어
+   * 옮기고, 올라올 때 마지막으로 서 있던 자리로 간다.
+   */
   private focusX = 0
   private focusZ = 0
-  /** 손으로 민 양. 손을 떼면 0으로 돌아온다. */
-  private panX = 0
-  private panZ = 0
   /** 카메라를 판 위에 띄우는 높이와 거리. `layout`이 정한다. */
   private lift = 0
   private back = 0
@@ -76,30 +80,24 @@ export class Cameras {
     this.overhead.updateProjectionMatrix()
     this.first.aspect = aspect
     this.first.updateProjectionMatrix()
-    this.placeOverhead({ x: this.focusX, z: this.focusZ }, 1)
+    this.placeOverhead()
   }
 
   /** 화면 세로에 담는 월드 거리. */
   private static readonly VIEW_SPAN = 168
 
-  /** 손으로 밀 수 있는 최대 거리. 이보다 멀리 가면 아바타를 잃어버린다. */
-  private static readonly PAN_LIMIT = 90
-
-  /**
-   * 부감을 자리잡는다. `follow`는 0~1로, 1이면 즉시 아바타에게 붙는다.
-   *
-   * 부드럽게 따라가는 것이 중요하다 — 아바타가 한 걸음 옮길 때마다 화면이
-   * 딱딱 끊기면 부감이 아니라 추적 카메라가 된다.
-   */
-  placeOverhead(target: Vec2, follow: number): void {
-    const wantX = clamp(target.x + this.panX, -MAP_W / 2, MAP_W / 2)
-    const wantZ = clamp(target.z + this.panZ, -MAP_H / 2, MAP_H / 2)
-    this.focusX += (wantX - this.focusX) * follow
-    this.focusZ += (wantZ - this.focusZ) * follow
-
+  /** 부감 카메라를 지금 겨누는 곳에 맞춰 세운다. */
+  placeOverhead(): void {
     this.overhead.position.set(this.focusX, PLATEAU + this.lift, this.focusZ + this.back)
     this.overhead.lookAt(this.focusX, PLATEAU, this.focusZ)
     this.overhead.updateMatrixWorld()
+  }
+
+  /** 그 점으로 화면을 옮긴다. 미니맵 좌클릭과 승천이 쓴다. */
+  lookAtPoint(p: Vec2): void {
+    this.focusX = clamp(p.x, -MAP_W / 2, MAP_W / 2)
+    this.focusZ = clamp(p.z, -MAP_H / 2, MAP_H / 2)
+    this.placeOverhead()
   }
 
   /** 지금 부감이 보고 있는 판 위의 점. 미니맵이 시야 사각형을 여기에 그린다. */
@@ -113,21 +111,17 @@ export class Cameras {
   }
 
   /**
-   * 부감을 손으로 민다. `dir`는 정규화된 화면 방향, `dt`는 프레임 간격.
+   * 부감을 손으로 민다. `dx`·`dz`는 정규화된 화면 방향, `dt`는 프레임 간격.
    *
-   * 아무 키도 안 눌리면 밀어 둔 양이 0으로 돌아온다 — **놓으면 아바타에게
-   * 돌아온다**는 성질이 있어야 화면을 잃어버리지 않는다.
+   * 돌아오지 않는다. 신이 판 밖으로 나간 지금 "돌아갈 곳"이 없고, 미니맵이
+   * 판 전체를 보여 주므로 화면을 잃어버릴 걱정도 없다.
    */
   panOverhead(dx: number, dz: number, dt: number): void {
-    const SPEED = 130
-    if (dx === 0 && dz === 0) {
-      const k = 1 - Math.exp(-dt * 2.4)
-      this.panX -= this.panX * k
-      this.panZ -= this.panZ * k
-      return
-    }
-    this.panX = clamp(this.panX + dx * SPEED * dt, -Cameras.PAN_LIMIT, Cameras.PAN_LIMIT)
-    this.panZ = clamp(this.panZ + dz * SPEED * dt, -Cameras.PAN_LIMIT, Cameras.PAN_LIMIT)
+    if (dx === 0 && dz === 0) return
+    const SPEED = 150
+    this.focusX = clamp(this.focusX + dx * SPEED * dt, -MAP_W / 2, MAP_W / 2)
+    this.focusZ = clamp(this.focusZ + dz * SPEED * dt, -MAP_H / 2, MAP_H / 2)
+    this.placeOverhead()
   }
 
   /**

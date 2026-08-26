@@ -64,6 +64,8 @@ interface Skin {
   wood: number
   flesh: number
   hair: number
+  /** 신의 것에만 쓴다. 룬 띠와 뿔 — 이 색이 보이면 사람이 아니다. */
+  gold: number
 }
 
 function skinFor(faction: Faction): Skin {
@@ -79,6 +81,7 @@ function skinFor(faction: Faction): Skin {
     wood: 0x6b4f34,
     flesh: 0xd9b18f,
     hair: own ? 0xa8763f : 0x6b5236,
+    gold: 0xd8b45c,
   }
 }
 
@@ -320,6 +323,26 @@ function axeParts(k: Skin): Parts {
     .add(SRC.box, k.metalDark, { s: [0.1, 0.17, 0.19], p: [0, 1.0, -0.09] })
 }
 
+/**
+ * 묠니르.
+ *
+ * 자루가 **짧고** 머리가 크다 — 실제 신화의 묘사이기도 하고, 부감에서 도끼와
+ * 헷갈리지 않는 유일한 방법이기도 하다. 도끼는 얇은 날이 옆으로 뻗고,
+ * 이것은 네모난 덩어리가 자루 끝에 달려 있다.
+ */
+function hammerParts(k: Skin): Parts {
+  return new Parts()
+    .add(SRC.cyl6, k.wood, { s: [0.13, 1.0, 0.13], p: [0, 0.1, 0] })
+    // 자루를 감은 가죽끈. 짧은 자루가 밋밋해 보이지 않게 한다.
+    .add(SRC.cyl8, k.clothDim, { s: [0.16, 0.16, 0.16], p: [0, -0.3, 0] })
+    // 머리. 하나의 덩어리 + 양쪽 타격면.
+    .add(SRC.box, k.metalDark, { s: [0.34, 0.4, 0.44], p: [0, 0.72, 0] })
+    .add(SRC.box, k.metal, { s: [0.4, 0.34, 0.14], p: [0, 0.72, 0.27] })
+    .add(SRC.box, k.metal, { s: [0.4, 0.34, 0.14], p: [0, 0.72, -0.27] })
+    // 룬을 새긴 띠. 금속 덩어리에 가로선이 하나 생겨 크기가 읽힌다.
+    .add(SRC.box, k.gold, { s: [0.36, 0.07, 0.46], p: [0, 0.86, 0] })
+}
+
 /** 창. 방패병의 사거리가 도끼병보다 긴 이유가 화면에도 있어야 한다. */
 function spearParts(k: Skin): Parts {
   return new Parts()
@@ -352,12 +375,15 @@ function toolParts(k: Skin): Parts {
  * 무기는 손에 대해 움직이지 않으므로 뼈를 하나 더 둘 이유가 없다. 합쳐 두면
  * 유닛당 드로우콜이 둘 줄어든다.
  */
-type Hold = 'axe' | 'spear' | 'shield' | 'tool' | 'none'
+type Hold = 'axe' | 'hammer' | 'spear' | 'shield' | 'tool' | 'none'
 
 /** 이 역할이 오른손에 드는 것. 쓰러진 몸도 같은 것을 들어야 한다. */
 function holdOf(role: WarriorRole): Hold {
   if (role === 'shield') return 'spear'
   if (role === 'worker') return 'tool'
+  // 강림한 신은 **망치**를 든다. 부감에서 실루엣만으로 "저건 사람이 아니다"가
+  // 읽혀야 하고, 노르드에서 그 실루엣은 하나뿐이다(GDD 5장).
+  if (role === 'chief') return 'hammer'
   return 'axe'
 }
 
@@ -369,6 +395,7 @@ function foreArmGeo(k: Skin, hold: Hold): THREE.BufferGeometry {
 
   const hand: V3 = [0, -FOREARM - 0.02, 0]
   if (hold === 'axe') p.absorb(axeParts(k), { r: [0.62, 0, 0], p: hand })
+  else if (hold === 'hammer') p.absorb(hammerParts(k), { r: [0.46, 0, 0], p: hand })
   else if (hold === 'tool') p.absorb(toolParts(k), { r: [0.45, 0, 0], p: hand })
   else if (hold === 'spear') p.absorb(spearParts(k), { r: [-0.16, 0, 0], p: hand })
   else if (hold === 'shield') {
@@ -583,8 +610,11 @@ export interface ViewArm {
  * 60%를 먹고 한가운데를 막았다. 뷰모델은 "내가 몸을 갖고 있다"만 말하면 되고,
  * 그 말을 하는 데 화면을 가릴 필요는 없다.
  */
-const VIEW_ARM_HOME = { x: 0.84, y: -0.62 }
-const VIEW_ARM_SCALE = 0.34
+const VIEW_ARM_HOME = { x: 0.5, y: -0.72 }
+// 도끼 때 쓰던 0.34에서 내렸다. 망치는 머리가 네모난 덩어리라 같은 배율에서
+// 도끼보다 훨씬 크게 읽히고, 화면 오른쪽 아래 구석에 있어야 할 것이
+// 한가운데까지 올라왔다.
+const VIEW_ARM_SCALE = 0.26
 const VIEW_ARM_ROLL = -2.5
 const VIEW_ARM_ELBOW = -0.42
 
@@ -600,12 +630,13 @@ export function buildViewArm(faction: Faction): ViewArm {
   // 구워져 있어서, 화면 오른쪽 아래에서 올라오는 구도로는 도끼가 밖으로 나간다.
   const upperGeo = upperArmGeo(k)
   const lowerGeo = foreArmGeo(k, 'none')
-  // 도끼는 손 기준으로 **뒤집어** 단다. 팔뚝이 위를 향하므로, 그냥 달면
-  // 도끼가 팔뚝 반대편(아래)으로 뻗어 화면 밖으로 나간다.
-  const axeGeo = axeParts(k).merge()
-  axeGeo.rotateX(Math.PI)
-  axeGeo.rotateZ(0.5)
-  axeGeo.translate(0, -FOREARM - 0.02, 0)
+  // 강림한 신이 드는 것은 **망치**다(`holdOf`). 손 기준으로 뒤집어 단다 —
+  // 팔뚝이 위를 향하므로 그냥 달면 무기가 팔뚝 반대편으로 뻗어 화면 밖으로
+  // 나간다.
+  const armGeo = hammerParts(k).merge()
+  armGeo.rotateX(Math.PI)
+  armGeo.rotateZ(0.5)
+  armGeo.translate(0, -FOREARM - 0.02, 0)
 
   const root = new THREE.Group()
   const upper = new THREE.Group()
@@ -614,7 +645,7 @@ export function buildViewArm(faction: Faction): ViewArm {
 
   const lower = new THREE.Group()
   lower.position.y = -UPPER_ARM
-  lower.add(new THREE.Mesh(lowerGeo, mat), new THREE.Mesh(axeGeo, mat))
+  lower.add(new THREE.Mesh(lowerGeo, mat), new THREE.Mesh(armGeo, mat))
   upper.add(lower)
 
   // 팔은 화면 밖 오른쪽 아래에서 시작해 가운데로 올라온다. 어깨를 화면 밖에

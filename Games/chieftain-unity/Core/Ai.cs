@@ -28,7 +28,6 @@ namespace Chieftain.Core
         private readonly int _side;
 
         private double _thinkIn;
-        private List<Vec2> _route = new List<Vec2>();
         private int _targetTile = -1;
 
         public Ai(Game game, int side)
@@ -50,7 +49,7 @@ namespace Chieftain.Core
                 BuildIfWorth();
                 Decide();
             }
-            MoveAvatar(dt);
+            ManageAvatar(dt);
         }
 
         // ─────────────────────────────────────────────────────── 생산
@@ -120,11 +119,7 @@ namespace Chieftain.Core
             var goal = g.Board.Anchor(target);
             g.SetRally(_side, goal);
 
-            if (target != _targetTile)
-            {
-                _targetTile = target;
-                _route = g.Board.Route(g.Players[_side].Avatar.Pos, goal);
-            }
+            _targetTile = target;
         }
 
         /// <summary>
@@ -217,39 +212,39 @@ namespace Chieftain.Core
         /// 아바타를 목표 칸으로 옮긴다. 멀면 **강림해서 직접 몰고**(빠름), 다 왔으면
         /// 올라온다. 사람이 하는 판단과 같은 판단을 같은 규칙으로 하는 것이다.
         /// </summary>
-        private void MoveAvatar(double dt)
+        private void ManageAvatar(double dt)
         {
             var g = _game;
             var a = g.Players[_side].Avatar;
-            if (_targetTile < 0) return;
-
-            var goalPoint = g.Board.Anchor(_targetTile);
-
-            // 다 왔으면 올라와서 자리를 지킨다.
-            if (Det.Dist(a.Pos, goalPoint) < Tuning.CommandRadius * 0.45)
+            if (_targetTile < 0)
             {
-                g.SetDriving(_side, false);
-                a.MoveTarget = null;
-                _route.Clear();
+                if (a.Embodied) g.Ascend(_side);
                 return;
             }
 
-            if (_route.Count == 0)
-            {
-                _route = g.Board.Route(a.Pos, goalPoint);
-            }
-            if (_route.Count == 0) return;
-            var next = _route[0];
+            var goal = g.Board.Anchor(_targetTile);
 
-            g.SetDriving(_side, true);
-            double dx = next.X - a.Pos.X;
-            double dz = next.Z - a.Pos.Z;
+            if (!a.Embodied)
+            {
+                // 보이는 곳에만 내려간다 — 사람과 같은 제약이다(Game.CanDescend).
+                g.Descend(_side, goal);
+                return;
+            }
+
+            // 목표가 멀어졌으면 올라간다. 걸어서 쫓아가지 않는 것이 이번
+            // 설계의 핵심이다 — 반경을 옮기는 유일한 방법이 강림이다.
+            double d = Det.Dist(a.Pos, goal);
+            if (d > Tuning.CommandRadius * 1.7)
+            {
+                g.Ascend(_side);
+                return;
+            }
+
+            if (d < Tuning.CommandRadius * 0.4) return;
+            double dx = goal.X - a.Pos.X;
+            double dz = goal.Z - a.Pos.Z;
             double l = Det.Hypot(dx, dz);
-            if (l < WaypointReach)
-            {
-                _route.RemoveAt(0);
-                return;
-            }
+            if (l < WaypointReach) return;
             a.Yaw = Det.Atan2(dx, dz);
             g.DriveAvatar(_side, new Vec2(dx / l, dz / l), dt);
         }

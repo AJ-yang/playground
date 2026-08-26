@@ -11,6 +11,7 @@ import { C } from './render/palette'
 import { bakeSky } from './render/sky'
 import { World } from './render/World'
 import { Banner, Hud } from './ui/Hud'
+import { DRAG_SLOP, unitAt, unitsInBox } from './ui/select'
 import { Minimap } from './ui/Minimap'
 
 /**
@@ -28,6 +29,7 @@ const app = document.getElementById('app')!
 const hudRoot = document.getElementById('hud')!
 const bannerRoot = document.getElementById('banner')!
 const minimapRoot = document.getElementById('minimap')!
+const boxEl = document.getElementById('selbox')!
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
@@ -64,8 +66,19 @@ const banner = new Banner(bannerRoot)
  */
 const minimap = new Minimap(
   minimapRoot,
-  (p) => session && !session.ended && session.game.setRally(HUMAN, p),
-  (p) => session && !session.ended && session.game.commandAvatar(HUMAN, p),
+  // 좌클릭 — 조준 중이면 거기 강림하고, 아니면 그쪽으로 화면을 옮긴다.
+  (p) => {
+    const s = session
+    if (!s || s.ended) return
+    if (s.aiming) descendAt(s, p)
+    else s.cameras.lookAtPoint(p)
+  },
+  // 우클릭 — 3D 화면과 같다. 고른 부대를 그리로 보낸다.
+  (p) => {
+    const s = session
+    if (!s || s.ended || s.selected.size === 0) return
+    s.game.commandUnits(HUMAN, [...s.selected], p)
+  },
 )
 
 let session: Session | null = null
@@ -78,6 +91,25 @@ interface Session {
   actors: Actors
   cameras: Cameras
   firstPerson: boolean
+  /** 강림할 자리를 짚는 중인가. Tab이 켜고 클릭이 끈다. */
+  aiming: boolean
+  /**
+   * 번개가 꽂히고 몸으로 들어가기까지 남은 시간.
+   *
+   * 0.5초쯤 부감에 붙들어 둔다. 즉시 1인칭으로 갈아타면 **자기가 뭘 했는지
+   * 못 본다** — 번개도, 발밑에 켜지는 반경 링도 전부 1인칭 카메라 안쪽에서
+   * 벌어지고 끝난다. 강림은 이 게임에서 가장 무거운 한 번이므로 그 장면이
+   * 있어야 한다.
+   */
+  striking: number
+  /**
+   * 지금 고른 유닛.
+   *
+   * **`Game` 밖에 산다.** 선택은 판정에 관여하지 않고 화면의 사정일 뿐이라,
+   * 여기 두어야 락스텝에서 두 사람이 서로 다른 것을 골라 놓고도 같은 판을
+   * 굴린다(GDD 7.2).
+   */
+  selected: Set<number>
   keys: Set<string>
   ended: boolean
 }
@@ -116,54 +148,96 @@ function start(seed = Math.floor(Math.random() * 0x7fffffff)): void {
     actors,
     cameras,
     firstPerson: false,
+    aiming: false,
+    striking: 0,
+    selected: new Set(),
     keys: new Set(),
     ended: false,
   }
   minimap.reset(game.board.land)
+  // 판 밖에서 지켜보는 시작이라 화면이 어디를 봐야 할지가 따로 정해져야
+  // 한다. 내 본진이다 — 첫 화면에 내 것이 보여야 무엇을 잃을 수 있는지 안다.
+  cameras.lookAtPoint(game.board.anchor(game.players[HUMAN].keepTile))
   resize()
 }
 
 // ────────────────────────────────────────────────────────────── 입력
 
 /**
- * 강림·복귀.
+ * 강림은 이제 **두 걸음**이다.
  *
- * 포인터 락을 걸되 **의존하지는 않는다.** 락이 걸리면 시선이 화면 밖으로 안
+ * `Tab`은 내려가는 것이 아니라 **조준을 켜는 것**이고, 그다음 짚은 자리에
+ * 내려간다. 신이 판 밖에 있으므로 "어디에 나타날 것인가"가 없으면 강림이
+ * 성립하지 않고, 그 선택 자체가 이 게임에서 가장 무거운 결정이다(GDD 3.2) —
+ * 반경을 옮기는 유일한 방법이기 때문이다.
+ *
+ * 포인터 락은 걸되 **의존하지는 않는다.** 락이 걸리면 시선이 화면 밖으로 안
  * 나가서 제일 좋지만, 샌드박스된 iframe이나 권한을 막아둔 브라우저에서는
  * 요청이 조용히 거절된다. 1인칭 시선은 이 게임의 핵심이라 거기서 죽으면
  * 안 되므로, 락이 없으면 **드래그로 둘러보는 방식**으로 물러선다.
  */
-function toggleFirstPerson(): void {
+function beginAim(): void {
   const s = session
-  if (!s || s.ended) return
-  s.firstPerson = !s.firstPerson
-  s.game.setDriving(HUMAN, s.firstPerson)
+  if (!s || s.ended || s.firstPerson) return
+  const a = s.game.players[HUMAN].avatar
+  if (a.descendIn > 0) {
+    s.game.note(`아직 내려갈 수 없다 (${a.descendIn.toFixed(1)}초)`, HUMAN)
+    return
+  }
+  s.aiming = true
+}
+
+function cancelAim(): void {
+  if (session) session.aiming = false
+}
+
+/** 짚은 자리에 실제로 내려간다. 못 가는 자리면 조준을 안 끈다. */
+function descendAt(s: Session, p: Vec2): void {
+  if (!s.game.descend(HUMAN, p)) {
+    s.game.note('보이는 땅에만 내려갈 수 있다', HUMAN)
+    return
+  }
+  s.aiming = false
+  s.actors.strike(HUMAN, s.game.players[HUMAN].avatar.pos)
+  s.cameras.lookAtPoint(s.game.players[HUMAN].avatar.pos)
+  s.striking = STRIKE_HOLD
+}
+
+/** 번개를 보여 주는 시간(초). */
+const STRIKE_HOLD = 0.55
+
+function enterFirstPerson(s: Session): void {
+  s.firstPerson = true
   lookDrag = false
-  if (s.firstPerson) {
-    // 거절되면 Promise가 reject되거나 예외가 난다. 어느 쪽이든 삼킨다 —
-    // 실패해도 드래그 조작이 살아 있으므로 알릴 것이 없다.
-    try {
-      const r = renderer.domElement.requestPointerLock() as unknown
-      if (r instanceof Promise) r.catch(() => {})
-    } catch {
-      /* 락 없이 간다 */
-    }
-  } else if (document.pointerLockElement) {
-    document.exitPointerLock()
+  try {
+    const r = renderer.domElement.requestPointerLock() as unknown
+    if (r instanceof Promise) r.catch(() => {})
+  } catch {
+    /* 락 없이 간다 */
   }
 }
 
-/**
- * 포인터 락이 없을 때 시선을 돌리는 길.
- *
- * 1인칭에서 누른 채 끌면 둘러보고, 끌지 않고 떼면 부대 명령이 된다. 둘을
- * 가르는 것은 **끈 거리**다(`DRAG_SLOP`). 이렇게 겹쳐 두면 조작 안내를 한
- * 줄 더 늘리지 않아도 되고, 규칙 모르는 사람은 그냥 마우스를 움직여 보다가
- * 알아챈다.
- */
+/** 올라간다. 몸이 사라지고 반경도 같이 꺼진다. */
+function ascend(): void {
+  const s = session
+  if (!s || !s.firstPerson) return
+  s.firstPerson = false
+  // 올라오면 화면은 방금 서 있던 자리에 남는다. 안 그러면 판 어디를 보고
+  // 있었는지 잃어버린 채로 부감에 던져진다.
+  s.cameras.lookAtPoint(s.game.players[HUMAN].avatar.pos)
+  s.game.ascend(HUMAN)
+  lookDrag = false
+  if (document.pointerLockElement) document.exitPointerLock()
+}
+
+/** 마지막으로 본 커서 자리. 조준 원이 이걸 따라간다. */
+const pointer = { x: innerWidth / 2, y: innerHeight / 2 }
+
 let lookDrag = false
 let dragDist = 0
-const DRAG_SLOP = 6
+
+/** 부감에서 왼쪽 버튼을 누른 채 끄는 중인가. 끝나면 상자 안이 선택된다. */
+let box: { x0: number; y0: number; x1: number; y1: number } | null = null
 
 addEventListener('keydown', (e) => {
   const s = session
@@ -172,33 +246,52 @@ addEventListener('keydown', (e) => {
   s.keys.add(k)
   if (e.key === 'Tab') {
     e.preventDefault()
-    toggleFirstPerson()
+    if (s.firstPerson) ascend()
+    else if (s.aiming) cancelAim()
+    else beginAim()
     return
   }
   if (k === '1') s.game.enqueue(HUMAN, 'shield')
   if (k === '2') s.game.enqueue(HUMAN, 'axe')
   if (k === '4') s.game.enqueue(HUMAN, 'worker')
-  // 3 — 아바타가 선 자리에 전진 기지. 부감·1인칭 어디서나 같은 키다.
+  // 3 — 신이 선 자리에 전진 기지. 강림해 있어야만 지을 수 있다.
   if (k === '3') s.game.build(HUMAN)
-  if (k === 'escape' && s.firstPerson) toggleFirstPerson()
+  if (k === 'escape') {
+    if (s.aiming) cancelAim()
+    else if (s.firstPerson) ascend()
+    else s.selected.clear()
+  }
 })
 
 addEventListener('keyup', (e) => session?.keys.delete(e.key.toLowerCase()))
 addEventListener('blur', () => session?.keys.clear())
 
-// 포인터 락이 풀리면(사용자가 Esc를 눌렀거나 창을 벗어났다) 부감으로 되돌린다.
+// 포인터 락이 풀리면(사용자가 Esc를 눌렀거나 창을 벗어났다) 올라온다.
 document.addEventListener('pointerlockchange', () => {
   const s = session
   if (!s) return
   if (!document.pointerLockElement && s.firstPerson) {
     s.firstPerson = false
-    s.game.setDriving(HUMAN, false)
+    s.cameras.lookAtPoint(s.game.players[HUMAN].avatar.pos)
+    s.game.ascend(HUMAN)
   }
 })
 
 addEventListener('mousemove', (e) => {
   const s = session
-  if (!s || !s.firstPerson) return
+  if (!s) return
+  pointer.x = e.clientX
+  pointer.y = e.clientY
+
+  if (box) {
+    box.x1 = e.clientX
+    box.y1 = e.clientY
+    dragDist += Math.abs(e.movementX) + Math.abs(e.movementY)
+    drawBox(dragDist >= DRAG_SLOP ? box : null)
+    return
+  }
+
+  if (!s.firstPerson) return
   const locked = document.pointerLockElement === renderer.domElement
   if (!locked && !lookDrag) return
   if (lookDrag) dragDist += Math.abs(e.movementX) + Math.abs(e.movementY)
@@ -209,19 +302,61 @@ addEventListener('mousemove', (e) => {
 
 addEventListener('mouseup', (e) => {
   const s = session
-  if (!s || e.button !== 0 || !lookDrag) return
+  if (!s || e.button !== 0) return
+
+  if (box) {
+    const b = box
+    box = null
+    drawBox(null)
+    if (s.ended) return
+    if (dragDist < DRAG_SLOP) pickOne(s, b.x1, b.y1)
+    else pickBox(s, b)
+    return
+  }
+
+  if (!lookDrag) return
   lookDrag = false
   // 끌지 않고 뗐으면 클릭으로 친다 — 보는 쪽으로 부대를 보낸다.
   if (dragDist < DRAG_SLOP && s.firstPerson && !s.ended) rallyAhead(s)
 })
 
-/** 1인칭의 부대 명령 — 아바타가 보고 있는 앞쪽으로 보낸다. */
+/**
+ * 한 놈 고르기.
+ *
+ * 빈 땅을 짚으면 **선택이 풀린다.** 스타크래프트가 그렇게 하고, 그래야
+ * "고른 것이 없다"는 상태를 사람이 손으로 만들 수 있다. Shift를 누르고
+ * 있으면 더한다.
+ */
+function pickOne(s: Session, x: number, y: number): void {
+  const id = unitAt(s.game, HUMAN, s.cameras.overhead, s.world.terrain, x, y, viewport())
+  if (!s.keys.has('shift')) s.selected.clear()
+  if (id >= 0) {
+    if (s.selected.has(id)) s.selected.delete(id)
+    else s.selected.add(id)
+  }
+}
+
+function pickBox(s: Session, b: { x0: number; y0: number; x1: number; y1: number }): void {
+  const ids = unitsInBox(s.game, HUMAN, s.cameras.overhead, s.world.terrain, b, viewport())
+  if (!s.keys.has('shift')) s.selected.clear()
+  for (const id of ids) s.selected.add(id)
+}
+
+function viewport(): { width: number; height: number } {
+  return { width: innerWidth, height: innerHeight }
+}
+
+/** 1인칭의 부대 명령 — 보고 있는 앞쪽으로 보낸다. */
 function rallyAhead(s: Session): void {
   const a = s.game.players[HUMAN].avatar
-  s.game.setRally(HUMAN, {
+  const point = {
     x: a.pos.x + Math.sin(a.yaw) * 14,
     z: a.pos.z + Math.cos(a.yaw) * 14,
-  })
+  }
+  // 골라 둔 부대가 있으면 그놈들만, 없으면 전군을 부른다. 1인칭에서는
+  // 유닛을 짚을 수가 없으므로 부감에서 골라 둔 것이 그대로 이어진다.
+  if (s.selected.size > 0) s.game.commandUnits(HUMAN, [...s.selected], point)
+  else s.game.setRally(HUMAN, point)
 }
 
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault())
@@ -231,8 +366,6 @@ renderer.domElement.addEventListener('mousedown', (e) => {
   if (!s || s.ended) return
 
   if (s.firstPerson) {
-    // 1인칭의 좌클릭 — 보고 있는 쪽으로 부대를 보낸다. 눈으로 본 곳을
-    // 가리키는 것이라, 부감에서 칸을 고르는 것과는 다른 감각이 된다.
     if (e.button !== 0) return
     if (document.pointerLockElement === renderer.domElement) {
       rallyAhead(s)
@@ -244,11 +377,48 @@ renderer.domElement.addEventListener('mousedown', (e) => {
     return
   }
 
-  const p = s.cameras.screenToGround(e.clientX, e.clientY, innerWidth, innerHeight)
-  if (!p) return
-  if (e.button === 0) s.game.setRally(HUMAN, p)
-  else if (e.button === 2) s.game.commandAvatar(HUMAN, p)
+  // ── 부감
+
+  if (s.aiming) {
+    // 조준 중에는 두 버튼이 같은 뜻이다 — 왼쪽은 내려가고, 오른쪽은 그만둔다.
+    const p = s.cameras.screenToGround(e.clientX, e.clientY, innerWidth, innerHeight)
+    if (e.button === 2) cancelAim()
+    else if (p) descendAt(s, p)
+    return
+  }
+
+  if (e.button === 0) {
+    // 누른 순간부터 상자다. 안 끌고 떼면 클릭으로 친다(`mouseup`).
+    box = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }
+    dragDist = 0
+    return
+  }
+
+  if (e.button === 2) {
+    /**
+     * **모든 이동은 우클릭이다.**
+     *
+     * 고른 것이 없으면 아무 일도 안 일어난다. 예전에는 우클릭이 아바타를
+     * 움직였는데, 신이 판 밖으로 나간 지금 그 명령은 존재하지 않는다.
+     */
+    if (s.selected.size === 0) return
+    const p = s.cameras.screenToGround(e.clientX, e.clientY, innerWidth, innerHeight)
+    if (p) s.game.commandUnits(HUMAN, [...s.selected], p)
+  }
 })
+
+/** 드래그 상자를 화면에 그린다. 3D가 아니라 DOM이라 픽셀에 딱 맞는다. */
+function drawBox(b: { x0: number; y0: number; x1: number; y1: number } | null): void {
+  if (!b) {
+    boxEl.style.display = 'none'
+    return
+  }
+  boxEl.style.display = 'block'
+  boxEl.style.left = `${Math.min(b.x0, b.x1)}px`
+  boxEl.style.top = `${Math.min(b.y0, b.y1)}px`
+  boxEl.style.width = `${Math.abs(b.x1 - b.x0)}px`
+  boxEl.style.height = `${Math.abs(b.y1 - b.y0)}px`
+}
 
 // ────────────────────────────────────────────────────────────── 루프
 
@@ -330,22 +500,47 @@ const loop = new GameLoop({
     if (!s) return
     const cam = s.firstPerson ? s.cameras.first : s.cameras.overhead
     const dt = renderClock.getDelta()
+
+    // 번개가 다 치면 몸으로 들어간다.
+    if (s.striking > 0) {
+      s.striking -= dt
+      if (s.striking <= 0) enterFirstPerson(s)
+    }
     const me = s.game.players[HUMAN].avatar
     if (s.firstPerson) {
       s.cameras.placeFirst(me.pos, me.yaw)
     } else {
       /**
-       * 부감은 아바타를 따라간다.
+       * 부감은 **아무도 안 따라간다.**
        *
-       * 맵이 넓어져서 한 화면에 다 안 들어온다(`Cameras`). 새 조작을 배우게
-       * 하지 않으면서 스크롤을 얻는 방법이고, 이 게임에서 아바타는 이미 화면의
-       * 중심이다 — 지휘 반경이 그를 따라다니므로 그가 있는 곳이 곧 지금
-       * 중요한 곳이다. WASD로 밀 수 있고 놓으면 돌아온다.
+       * 신이 판 밖으로 나가면서 따라갈 몸이 없어졌다. WASD로 밀고, 미니맵을
+       * 짚어 옮기고, 올라오면 마지막으로 서 있던 자리로 간다 — 판 밖에서
+       * 내려다보는 존재에게 맞는 카메라다(GDD 3.2).
        */
       const pan = panDir(s.keys)
       s.cameras.panOverhead(pan.x, pan.z, dt)
-      s.cameras.placeOverhead(me.pos, 1 - Math.exp(-dt * 3.5))
     }
+    /**
+     * 죽은 유닛은 선택에서 빠진다.
+     *
+     * 안 지우면 하단 패널이 시체를 붙들고 있고, 우클릭이 아무 일도 안 하는
+     * 유령 선택이 남는다.
+     */
+    if (s.selected.size > 0) {
+      for (const id of s.selected) {
+        if (!s.game.units.some((u) => u.id === id && u.hp > 0)) s.selected.delete(id)
+      }
+    }
+    s.actors.setSelection(s.selected)
+
+    // 조준 원은 커서를 따라간다. 못 내려가는 자리면 붉어진다.
+    if (s.aiming) {
+      const p = s.cameras.screenToGround(pointer.x, pointer.y, innerWidth, innerHeight)
+      s.actors.aimAt(p, !!p && s.game.canDescend(HUMAN, p))
+    } else {
+      s.actors.aimAt(null, false)
+    }
+
     applyFog(s.scene, s.firstPerson)
     s.world.sync(s.game, HUMAN)
     // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
@@ -353,7 +548,7 @@ const loop = new GameLoop({
     // 걸음 흔들림은 뼈대가 굴린 위상에서 나오므로 sync 뒤에 얹는다.
     if (s.firstPerson) s.cameras.applyFirstBob(s.actors.viewerBob)
     renderer.render(s.scene, cam)
-    hud.render(s.game, s.firstPerson)
+    hud.render(s.game, s.firstPerson, s.selected, s.aiming)
     // 미니맵은 1인칭에서도 그린다. 눈앞만 보이는 시점일수록 판 전체를 보는
     // 눈이 더 필요하고, 강림한 채로 부대를 보낼 수 있다는 것이 강림의 값을
     // 깎지 않는 유일한 방법이다(GDD 3.2).

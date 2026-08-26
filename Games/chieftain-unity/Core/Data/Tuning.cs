@@ -17,8 +17,22 @@ namespace Chieftain.Core
         public const double CommandRadius = TILE * 0.5;
 
         /// <summary>부감 이동 명령 속도. 강림의 유일한 유인이 이 둘의 비율이다.</summary>
-        public const double AvatarSpeedCommanded = 10.5;
+        /// <summary>
+        /// 강림해 있는 동안 신이 걷는 속도. 짝이 되던 AvatarSpeedCommanded는
+        /// 사라졌다 — 신은 부감에서 판 위를 걷지 않는다(GDD 3.2).
+        /// </summary>
         public const double AvatarSpeedDriven = 23.1;
+
+        /// <summary>
+        /// 강림 재사용 대기 (초).
+        ///
+        /// <para>
+        /// 강림이 내려꽂히는 것이 되면서 필요해진 값이다. 없으면 내려갔다 즉시
+        /// 올라와 맵 반대편에 다시 내려갈 수 있고, 그러면 반경을 공짜로
+        /// 순간이동시키는 것이라 "여기가 결전지다"라는 결정이 사라진다.
+        /// </para>
+        /// </summary>
+        public const double DescendCooldown = 8;
 
         public const double LookSensitivity = 0.0022;
 

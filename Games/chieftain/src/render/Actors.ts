@@ -68,6 +68,14 @@ export class Actors {
   private readonly forgeNodes = new Map<number, THREE.Group>()
   private readonly focusMark: THREE.Mesh
   private readonly radiusRing: THREE.Mesh
+  /** 강림 조준 원. Tab을 누른 뒤 커서를 따라다닌다. */
+  private readonly aimRing: THREE.Mesh
+  /** 강림 번개. 내려꽂힐 때 한 번 번쩍이고 사라진다. */
+  private readonly bolts: THREE.Mesh[] = []
+  /** 남은 번개 수명 0~1(진영별). */
+  private readonly boltLife: [number, number] = [0, 0]
+  /** 지금 선택된 유닛 id. 판정에 관여하지 않는 순수한 화면 상태다. */
+  private selected: ReadonlySet<number> = new Set()
   private readonly rallyMark: THREE.Group
   private readonly disposables: { dispose(): void }[] = []
 
@@ -90,6 +98,9 @@ export class Actors {
    */
   private readonly geo = {
     foot: new THREE.RingGeometry(1.1, 1.62, 20),
+    // 선택 링. 지휘 링보다 **바깥**에 둔다 — 둘 다 켜졌을 때 겹쳐서
+    // 어느 쪽이 무슨 뜻인지 못 읽으면 링 두 개가 서로를 지운다.
+    pick: new THREE.RingGeometry(1.86, 2.16, 22),
     spark: new THREE.IcosahedronGeometry(1, 0),
     bar: new THREE.PlaneGeometry(1, 1),
   }
@@ -104,6 +115,9 @@ export class Actors {
     this.root.add(this.rallyMark)
     this.focusMark = this.buildFocusMark()
     this.root.add(this.focusMark)
+    this.aimRing = this.buildAimRing()
+    this.root.add(this.aimRing)
+    this.buildBolts()
     this.buildAvatars(game)
 
     this.viewArm = buildViewArm(game.humanSide)
@@ -214,6 +228,106 @@ export class Actors {
     // 링은 제자리에 두고 정점만 옮긴다. 그룹을 옮기면 높이를 두 번 더한다.
     m.frustumCulled = false
     return m
+  }
+
+  /**
+   * 강림 조준 원.
+   *
+   * 반지름이 **지휘 반경과 같다.** 조준 중에 커서를 따라다니는 이 원이 곧
+   * "여기 내려가면 이만큼이 세진다"는 뜻이라, 강림 규칙을 글자 없이 가르치는
+   * 유일한 그림이다(GDD 6.5). 안 되는 자리에서는 색이 붉게 바뀐다.
+   */
+  private buildAimRing(): THREE.Mesh {
+    const r = TUNING.commandRadius
+    const geo = new THREE.RingGeometry(r - 1.1, r, 72)
+    geo.rotateX(-Math.PI / 2)
+    const mat = new THREE.MeshBasicMaterial({
+      color: C.radius,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+    this.disposables.push(geo, mat)
+    const m = new THREE.Mesh(geo, mat)
+    m.renderOrder = 5
+    m.frustumCulled = false
+    m.visible = false
+    return m
+  }
+
+  /**
+   * 강림 번개.
+   *
+   * 하늘에서 땅으로 꽂히는 얇은 기둥 하나. 순간이동이 된 강림에 **사건의
+   * 순간**을 주는 장치다 — 몸이 소리 없이 나타나면 사람은 자기가 뭘 했는지
+   * 모르고, 상대는 언제 내려왔는지 모른다.
+   */
+  private buildBolts(): void {
+    const geo = new THREE.CylinderGeometry(0.35, 1.4, 60, 6, 1, true)
+    this.disposables.push(geo)
+    for (let side = 0; side < 2; side++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xf2f6ff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      this.disposables.push(mat)
+      const m = new THREE.Mesh(geo, mat)
+      m.position.y = 30
+      m.renderOrder = 6
+      m.visible = false
+      const holder = new THREE.Group()
+      holder.add(m)
+      this.root.add(holder)
+      this.bolts.push(m)
+    }
+  }
+
+  /** 화면 쪽에서 알려 주는 선택 목록. 시뮬레이션은 이걸 모른다. */
+  setSelection(ids: ReadonlySet<number>): void {
+    this.selected = ids
+  }
+
+  /**
+   * 조준 원을 그 자리에 놓는다. `point`가 null이면 조준 중이 아니다.
+   */
+  aimAt(point: { x: number; z: number } | null, ok: boolean): void {
+    this.aimRing.visible = !!point
+    if (!point) return
+    const pos = this.aimRing.geometry.attributes.position as THREE.BufferAttribute
+    for (let i = 0; i < pos.count; i++) {
+      pos.setY(i, this.terrain.heightAt(pos.getX(i) + point.x, pos.getZ(i) + point.z) + 0.3)
+    }
+    pos.needsUpdate = true
+    this.aimRing.position.set(point.x, 0, point.z)
+    ;(this.aimRing.material as THREE.MeshBasicMaterial).color.setHex(ok ? C.radius : 0xff5a4a)
+  }
+
+  /** 그 진영이 방금 강림했다. 번개를 친다. */
+  strike(side: Side, at: { x: number; z: number }): void {
+    const bolt = this.bolts[side]!
+    bolt.parent!.position.set(at.x, this.terrain.heightAt(at.x, at.z), at.z)
+    bolt.visible = true
+    this.boltLife[side] = 1
+  }
+
+  private syncBolts(dt: number): void {
+    for (let side = 0; side < 2; side++) {
+      const life = this.boltLife[side]!
+      if (life <= 0) continue
+      const next = Math.max(0, life - dt * 1.5)
+      this.boltLife[side] = next
+      const bolt = this.bolts[side]!
+      const mat = bolt.material as THREE.MeshBasicMaterial
+      // 처음엔 하얗게 터지고 진영색으로 식으며 사라진다.
+      mat.opacity = next * next * 0.85
+      mat.color.setHex(C.side[side as Side]).lerp(_white, next)
+      bolt.scale.x = bolt.scale.z = 0.6 + (1 - next) * 1.6
+      if (next <= 0) bolt.visible = false
+    }
   }
 
   /** 반경 링의 정점을 아바타 자리에 맞춰 지형 위로 다시 얹는다. */
@@ -349,6 +463,22 @@ export class Actors {
     foot.renderOrder = 2
     group.add(foot)
 
+    // 선택 링 — 내가 손으로 고른 동안만 켜진다. 금색(=보너스)과 헷갈리면
+    // 안 되므로 흰색이고, 지휘 링보다 한 뼘 바깥에 있다.
+    const pickMat = new THREE.MeshBasicMaterial({
+      color: 0xe8f0f7,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+    this.disposables.push(pickMat)
+    const pick = new THREE.Mesh(this.geo.pick, pickMat)
+    pick.rotation.x = -Math.PI / 2
+    pick.position.y = 0.12
+    pick.renderOrder = 3
+    group.add(pick)
+
     // 체력바. 다치기 전에는 숨어 있다가 한 대 맞으면 나타난다 —
     // 멀쩡한 유닛 위에까지 막대가 뜨면 화면이 막대밭이 된다.
     const bar = new THREE.Group()
@@ -382,6 +512,7 @@ export class Actors {
       rig,
       foot,
       footMat,
+      pickMat,
       bar,
       barFill,
       px: u.pos.x,
@@ -414,6 +545,7 @@ export class Actors {
     this.syncHits(game, viewer)
     this.syncCorpses(game, viewer)
     this.syncFocus(game, viewer)
+    this.syncBolts(dt)
   }
 
   private syncUnits(game: Game, viewer: Side, camera: THREE.Camera, dt: number): void {
@@ -470,6 +602,7 @@ export class Actors {
       // 발밑 링 = 지휘받는 중. 링이 지나갈 때 발밑이 켜지는 것을 보아야
       // 지휘 반경 규칙이 설명 없이 전달된다.
       node.footMat.opacity = u.commanded ? 0.6 : 0
+      node.pickMat.opacity = this.selected.has(u.id) ? 0.85 : 0
       node.group.scale.setScalar(UNITS[u.kind].radius * Actors.VIEW_SCALE)
 
       // 체력바 — 다친 놈에게만. 카메라를 향해 돌려 세운다.
@@ -491,6 +624,7 @@ export class Actors {
       this.root.remove(node.group)
       node.rig.mat.dispose()
       node.footMat.dispose()
+      node.pickMat.dispose()
       this.unitNodes.delete(id)
     }
   }
@@ -512,11 +646,18 @@ export class Actors {
        *
        * 몸을 그려 보려던 시도는 접었다 — 이유는 `warrior.ts`의 `ViewArm`에 있다.
        */
+      /**
+       * **몸이 없으면 아무것도 안 그린다.**
+       *
+       * 신은 평소 판 위에 없다(GDD 3.2). 부감에서 내 아바타가 서 있으면 이번
+       * 설계 변경이 화면에서 통째로 거짓말이 된다 — 규칙은 코드가 아니라
+       * 화면이 가르친다.
+       */
       const mine = p.side === viewer
       const inBody = firstPerson && mine
-      const visible = mine
-        ? !inBody
-        : game.visible[viewer].has(game.board.tileAt(p.avatar.pos))
+      const visible =
+        p.avatar.embodied &&
+        (mine ? !inBody : game.visible[viewer].has(game.board.tileAt(p.avatar.pos)))
       node.group.visible = visible
       node.group.position.set(
         p.avatar.pos.x,
@@ -560,9 +701,10 @@ export class Actors {
       this.viewerBob.roll = 0
     }
 
-    // 반경 링은 보는 쪽의 것만 그린다. 상대 반경까지 보이면 정보가 과해진다.
+    // 반경 링은 보는 쪽의 것만, 그리고 **내려와 있을 때만** 그린다.
     const me = game.players[viewer].avatar
-    this.bendRing(me.pos.x, me.pos.z)
+    this.radiusRing.visible = me.embodied
+    if (me.embodied) this.bendRing(me.pos.x, me.pos.z)
   }
 
   private syncTiles(game: Game, viewer: Side, firstPerson: boolean): void {
@@ -804,6 +946,7 @@ interface UnitNode {
   rig: Rig
   foot: THREE.Mesh
   footMat: THREE.MeshBasicMaterial
+  pickMat: THREE.MeshBasicMaterial
   bar: THREE.Group
   barFill: THREE.Mesh
   /** 지난 프레임의 자리. 걸음 속도를 재는 데만 쓴다. */
@@ -834,6 +977,7 @@ function windupOf(u: Unit): number {
 }
 
 const _c = new THREE.Color()
+const _white = new THREE.Color(0xf2f6ff)
 
 /** 안개 색. 매 프레임 다시 안 구하려고 미리 잡아 둔다. */
 const FOG_RGB = (() => {

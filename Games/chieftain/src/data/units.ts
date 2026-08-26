@@ -14,6 +14,14 @@ export type UnitKind = 'shield' | 'axe' | 'worker'
 export interface UnitDef {
   readonly kind: UnitKind
   readonly name: string
+  /**
+   * 이 유닛이 무엇을 하는 놈인지 한 줄.
+   *
+   * 선택하면 하단에 뜬다. 규칙을 시작 배너에 길게 적는 대신 **필요할 때
+   * 그 자리에서** 알려 주는 것이라, "설명 없이 쥐어주고 관찰한다"는 판정
+   * 조건을 안 깬다(GDD 6.5).
+   */
+  readonly blurb: string
   readonly cost: number
   /** 생산에 걸리는 초. */
   readonly buildSeconds: number
@@ -54,6 +62,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   shield: {
     kind: 'shield',
     name: '방패병',
+    blurb: '반경 안에서 버틴다. 막아내면 금색으로 번쩍인다.',
     cost: 45,
     buildSeconds: 5,
     hp: 130,
@@ -69,6 +78,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   worker: {
     kind: 'worker',
     name: '일꾼',
+    blurb: '싸우지 않는다. 밀리면 알아서 물러난다.',
     // 병사보다 싸고 빠르게 나온다. 초반에 무엇에 쓸지가 결정이어야 하므로,
     // 값이 비싸면 결정 자체가 안 생긴다.
     cost: 30,
@@ -87,6 +97,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   axe: {
     kind: 'axe',
     name: '도끼병',
+    blurb: '반경 안에서 더 세게 친다. 사거리가 짧다.',
     cost: 55,
     buildSeconds: 6,
     hp: 85,

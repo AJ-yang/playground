@@ -50,13 +50,10 @@ internal static class Program
                 var a = p.Avatar;
                 var q = new List<string>();
                 foreach (var i in p.Queue) q.Add($"{K(i.Kind)}:{D(i.Remain)}");
-                string mt = a.MoveTarget.HasValue
-                    ? $"{D(a.MoveTarget.Value.X)}/{D(a.MoveTarget.Value.Z)}"
-                    : "-";
                 sb.Append("P ").Append(p.Side).Append(' ').Append(D(p.Silver)).Append(' ')
                   .Append(D(p.KeepHp)).Append(' ').Append(D(a.Pos.X)).Append(' ').Append(D(a.Pos.Z))
-                  .Append(' ').Append(D(a.Yaw)).Append(' ').Append(B(a.Driving)).Append(' ')
-                  .Append(mt).Append(' ').Append(D(p.Rally.X)).Append(' ').Append(D(p.Rally.Z))
+                  .Append(' ').Append(D(a.Yaw)).Append(' ').Append(B(a.Embodied)).Append(' ')
+                  .Append(D(a.DescendIn)).Append(' ').Append(D(p.Rally.X)).Append(' ').Append(D(p.Rally.Z))
                   .Append(' ').Append(p.RallyTile).Append(' ').Append(p.FocusId)
                   .Append(" [").Append(string.Join(",", q)).Append("]\n");
             }
@@ -67,7 +64,7 @@ internal static class Program
                   .Append(' ').Append(D(u.Pos.X)).Append(' ').Append(D(u.Pos.Z)).Append(' ')
                   .Append(D(u.Hp)).Append(' ').Append(u.Tile).Append(' ').Append(D(u.Facing))
                   .Append(' ').Append(D(u.SwingIn)).Append(' ').Append(B(u.Commanded)).Append(' ')
-                  .Append(B(u.Fighting)).Append(' ').Append(u.DestTile).Append(' ')
+                  .Append(B(u.Ordered)).Append(' ').Append(B(u.Fighting)).Append(' ').Append(u.DestTile).Append(' ')
                   .Append(u.Path.Count).Append(' ').Append(D(u.ThinkIn)).Append(' ')
                   .Append(D(u.Lunge)).Append(' ').Append(D(u.Flash)).Append(' ').Append(D(u.Guard))
                   .Append(' ').Append(u.AnchorTile).Append('\n');

@@ -44,7 +44,7 @@ function dump(tick: number): void {
     const q = p.queue.map((i) => `${i.kind}:${d(i.remain)}`).join(',')
     out.push(
       `P ${p.side} ${d(p.silver)} ${d(p.keepHp)} ${d(a.pos.x)} ${d(a.pos.z)} ${d(a.yaw)} ` +
-        `${b(a.driving)} ${a.moveTarget ? `${d(a.moveTarget.x)}/${d(a.moveTarget.z)}` : '-'} ` +
+        `${b(a.embodied)} ${d(a.descendIn)} ` +
         `${d(p.rally.x)} ${d(p.rally.z)} ${p.rallyTile} ${p.focusId} [${q}]`,
     )
   }
@@ -52,7 +52,7 @@ function dump(tick: number): void {
   for (const u of game.units) {
     out.push(
       `U ${u.id} ${u.faction} ${u.kind} ${d(u.pos.x)} ${d(u.pos.z)} ${d(u.hp)} ${u.tile} ` +
-        `${d(u.facing)} ${d(u.swingIn)} ${b(u.commanded)} ${b(u.fighting)} ${u.destTile} ` +
+        `${d(u.facing)} ${d(u.swingIn)} ${b(u.commanded)} ${b(u.ordered)} ${b(u.fighting)} ${u.destTile} ` +
         `${u.path.length} ${d(u.thinkIn)} ${d(u.lunge)} ${d(u.flash)} ${d(u.guard)} ${u.anchorTile}`,
     )
   }

@@ -25,8 +25,19 @@ namespace Chieftain.Core
         public List<Vec2> Path = new List<Vec2>();
         /// <summary>경유지의 최종 목적지 칸. -1이면 목적지 없음.</summary>
         public int DestTile = -1;
-        /// <summary>이번 틱에 지휘 반경 안에 있었는가 (GDD 3.1).</summary>
+        /// <summary>
+        /// 이번 틱에 지휘 반경 안에 있었는가 (GDD 3.1).
+        ///
+        /// <para>
+        /// 이제 이것은 명령을 듣느냐가 아니라 보너스를 받느냐다. 신이 판 위에
+        /// 없는 동안에는 아무도 반경 안에 있지 않다.
+        /// </para>
+        /// </summary>
         public bool Commanded;
+        /// <summary>
+        /// 직접 명령을 받았는가. 자율 판단이 이 유닛을 안 건드린다.
+        /// </summary>
+        public bool Ordered;
         /// <summary>반경 밖 유닛이 스스로 판단을 다시 하기까지 남은 시간.</summary>
         public double ThinkIn;
         /// <summary>중립 수비대는 자기 칸을 떠나지 않는다.</summary>
@@ -81,26 +92,28 @@ namespace Chieftain.Core
         public double Raising;
     }
 
+    /// <summary>
+    /// 강림한 신 (GDD 3.2).
+    ///
+    /// <para>
+    /// 평소에는 판 위에 없다. 부감에서 나는 세계 안의 기물이 아니라 밖에서
+    /// 내려다보는 존재이고, 강림하는 순간에만 몸을 얻는다. 그래서 Pos는 "지금
+    /// 서 있는 곳"이 아니라 "마지막으로 서 있던 곳"일 수 있다 — 몸이 있는지는
+    /// Embodied만 말한다.
+    /// </para>
+    /// </summary>
     public sealed class Avatar
     {
         public int Side;
         public Vec2 Pos;
-        /// <summary>1인칭 시선. 부감에서도 몸이 이쪽을 본다.</summary>
+        /// <summary>1인칭 시선.</summary>
         public double Yaw;
-        /// <summary>부감에서 내린 이동 명령의 목적지. 직접 몰 때는 null.</summary>
-        public Vec2? MoveTarget;
         /// <summary>
-        /// 그 목적지까지의 경유지.
-        ///
-        /// <para>
-        /// 예전에는 매 틱 경로를 다시 냈다. 아홉 칸짜리 판에서는 공짜였지만, 지금은
-        /// 통행 격자 8,640칸을 훑는 탐색이라 매 틱 돌릴 수가 없다. 명령을 받을 때
-        /// 한 번 내고 경유지를 하나씩 지운다.
-        /// </para>
+        /// 지금 판 위에 몸이 있는가. 이 한 값이 지휘 반경의 존재 여부다.
         /// </summary>
-        public List<Vec2> Path = new List<Vec2>();
-        /// <summary>이 아바타를 지금 1인칭으로 몰고 있는가 (GDD 3.2).</summary>
-        public bool Driving;
+        public bool Embodied;
+        /// <summary>다음 강림까지 남은 시간.</summary>
+        public double DescendIn;
     }
 
     public sealed class NeutralCamp

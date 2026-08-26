@@ -128,13 +128,12 @@ namespace Chieftain.Core
                 Avatar = new Avatar
                 {
                     Side = side,
-                    // 아바타는 롱하우스 **밖**에 선다. 건물 안에서 시작하면 강림한 첫
-                    // 화면이 벽이라, 1인칭이 무엇을 보여주는지 알기도 전에 인상이 정해진다.
+                    // 판이 시작될 때 신은 판 위에 없다. 이 자리는 아직 쓰이지 않는
+                    // 기본값이고, 첫 강림 때 사람이 찍는 곳으로 덮인다.
                     Pos = Board.ClampToLand(new Vec2(home.X + (side == 0 ? 10 : -10), home.Z + 6)),
                     Yaw = side == 0 ? 0 : Math.PI,
-                    MoveTarget = null,
-                    Path = new List<Vec2>(),
-                    Driving = false,
+                    Embodied = false,
+                    DescendIn = 0,
                 },
             };
         }
@@ -172,6 +171,7 @@ namespace Chieftain.Core
                 Path = new List<Vec2>(),
                 DestTile = -1,
                 Commanded = false,
+                Ordered = false,
                 ThinkIn = 0,
                 AnchorTile = tileId,
                 Facing = a,
@@ -201,6 +201,7 @@ namespace Chieftain.Core
                 Path = new List<Vec2>(),
                 DestTile = -1,
                 Commanded = false,
+                Ordered = false,
                 ThinkIn = 0,
                 AnchorTile = -1,
                 Facing = side == 0 ? 0 : Math.PI,
@@ -220,17 +221,17 @@ namespace Chieftain.Core
         // ───────────────────────────────────────────────────────── 명령
 
         /// <summary>
-        /// 부대 집결 지점 (GDD 3.1).
+        /// 부대 집결 지점.
         ///
         /// <para>
-        /// **반경 안 유닛은 이 점을 정확히 향하고, 밖 유닛은 칸까지만 안다.** 하나의
-        /// 명령이 두 종류로 갈리는 것이 지휘 반경 규칙의 전부다.
+        /// 모두가 정확히 듣는다. 신이 부감에서 사라진 지금 "반경 밖은 대충
+        /// 듣는다"를 그대로 두면 아무도 명령을 안 듣는 게임이 된다. 지휘
+        /// 반경은 이제 명령을 듣느냐가 아니라 얼마나 세느냐를 가른다(GDD 3.1).
         /// </para>
         /// </summary>
         public void SetRally(int side, Vec2 point)
         {
             var p = Players[side];
-            // 클릭한 곳에 적이 서 있으면 **집중 공격 지정**까지 함께 한다.
             p.FocusId = EnemyNear(side, point, 5.5);
             int tile = Board.TileAt(point);
             p.RallyTile = tile;
@@ -241,44 +242,106 @@ namespace Chieftain.Core
                 // 일꾼은 집결 명령을 안 듣는다. 부대와 같이 전선으로 걸어가면
                 // 그냥 죽으러 가는 것이고, 그러면 아무도 일꾼을 안 뽑는다.
                 if (Units_Def(u.Kind).Civilian) continue;
-                // 반경 안 유닛만 즉시 반응한다. 밖은 다음 자율 판단 때 알게 된다.
-                u.ThinkIn = u.Commanded ? 0 : Math.Min(u.ThinkIn, AutonomyThink * 0.5);
-                if (u.Commanded) Repath(u, tile, p.Rally);
+                if (u.Ordered) continue;
+                u.ThinkIn = 0;
+                Repath(u, tile, p.Rally);
             }
         }
 
-        /// <summary>부감에서 내리는 아바타 이동 명령. 느리다(GDD 3.2).</summary>
-        public void CommandAvatar(int side, Vec2 point)
+        /// <summary>
+        /// 고른 부대에게 내리는 이동·공격 명령 (우클릭).
+        ///
+        /// <para>
+        /// 선택은 시뮬레이션 밖에 있다. 여기 들어오는 것은 이미 확정된 id
+        /// 목록뿐이라, 락스텝에서 두 클라이언트가 서로 다른 것을 골라 놓고도
+        /// 같은 판을 굴릴 수 있다(GDD 7.2).
+        /// </para>
+        /// </summary>
+        public void CommandUnits(int side, IReadOnlyList<int> ids, Vec2 point)
         {
-            var a = Players[side].Avatar;
-            if (a.Driving) return;
-            a.MoveTarget = Board.ClampToLand(point);
-            // 경로는 **여기서 한 번만** 낸다. 매 틱 다시 내면 격자 탐색이 프레임을 먹는다.
-            a.Path = Board.Route(a.Pos, a.MoveTarget.Value);
-        }
+            var p = Players[side];
+            var target = Board.ClampToLand(point);
+            int tile = Board.TileAt(target);
 
-        /// <summary>강림·복귀 (GDD 3.2).</summary>
-        public void SetDriving(int side, bool on)
-        {
-            var a = Players[side].Avatar;
-            if (a.Driving == on) return;
-            a.Driving = on;
-            if (on)
+            int foe = EnemyNear(side, target, 6.5);
+            if (foe >= 0) p.FocusId = foe;
+
+            var mine = new List<Unit>();
+            foreach (int id in ids)
             {
-                a.MoveTarget = null;
-                if (side == HumanSide)
+                foreach (var u in Units)
                 {
-                    Telemetry.Descents++;
-                    Telemetry.LastDescentAt = Telemetry.Elapsed;
+                    if (u.Id == id && u.Fac == side && u.Hp > 0) { mine.Add(u); break; }
                 }
             }
+            if (mine.Count == 0) return;
+
+            for (int i = 0; i < mine.Count; i++)
+            {
+                var u = mine[i];
+                var spot = mine.Count == 1 ? target : Spread(target, i);
+                u.Ordered = true;
+                u.ThinkIn = 0;
+                u.FocusId = foe;
+                Repath(u, tile, spot);
+            }
+        }
+
+        /// <summary>여럿을 한 점에 보낼 때 벌려 세우는 자리. Det만 쓴다.</summary>
+        private Vec2 Spread(Vec2 center, int index)
+        {
+            int ring = index / 6;
+            int slot = index % 6;
+            double r = 3.2 + ring * 3.2;
+            double a = ((double)slot / 6) * Math.PI * 2 + ring * 0.5;
+            return Board.ClampToLand(new Vec2(center.X + Det.Cos(a) * r, center.Z + Det.Sin(a) * r));
+        }
+
+        /// <summary>
+        /// 여기에 내려갈 수 있는가. 지금 보이는 땅에만 내려간다 — 안개 속에
+        /// 찍을 수 있으면 강림이 공짜 정찰이 된다(GDD 3.3).
+        /// </summary>
+        public bool CanDescend(int side, Vec2 point)
+        {
+            var a = Players[side].Avatar;
+            if (a.Embodied || a.DescendIn > 0) return false;
+            if (!Board.IsWalkable(point)) return false;
+            return Visible[side].Contains(Board.TileAt(point));
+        }
+
+        /// <summary>
+        /// 강림 (GDD 3.2). 그 자리에 몸이 생기고 그 자리에 지휘 반경이 켜진다.
+        /// </summary>
+        public bool Descend(int side, Vec2 point)
+        {
+            if (!CanDescend(side, point)) return false;
+            var a = Players[side].Avatar;
+            a.Pos = Board.ClampToLand(point);
+            a.Embodied = true;
+            a.DescendIn = 0;
+            if (side == HumanSide)
+            {
+                Telemetry.Descents++;
+                Telemetry.LastDescentAt = Telemetry.Elapsed;
+            }
+            Note("강림한다", side);
+            return true;
+        }
+
+        /// <summary>승천. 몸이 사라지고 반경도 같이 꺼진다.</summary>
+        public void Ascend(int side)
+        {
+            var a = Players[side].Avatar;
+            if (!a.Embodied) return;
+            a.Embodied = false;
+            a.DescendIn = Tuning.DescendCooldown;
         }
 
         /// <summary>1인칭에서 직접 모는 한 스텝. dir는 정규화된 진행 방향.</summary>
         public void DriveAvatar(int side, Vec2 dir, double dt)
         {
             var a = Players[side].Avatar;
-            if (!a.Driving) return;
+            if (!a.Embodied) return;
             double step = Tuning.AvatarSpeedDriven * dt;
             var next = new Vec2(a.Pos.X + dir.X * step, a.Pos.Z + dir.Z * step);
             // 물에는 못 들어간다. 축을 하나씩 시험해 벽을 따라 미끄러지게 한다.
@@ -435,10 +498,10 @@ namespace Chieftain.Core
             Telemetry.Elapsed += dt;
             foreach (var p in Players)
             {
-                if (p.Avatar.Driving && p.Side == HumanSide) Telemetry.TimeInFirstPerson += dt;
+                if (p.Avatar.Embodied && p.Side == HumanSide) Telemetry.TimeInFirstPerson += dt;
             }
 
-            UpdateAvatars(dt);
+            TickAvatars(dt);
             MarkCommanded();
             UpdateUnits(dt);
             ResolveOverlap();
@@ -452,30 +515,17 @@ namespace Chieftain.Core
             TrimLog();
         }
 
-        private void UpdateAvatars(double dt)
+        /// <summary>
+        /// 강림 대기시간만 흐른다. 신은 판 위를 걸어다니지 않는다.
+        /// </summary>
+        private void TickAvatars(double dt)
         {
             foreach (var p in Players)
             {
-                var a = p.Avatar;
-                if (a.Driving) continue;
-                if (!a.MoveTarget.HasValue) continue;
-                var target = a.MoveTarget.Value;
-
-                // 경로는 CommandAvatar가 한 번 냈다. 도착한 경유지를 지워 가며 걷고,
-                // 다 지우면 마지막으로 목적지 자체를 향한다.
-                while (a.Path.Count > 1 && Det.Dist(a.Pos, a.Path[0]) <= WaypointEps)
+                if (p.Avatar.DescendIn > 0)
                 {
-                    a.Path.RemoveAt(0);
+                    p.Avatar.DescendIn = Math.Max(0, p.Avatar.DescendIn - dt);
                 }
-                var next = a.Path.Count > 0 ? a.Path[0] : target;
-
-                double step = Tuning.AvatarSpeedCommanded * dt;
-                var moved = Det.MoveToward(a.Pos, next, step);
-                double dx = moved.X - a.Pos.X;
-                double dz = moved.Z - a.Pos.Z;
-                if (Det.Hypot(dx, dz) > 1e-4) a.Yaw = Det.Atan2(dx, dz);
-                a.Pos = moved;
-                if (Det.Dist(a.Pos, target) < 0.4) a.MoveTarget = null;
             }
         }
 
@@ -497,7 +547,8 @@ namespace Chieftain.Core
                     continue;
                 }
                 var a = Players[u.Fac].Avatar;
-                u.Commanded = Det.Dist2(u.Pos, a.Pos) <= r2;
+                // 몸이 없으면 반경도 없다. 이 한 줄이 이번 설계 변경의 전부다.
+                u.Commanded = a.Embodied && Det.Dist2(u.Pos, a.Pos) <= r2;
             }
         }
 
@@ -723,7 +774,8 @@ namespace Chieftain.Core
         /// </summary>
         private void Autonomy(Unit u, double dt)
         {
-            if (u.Commanded) return;
+            // 직접 명령을 받은 유닛은 건드리지 않는다.
+            if (u.Ordered) return;
             u.ThinkIn -= dt;
             if (u.ThinkIn > 0) return;
             u.ThinkIn = AutonomyThink;
@@ -854,7 +906,12 @@ namespace Chieftain.Core
             double dz = moved.Z - u.Pos.Z;
             if (Det.Hypot(dx, dz) > 1e-4) u.Facing = Det.Atan2(dx, dz);
             u.Pos = moved;
-            if (Det.Dist(u.Pos, next) < 0.5) u.Path.RemoveAt(0);
+            if (Det.Dist(u.Pos, next) < 0.5)
+            {
+                u.Path.RemoveAt(0);
+                // 다 왔으면 명령이 끝난 것이다.
+                if (u.Path.Count == 0) u.Ordered = false;
+            }
         }
 
         /// <summary>겹침 밀어내기. 대열이 한 점에 뭉치면 방패벽이 안 보인다.</summary>
@@ -1048,7 +1105,8 @@ namespace Chieftain.Core
                 var p = Players[side];
                 var keep = Board.Defs[p.KeepTile];
                 sources.Add((new Vec2(keep.X, keep.Z), Tuning.VisionKeep));
-                sources.Add((p.Avatar.Pos, Tuning.VisionAvatar));
+                // 몸이 있을 때만 신의 눈이 열린다.
+                if (p.Avatar.Embodied) sources.Add((p.Avatar.Pos, Tuning.VisionAvatar));
                 foreach (var u in Units)
                 {
                     if (u.Fac != side || u.Hp <= 0) continue;

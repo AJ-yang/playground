@@ -47,9 +47,6 @@ const FLASH_FADE = 0.2
 /** 집중 공격이 통하는 거리. 이보다 멀면 지목해도 못 알아듣는다. */
 const FOCUS_RANGE = 16
 
-/** 경유지에 이만큼 가까우면 도착한 것으로 치고 다음 경유지를 본다. */
-const WAYPOINT_EPS = 0.8
-
 /** 일꾼이 갈 곳을 다시 고르는 주기. 병사보다 자주 본다 — 도망쳐야 하기 때문이다. */
 const WORKER_THINK = 0.8
 
@@ -157,16 +154,17 @@ export class Game {
       focusId: -1,
       avatar: {
         side,
-        // 아바타는 롱하우스 **밖**에 선다. 건물 안에서 시작하면 강림한 첫
-        // 화면이 벽이라, 1인칭이 무엇을 보여주는지 알기도 전에 인상이 정해진다.
+        // 판이 시작될 때 신은 **판 위에 없다.** 이 자리는 아직 쓰이지 않는
+        // 기본값이고, 첫 강림 때 사람이 찍는 곳으로 덮인다. 그래도 롱하우스
+        // 밖으로 잡아 두는 이유는, 어떤 경로로든 여기서 몸이 생기면 첫 화면이
+        // 벽이 되어서는 안 되기 때문이다.
         pos: this.board.clampToLand({
           x: home.x + (side === 0 ? 10 : -10),
           z: home.z + 6,
         }),
         yaw: side === 0 ? 0 : Math.PI,
-        moveTarget: null,
-        path: [],
-        driving: false,
+        embodied: false,
+        descendIn: 0,
       },
     }
   }
@@ -199,6 +197,7 @@ export class Game {
       path: [],
       destTile: -1,
       commanded: false,
+      ordered: false,
       thinkIn: 0,
       anchorTile: tileId,
       facing: a,
@@ -226,6 +225,7 @@ export class Game {
       path: [],
       destTile: -1,
       commanded: false,
+      ordered: false,
       thinkIn: 0,
       anchorTile: -1,
       facing: side === 0 ? 0 : Math.PI,
@@ -243,18 +243,18 @@ export class Game {
   // ────────────────────────────────────────────────────────────── 명령
 
   /**
-   * 부대 집결 지점 (GDD 3.1).
+   * 부대 집결 지점.
    *
-   * **반경 안 유닛은 이 점을 정확히 향하고, 밖 유닛은 칸까지만 안다.** 하나의
-   * 명령이 두 종류로 갈리는 것이 지휘 반경 규칙의 전부다 — 별도의 "세밀 명령"
-   * UI를 만들지 않은 것은 그래야 규칙이 설명 없이 드러나기 때문이다.
+   * **모두가 정확히 듣는다.** 예전에는 반경 안 유닛만 이 점을 정확히 향하고
+   * 밖은 칸까지만 알았는데, 신이 부감에서 사라진 지금 그 규칙을 그대로 두면
+   * 아무도 명령을 안 듣는 게임이 된다. 지휘 반경은 이제 **명령을 듣느냐**가
+   * 아니라 **얼마나 세느냐**를 가른다(GDD 3.1).
+   *
+   * 사람은 이제 부대를 골라 `commandUnits`로 움직인다. 이 함수는 AI가 쓰고,
+   * 사람 쪽에서는 "명령 안 받은 유닛이 어디로 모이는가"의 기본값으로 남는다.
    */
   setRally(side: Side, point: Vec2): void {
     const p = this.players[side]
-    // 클릭한 곳에 적이 서 있으면 **집중 공격 지정**까지 함께 한다.
-    // 버튼을 하나 더 만들지 않은 이유는, 사람은 어차피 "저기로"와 "저놈에게"를
-    // 같은 동작으로 생각하기 때문이다. 규칙 모르는 사람에게 배울 것을 하나
-    // 더 얹지 않으면서 전투에 판단을 넣는 유일한 방법이기도 하다.
     p.focusId = this.enemyNear(side, point, 5.5)
     const tile = this.board.tileAt(point)
     p.rallyTile = tile
@@ -264,40 +264,110 @@ export class Game {
       // 일꾼은 집결 명령을 안 듣는다. 부대와 같이 전선으로 걸어가면
       // 그냥 죽으러 가는 것이고, 그러면 아무도 일꾼을 안 뽑는다.
       if (UNITS[u.kind].civilian) continue
-      // 반경 안 유닛만 즉시 반응한다. 밖은 다음 자율 판단 때 알게 된다.
-      u.thinkIn = u.commanded ? 0 : Math.min(u.thinkIn, AUTONOMY_THINK * 0.5)
-      if (u.commanded) this.repath(u, tile, p.rally)
+      if (u.ordered) continue
+      u.thinkIn = 0
+      this.repath(u, tile, p.rally)
     }
   }
 
-  /** 부감에서 내리는 아바타 이동 명령. 느리다(GDD 3.2). */
-  commandAvatar(side: Side, point: Vec2): void {
-    const a = this.players[side].avatar
-    if (a.driving) return
-    a.moveTarget = this.board.clampToLand(point)
-    // 경로는 **여기서 한 번만** 낸다. 매 틱 다시 내면 격자 탐색이 프레임을 먹는다.
-    a.path = this.board.route(a.pos, a.moveTarget)
+  /**
+   * 고른 부대에게 내리는 이동·공격 명령 (우클릭).
+   *
+   * **선택은 시뮬레이션 밖에 있다.** 어떤 유닛이 선택되어 있는지는 화면의
+   * 사정이고 판정에 관여하지 않는다 — 여기 들어오는 것은 이미 확정된 id
+   * 목록뿐이라, 락스텝에서 두 클라이언트가 서로 다른 것을 골라 놓고도 같은
+   * 판을 굴릴 수 있다(GDD 7.2).
+   */
+  commandUnits(side: Side, ids: number[], point: Vec2): void {
+    const p = this.players[side]
+    const target = this.board.clampToLand(point)
+    const tile = this.board.tileAt(target)
+
+    // 짚은 곳에 적이 있으면 집중 공격까지 함께 지정한다. 버튼을 늘리지
+    // 않으면서 "저기로"와 "저놈에게"를 한 동작에 담는다.
+    const foe = this.enemyNear(side, target, 6.5)
+    if (foe >= 0) p.focusId = foe
+
+    // 한 점에 전부 몰아넣으면 서로 밀어내느라 대열이 터진다. 인원수에 맞춰
+    // 고리 모양으로 벌려 세운다 — 순서는 id 순이라 두 클라이언트가 같다.
+    const mine = ids
+      .map((id) => this.units.find((u) => u.id === id))
+      .filter((u): u is Unit => !!u && u.faction === side && u.hp > 0)
+    if (mine.length === 0) return
+
+    for (let i = 0; i < mine.length; i++) {
+      const u = mine[i]!
+      const spot = mine.length === 1 ? target : this.spread(target, i, mine.length)
+      u.ordered = true
+      u.thinkIn = 0
+      u.focusId = foe
+      this.repath(u, tile, spot)
+    }
   }
 
-  /** 강림·복귀 (GDD 3.2). */
-  setDriving(side: Side, on: boolean): void {
+  /**
+   * 여럿을 한 점에 보낼 때 벌려 세우는 자리.
+   *
+   * `det`의 sin·cos만 쓴다 — 명령은 판정이므로 두 클라이언트가 비트까지
+   * 같은 자리를 내야 한다(GDD 7.2).
+   */
+  private spread(center: Vec2, index: number, _count: number): Vec2 {
+    const ring = Math.floor(index / 6)
+    const slot = index % 6
+    const r = 3.2 + ring * 3.2
+    const a = (slot / 6) * Math.PI * 2 + ring * 0.5
+    return this.board.clampToLand({
+      x: center.x + cos(a) * r,
+      z: center.z + sin(a) * r,
+    })
+  }
+
+  /**
+   * 여기에 내려갈 수 있는가.
+   *
+   * **지금 보이는 땅에만** 내려간다. 안개 속에 찍을 수 있으면 강림이 공짜
+   * 정찰이 되고, 그러면 "부감 시야를 잃는다"는 강림의 유일한 대가가 되레
+   * 이득으로 뒤집힌다(GDD 3.3).
+   */
+  canDescend(side: Side, point: Vec2): boolean {
     const a = this.players[side].avatar
-    if (a.driving === on) return
-    a.driving = on
-    if (on) {
-      a.moveTarget = null
-      a.path = []
-      if (side === this.humanSide) {
-        this.telemetry.descents++
-        this.telemetry.lastDescentAt = this.telemetry.elapsed
-      }
+    if (a.embodied || a.descendIn > 0) return false
+    if (!this.board.isWalkable(point)) return false
+    return this.visible[side].has(this.board.tileAt(point))
+  }
+
+  /**
+   * 강림 (GDD 3.2).
+   *
+   * 그 자리에 몸이 생기고, 그 자리에 지휘 반경이 켜진다. 걸어가는 것이 아니라
+   * **내려꽂히는 것**이라, 이 게임에서 반경을 옮기는 유일한 방법이 강림이 된다.
+   */
+  descend(side: Side, point: Vec2): boolean {
+    if (!this.canDescend(side, point)) return false
+    const a = this.players[side].avatar
+    a.pos = this.board.clampToLand(point)
+    a.embodied = true
+    a.descendIn = 0
+    if (side === this.humanSide) {
+      this.telemetry.descents++
+      this.telemetry.lastDescentAt = this.telemetry.elapsed
     }
+    this.note('강림한다', side)
+    return true
+  }
+
+  /** 승천. 몸이 사라지고 반경도 같이 꺼진다. */
+  ascend(side: Side): void {
+    const a = this.players[side].avatar
+    if (!a.embodied) return
+    a.embodied = false
+    a.descendIn = TUNING.descendCooldown
   }
 
   /** 1인칭에서 직접 모는 한 스텝. dir는 정규화된 진행 방향. */
   driveAvatar(side: Side, dir: Vec2, dt: number): void {
     const a = this.players[side].avatar
-    if (!a.driving) return
+    if (!a.embodied) return
     const step = TUNING.avatarSpeedDriven * dt
     const next = { x: a.pos.x + dir.x * step, z: a.pos.z + dir.z * step }
     // 물에는 못 들어간다. 축을 하나씩 시험해 벽을 따라 미끄러지게 한다.
@@ -433,12 +503,12 @@ export class Game {
     }
     this.telemetry.elapsed += dt
     for (const p of this.players) {
-      if (p.avatar.driving && p.side === this.humanSide) {
+      if (p.avatar.embodied && p.side === this.humanSide) {
         this.telemetry.timeInFirstPerson += dt
       }
     }
 
-    this.updateAvatars(dt)
+    this.tickAvatars(dt)
     this.markCommanded()
     this.updateUnits(dt)
     this.resolveOverlap()
@@ -452,34 +522,25 @@ export class Game {
     this.trimLog()
   }
 
-  private updateAvatars(dt: number): void {
+  /**
+   * 강림 대기시간만 흐른다.
+   *
+   * 예전에는 여기서 아바타가 부감 명령을 따라 걸었다. 그 걸음이 통째로
+   * 사라진 것이 이번 변경의 핵심이다 — 신은 판 위를 걸어다니지 않고,
+   * 내려와 있는 동안에만 1인칭으로 움직인다.
+   */
+  private tickAvatars(dt: number): void {
     for (const p of this.players) {
-      const a = p.avatar
-      if (a.driving) continue
-      if (!a.moveTarget) continue
-      // 부감 명령은 느리게 간다. 직접 모는 것보다 느린 이 차이가 강림의
-      // 유일한 유인이다(GDD 3.2, tuning.ts).
-      //
-      // 경로는 `commandAvatar`가 한 번 냈다. 도착한 경유지를 지워 가며 걷고,
-      // 다 지우면 마지막으로 목적지 자체를 향한다.
-      while (a.path.length > 1 && dist(a.pos, a.path[0]!) <= WAYPOINT_EPS) {
-        a.path.shift()
+      if (p.avatar.descendIn > 0) {
+        p.avatar.descendIn = Math.max(0, p.avatar.descendIn - dt)
       }
-      const next = a.path[0] ?? a.moveTarget
-
-      const step = TUNING.avatarSpeedCommanded * dt
-      const moved = moveToward(a.pos, next, step)
-      const d = { x: moved.x - a.pos.x, z: moved.z - a.pos.z }
-      if (hypot(d.x, d.z) > 1e-4) a.yaw = atan2(d.x, d.z)
-      a.pos = moved
-      if (dist(a.pos, a.moveTarget) < 0.4) a.moveTarget = null
     }
   }
 
   /**
    * 지휘 반경 판정 (GDD 3.1).
    *
-   * 매 틱 다시 계산한다. 아바타가 움직이면 지휘받는 부대도 즉시 바뀐다 —
+   * 매 틱 다시 계산한다. 신이 움직이면 보너스를 받는 부대도 즉시 바뀐다 —
    * "반경을 옮긴다"가 곧 "전력을 옮긴다"가 되는 것은 이 한 줄 때문이다.
    */
   private markCommanded(): void {
@@ -493,7 +554,9 @@ export class Game {
         continue
       }
       const a = this.players[u.faction].avatar
-      u.commanded = dist2(u.pos, a.pos) <= r2
+      // **몸이 없으면 반경도 없다.** 이 한 줄이 이번 설계 변경의 전부다 —
+      // 부감은 평범한 지휘이고, 반경은 내려온 자리에만 켜진다.
+      u.commanded = a.embodied && dist2(u.pos, a.pos) <= r2
     }
   }
 
@@ -690,14 +753,16 @@ export class Game {
   }
 
   /**
-   * 반경 밖 유닛의 자율 행동 (GDD 3.1).
+   * 명령을 안 받은 유닛의 자율 행동.
    *
    * 집결 지점의 **칸까지만** 안다. 그리고 즉시 반응하지 않는다 —
-   * `AUTONOMY_THINK` 주기로만 생각을 고친다. 이 굼뜸이 "지휘받지 못한 부대"의
-   * 실제 감각이고, 아바타를 그쪽으로 보낼 이유가 된다.
+   * `AUTONOMY_THINK` 주기로만 생각을 고친다. 손으로 고르지 않은 부대가
+   * 얼어붙지 않게 하는 최소한의 장치다.
    */
   private autonomy(u: Unit, dt: number): void {
-    if (u.commanded) return
+    // 직접 명령을 받은 유닛은 건드리지 않는다. 안 그러면 우클릭으로 보낸
+    // 부대가 1.5초 뒤에 제멋대로 집결 지점으로 돌아선다.
+    if (u.ordered) return
     u.thinkIn -= dt
     if (u.thinkIn > 0) return
     u.thinkIn = AUTONOMY_THINK
@@ -812,7 +877,12 @@ export class Game {
     const d = { x: moved.x - u.pos.x, z: moved.z - u.pos.z }
     if (hypot(d.x, d.z) > 1e-4) u.facing = atan2(d.x, d.z)
     u.pos = moved
-    if (dist(u.pos, next) < 0.5) u.path.shift()
+    if (dist(u.pos, next) < 0.5) {
+      u.path.shift()
+      // 다 왔으면 명령이 끝난 것이다. 여기서 안 풀면 그 유닛은 판이 끝날
+      // 때까지 자율 판단을 영영 안 하고 그 자리에 서 있는다.
+      if (u.path.length === 0) u.ordered = false
+    }
   }
 
   /** 겹침 밀어내기. 대열이 한 점에 뭉치면 방패벽이 안 보인다. */
@@ -980,7 +1050,11 @@ export class Game {
       const p = this.players[side]
       const keep = this.board.defs[p.keepTile]!
       sources.push({ pos: { x: keep.x, z: keep.z }, radius: TUNING.visionKeep })
-      sources.push({ pos: p.avatar.pos, radius: TUNING.visionAvatar })
+      // 몸이 있을 때만 신의 눈이 열린다. 판 밖에서 지켜보는 동안 보이는
+      // 것은 내 부대와 건물이 보는 것뿐이다.
+      if (p.avatar.embodied) {
+        sources.push({ pos: p.avatar.pos, radius: TUNING.visionAvatar })
+      }
       for (const u of this.units) {
         if (u.faction !== side || u.hp <= 0) continue
         sources.push({ pos: u.pos, radius: TUNING.visionUnit })
@@ -1007,7 +1081,7 @@ export class Game {
     }
   }
 
-  private note(text: string, side: Side): void {
+  note(text: string, side: Side): void {
     if (side !== this.humanSide) return
     this.log.push({ text, at: this.telemetry.elapsed })
   }
@@ -1019,6 +1093,11 @@ export class Game {
   }
 
   // ────────────────────────────────────────────────────────────── 읽기용
+
+  /** 일꾼인가. 화면 쪽에서 유닛 정의를 다시 들여다보지 않게 해 주는 창구다. */
+  isCivilian(u: Unit): boolean {
+    return !!UNITS[u.kind].civilian
+  }
 
   /** 이 진영이 지금 저 유닛을 볼 수 있는가. 안개 밖의 적은 그리지 않는다. */
   canSee(side: Side, u: Unit): boolean {

@@ -151,19 +151,25 @@ export class Minimap {
       g.fill()
     }
 
-    // 내 지휘 반경. 미니맵에서 **가장 눈에 띄어야 하는 것**이다 — 이 원이
-    // 어디 있느냐가 곧 내 전력이 어디 있느냐다(GDD 3.1).
+    /**
+     * 내 지휘 반경.
+     *
+     * **내려와 있을 때만 그린다.** 신은 평소 판 위에 없고(GDD 3.2), 없는 것을
+     * 미니맵이 그리면 이 게임의 중심 규칙이 화면에서 거짓말이 된다.
+     */
     const a = game.players[me].avatar
     const ap = toScreen(a.pos)
-    g.strokeStyle = 'rgba(255, 224, 138, 0.5)'
-    g.lineWidth = 1
-    g.beginPath()
-    g.arc(ap.x, ap.y, (TUNING.commandRadius / MAP_W) * W, 0, Math.PI * 2)
-    g.stroke()
-    g.fillStyle = hex(C.radius)
-    g.beginPath()
-    g.arc(ap.x, ap.y, 2.6, 0, Math.PI * 2)
-    g.fill()
+    if (a.embodied) {
+      g.strokeStyle = 'rgba(255, 224, 138, 0.5)'
+      g.lineWidth = 1
+      g.beginPath()
+      g.arc(ap.x, ap.y, (TUNING.commandRadius / MAP_W) * W, 0, Math.PI * 2)
+      g.stroke()
+      g.fillStyle = hex(C.radius)
+      g.beginPath()
+      g.arc(ap.x, ap.y, 2.6, 0, Math.PI * 2)
+      g.fill()
+    }
 
     // 지금 보고 있는 곳. 스크롤하는 카메라는 이게 없으면 자기가 판의 어디를
     // 보는지 알 수가 없다.
@@ -174,7 +180,7 @@ export class Minimap {
       g.strokeStyle = 'rgba(255, 255, 255, 0.6)'
       g.lineWidth = 1
       g.strokeRect(c.x - (vw * W) / 2, c.y - (vh * H) / 2, vw * W, vh * H)
-    } else {
+    } else if (a.embodied) {
       // 1인칭 — 어디를 보고 있는지만 짧은 침으로 찍는다.
       g.strokeStyle = hex(C.radius)
       g.lineWidth = 1.4

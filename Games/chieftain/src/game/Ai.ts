@@ -1,5 +1,5 @@
 import { atan2, hypot } from '../core/det'
-import { dist, type Vec2 } from '../core/vec2'
+import { dist } from '../core/vec2'
 import { TUNING } from '../data/tuning'
 import type { UnitKind } from '../data/units'
 import { FORGE, type Game } from './Game'
@@ -28,7 +28,6 @@ const WAYPOINT_REACH = 1.6
  */
 export class Ai {
   private thinkIn = 0
-  private route: Vec2[] = []
   private targetTile = -1
 
   constructor(
@@ -47,7 +46,7 @@ export class Ai {
       this.buildIfWorth()
       this.decide()
     }
-    this.moveAvatar(dt)
+    this.manageAvatar(dt)
   }
 
   // ─────────────────────────────────────────────────────────── 생산
@@ -119,10 +118,7 @@ export class Ai {
     const goal = g.board.anchor(target)
     g.setRally(this.side, goal)
 
-    if (target !== this.targetTile) {
-      this.targetTile = target
-      this.route = g.board.route(g.players[this.side].avatar.pos, goal)
-    }
+    this.targetTile = target
   }
 
   /**
@@ -203,39 +199,46 @@ export class Ai {
   /**
    * 아바타를 목표 칸으로 옮긴다.
    *
-   * 멀면 **강림해서 직접 몰고**(빠름), 다 왔으면 올라온다. 사람이 하는 판단과
-   * 같은 판단을 같은 규칙으로 하는 것이라, AI를 이기려면 사람도 같은 것을
-   * 해야 한다.
+   * 목표 지역이 보이면 **거기 내려꽂히고**, 목표가 멀어지면 올라간다. 사람이
+   * 하는 판단과 같은 판단을 같은 규칙으로 하는 것이라, AI를 이기려면 사람도
+   * 같은 것을 해야 한다.
    */
-  private moveAvatar(dt: number): void {
+  private manageAvatar(dt: number): void {
     const g = this.game
     const a = g.players[this.side].avatar
-    if (this.targetTile < 0) return
-
-    const goalPoint = g.board.anchor(this.targetTile)
-
-    // 다 왔으면 올라와서 자리를 지킨다.
-    if (dist(a.pos, goalPoint) < TUNING.commandRadius * 0.45) {
-      g.setDriving(this.side, false)
-      a.moveTarget = null
-      this.route = []
+    if (this.targetTile < 0) {
+      if (a.embodied) g.ascend(this.side)
       return
     }
 
-    if (this.route.length === 0) {
-      this.route = g.board.route(a.pos, goalPoint)
-    }
-    const next = this.route[0]
-    if (!next) return
+    const goal = g.board.anchor(this.targetTile)
 
-    g.setDriving(this.side, true)
-    const dx = next.x - a.pos.x
-    const dz = next.z - a.pos.z
+    if (!a.embodied) {
+      // 보이는 곳에만 내려간다 — 사람과 같은 제약이다(`Game.canDescend`).
+      // 안 보이면 부대가 먼저 가서 열어 줄 때까지 판 밖에서 기다린다.
+      g.descend(this.side, goal)
+      return
+    }
+
+    /**
+     * 목표가 멀어졌으면 **올라간다.**
+     *
+     * 걸어서 쫓아가지 않는 것이 이번 설계의 핵심이다. 반경을 옮기는 유일한
+     * 방법이 강림이므로, 다음 결전지로 가려면 한 번 올라갔다 다시 내려와야
+     * 한다 — 사람도 똑같이 해야 하는 일이다.
+     */
+    const d = dist(a.pos, goal)
+    if (d > TUNING.commandRadius * 1.7) {
+      g.ascend(this.side)
+      return
+    }
+
+    // 반경 안이면 굳이 안 움직인다. 조금 벗어나 있으면 걸어서 맞춘다.
+    if (d < TUNING.commandRadius * 0.4) return
+    const dx = goal.x - a.pos.x
+    const dz = goal.z - a.pos.z
     const l = hypot(dx, dz)
-    if (l < WAYPOINT_REACH) {
-      this.route.shift()
-      return
-    }
+    if (l < WAYPOINT_REACH) return
     a.yaw = atan2(dx, dz)
     g.driveAvatar(this.side, { x: dx / l, z: dz / l }, dt)
   }
