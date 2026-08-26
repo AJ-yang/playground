@@ -7,6 +7,7 @@ namespace Chieftain.Core
     {
         Shield = 0,
         Axe = 1,
+        Worker = 2,
     }
 
     public sealed class UnitDef
@@ -30,6 +31,12 @@ namespace Chieftain.Core
         /// <summary>몸 크기. 겹침 밀어내기와 사거리 계산에 쓴다.</summary>
         public double Radius;
         public double Height;
+        /// <summary>
+        /// 싸우지 않는 유닛인가. 일꾼만 참이다 — 표적은 되지만 표적을 고르지
+        /// 않고, 적이 있는 칸에서는 도망친다. <c>Dps</c>를 0으로 두는 것만으로는
+        /// 붙어 서서 맞아 죽는 그림이 된다.
+        /// </summary>
+        public bool Civilian;
     }
 
     public static class Units
@@ -66,8 +73,32 @@ namespace Chieftain.Core
             Height = 3.2,
         };
 
-        public static UnitDef Of(UnitKind k) => k == UnitKind.Shield ? Shield : Axe;
+        /// <summary>
+        /// 일꾼 (GDD 4.6). **자원 노드를 캐지 않는다** — 내 땅 위에 서 있으면 그
+        /// 칸의 수입이 오른다. 칸마다 정원이 있어서, 더 벌려면 땅을 더 먹어야 하고
+        /// 땅을 먹으려면 앞으로 나가야 한다.
+        /// </summary>
+        public static readonly UnitDef Worker = new UnitDef
+        {
+            Kind = UnitKind.Worker,
+            Name = "일꾼",
+            Cost = 30,
+            BuildSeconds = 4,
+            Hp = 60,
+            Dps = 0,
+            Swing = 1,
+            DamageTaken = 1.3,
+            Speed = 9,
+            Range = 0,
+            Radius = 0.9,
+            Height = 3.0,
+            Civilian = true,
+        };
 
-        public static readonly IReadOnlyList<UnitKind> Order = new[] { UnitKind.Shield, UnitKind.Axe };
+        public static UnitDef Of(UnitKind k) =>
+            k == UnitKind.Shield ? Shield : k == UnitKind.Axe ? Axe : Worker;
+
+        public static readonly IReadOnlyList<UnitKind> Order =
+            new[] { UnitKind.Shield, UnitKind.Axe, UnitKind.Worker };
     }
 }

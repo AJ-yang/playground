@@ -57,6 +57,22 @@ export class Ai {
     const p = g.players[this.side]
     if (p.queue.length >= 2) return
 
+    /**
+     * 일꾼을 먼저 본다.
+     *
+     * **AI가 경제를 안 쓰면 사람은 경제를 안 써도 이긴다.** 그러면 GDD 4.6이
+     * 넣은 결정("언제 은을 경제로 돌릴 것인가")이 실험대에 아예 안 오른다.
+     * AI가 아바타를 사람과 같은 규칙으로 쓰는 것과 같은 이유다(GDD 6.3).
+     *
+     * 목표치는 **일굴 땅이 있는 만큼**이다. 정원이 찬 뒤에도 계속 뽑으면
+     * 은만 놀리고, 그건 사람이 저지르는 실수를 AI가 따라 하는 꼴이다.
+     */
+    const workers = g.countWorkers(this.side)
+    const room = g.board.ownedBy(this.side) * TUNING.workersPerTile
+    if (workers < Math.min(TUNING.maxWorkers, room)) {
+      if (g.enqueue(this.side, 'worker')) return
+    }
+
     // 방패병이 절반은 되게 유지한다. 도끼병만 뽑으면 반경 밖에서 순식간에 녹고,
     // 그러면 지휘 반경이 있으나 없으나 같은 게임이 되어 버린다.
     let shields = 0
@@ -64,7 +80,7 @@ export class Ai {
     for (const u of g.units) {
       if (u.faction !== this.side) continue
       if (u.kind === 'shield') shields++
-      else axes++
+      else if (u.kind === 'axe') axes++
     }
     const want: UnitKind = shields <= axes ? 'shield' : 'axe'
     if (!g.enqueue(this.side, want)) g.enqueue(this.side, want === 'shield' ? 'axe' : 'shield')

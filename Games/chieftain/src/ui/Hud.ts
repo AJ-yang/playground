@@ -26,6 +26,7 @@ export class Hud {
 
     const commanded = game.commandedCount(me)
     const army = game.countUnits(me)
+    const workers = game.countWorkers(me)
     const tiles = game.board.ownedBy(me)
     const foeTiles = game.board.ownedBy(foe)
     const forges = game.forgesOf(me).length
@@ -38,6 +39,7 @@ export class Hud {
       <div class="panel top-left">
         <div class="row"><span>은</span><b>${Math.floor(p.silver)}</b></div>
         <div class="row"><span>병력</span><b>${army} / ${TUNING.maxUnits}</b></div>
+        <div class="row"><span>일꾼</span><b>${workers} / ${TUNING.maxWorkers}</b></div>
         <div class="row"><span>내 땅</span><b>${tiles} <span class="muted">: ${foeTiles}</span></b></div>
         <div class="row">
           <span>지휘 중</span>
@@ -74,7 +76,7 @@ export class Hud {
 const OVERHEAD_KEYS = `
   <span class="k">좌클릭</span> 부대 <span class="muted">(적을 짚으면 집중)</span> &nbsp;·&nbsp;
   <span class="k">우클릭</span> 나 <span class="muted">(느리다)</span> &nbsp;·&nbsp;
-  <span class="k">1</span><span class="k">2</span> 병력 &nbsp;<span class="k">3</span> 기지 &nbsp;·&nbsp;
+  <span class="k">1</span><span class="k">2</span> 병력 &nbsp;<span class="k">4</span> 일꾼 &nbsp;<span class="k">3</span> 기지 &nbsp;·&nbsp;
   <span class="k">Tab</span> <b>강림</b>
 `
 

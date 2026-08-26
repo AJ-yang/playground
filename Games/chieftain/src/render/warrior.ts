@@ -34,7 +34,7 @@ import { NEUTRAL, type Faction, type Side } from '../game/types'
  * 여섯 개뿐이라 캐시가 작다.
  */
 
-export type WarriorRole = 'shield' | 'axe' | 'chief'
+export type WarriorRole = 'shield' | 'axe' | 'chief' | 'worker'
 
 // ─────────────────────────────────────────────────────────── 치수
 
@@ -226,10 +226,19 @@ function torsoGeo(k: Skin, role: WarriorRole): THREE.BufferGeometry {
      * 단색 캡슐은 못생겼어도 **누구 편인지는 100% 읽혔고**, 그걸 잃으면
      * 이 게임의 시각적 규칙 전달이 통째로 죽는다(GDD 6.2).
      */
-    .add(SRC.sphere, k.cloth, { s: [0.44, 0.32, 0.44], p: [SHOULDER_X, SHOULDER_Y - 0.02, 0] })
-    .add(SRC.sphere, k.cloth, { s: [0.44, 0.32, 0.44], p: [-SHOULDER_X, SHOULDER_Y - 0.02, 0] })
 
-  if (role !== 'chief') {
+  if (role !== 'worker') {
+    // 어깨판. 일꾼에게는 없다 — 갑옷을 안 입었다는 것이 실루엣의 차이다.
+    p.add(SRC.sphere, k.cloth, {
+      s: [0.44, 0.32, 0.44],
+      p: [SHOULDER_X, SHOULDER_Y - 0.02, 0],
+    }).add(SRC.sphere, k.cloth, {
+      s: [0.44, 0.32, 0.44],
+      p: [-SHOULDER_X, SHOULDER_Y - 0.02, 0],
+    })
+  }
+
+  if (role !== 'chief' && role !== 'worker') {
     // 부하는 어깨만 덮는 짧은 망토. 위에서 봤을 때 진영색 면적을 만든다.
     // 족장의 긴 망토는 여기 없다 — 따로 떼어 `cloakGeo`가 만든다.
     p.add(SRC.cone8, k.cloth, { s: [1.16, 0.92, 0.86], r: [0.18, 0, 0], p: [0, 0.62, -0.16] })
@@ -263,10 +272,17 @@ function headGeo(k: Skin, role: WarriorRole): THREE.BufferGeometry {
       r: [Math.PI, 0, 0],
       p: [0, -0.04, 0.11],
     })
-    .add(SRC.dome, k.metal, { s: [0.61, 0.6, 0.59], p: [0, 0.2, 0] })
-    .add(SRC.cyl8, k.metalDark, { s: [0.62, 0.09, 0.6], p: [0, 0.19, 0] })
-    // 코가리개. 얼굴 정면에 세로선이 하나 생겨서 어느 쪽을 보는지가 읽힌다.
-    .add(SRC.box, k.metalDark, { s: [0.08, 0.3, 0.08], p: [0, 0.16, 0.27] })
+
+  if (role === 'worker') {
+    // **투구가 없다.** 부감에서 병사와 일꾼을 가르는 가장 강한 단서다 —
+    // 병사의 머리는 밝은 금속이고 일꾼의 머리는 머리카락 색이다.
+    p.add(SRC.dome, k.hair, { s: [0.6, 0.5, 0.58], p: [0, 0.22, 0] })
+  } else {
+    p.add(SRC.dome, k.metal, { s: [0.61, 0.6, 0.59], p: [0, 0.2, 0] })
+      .add(SRC.cyl8, k.metalDark, { s: [0.62, 0.09, 0.6], p: [0, 0.19, 0] })
+      // 코가리개. 얼굴 정면에 세로선이 하나 생겨서 어느 쪽을 보는지가 읽힌다.
+      .add(SRC.box, k.metalDark, { s: [0.08, 0.3, 0.08], p: [0, 0.16, 0.27] })
+  }
 
   if (role === 'chief') {
     // 뿔. 눕히면 모자 챙이 되어 버려서 세워 둔다 — 부감에서 아바타를 찾는
@@ -323,13 +339,29 @@ function shieldParts(k: Skin): Parts {
     .add(SRC.sphere, k.metal, { s: [0.34, 0.34, 0.3], p: [0, 0, 0.22] })
 }
 
+/** 일꾼의 연장. 짧은 자루에 작은 날 — 도끼와 헷갈리지 않을 만큼 작다. */
+function toolParts(k: Skin): Parts {
+  return new Parts()
+    .add(SRC.cyl5, k.wood, { s: [0.09, 1.1, 0.09], p: [0, 0.12, 0] })
+    .add(SRC.box, k.metalDark, { s: [0.06, 0.16, 0.34], p: [0, 0.6, 0.15] })
+}
+
 /**
  * 팔뚝 — 원점이 팔꿈치. 손과 들고 있는 것까지 한 덩어리로 굽는다.
  *
  * 무기는 손에 대해 움직이지 않으므로 뼈를 하나 더 둘 이유가 없다. 합쳐 두면
  * 유닛당 드로우콜이 둘 줄어든다.
  */
-function foreArmGeo(k: Skin, hold: 'axe' | 'spear' | 'shield' | 'none'): THREE.BufferGeometry {
+type Hold = 'axe' | 'spear' | 'shield' | 'tool' | 'none'
+
+/** 이 역할이 오른손에 드는 것. 쓰러진 몸도 같은 것을 들어야 한다. */
+function holdOf(role: WarriorRole): Hold {
+  if (role === 'shield') return 'spear'
+  if (role === 'worker') return 'tool'
+  return 'axe'
+}
+
+function foreArmGeo(k: Skin, hold: Hold): THREE.BufferGeometry {
   const p = new Parts()
     .add(SRC.cyl6, k.cloth, { s: [0.26, FOREARM * 0.7, 0.26], p: [0, -FOREARM * 0.35, 0] })
     .add(SRC.cyl6, k.flesh, { s: [0.24, FOREARM * 0.34, 0.24], p: [0, -FOREARM * 0.83, 0] })
@@ -337,6 +369,7 @@ function foreArmGeo(k: Skin, hold: 'axe' | 'spear' | 'shield' | 'none'): THREE.B
 
   const hand: V3 = [0, -FOREARM - 0.02, 0]
   if (hold === 'axe') p.absorb(axeParts(k), { r: [0.62, 0, 0], p: hand })
+  else if (hold === 'tool') p.absorb(toolParts(k), { r: [0.45, 0, 0], p: hand })
   else if (hold === 'spear') p.absorb(spearParts(k), { r: [-0.16, 0, 0], p: hand })
   else if (hold === 'shield') {
     // 방패는 손이 아니라 팔뚝에 묶인다. 위치를 팔꿈치 쪽으로 끌어올린다.
@@ -374,7 +407,7 @@ function geoSet(role: WarriorRole, faction: Faction): GeoSet {
     head: headGeo(k, role),
     upper: upperArmGeo(k),
     foreL: foreArmGeo(k, role === 'shield' ? 'shield' : 'none'),
-    foreR: foreArmGeo(k, role === 'shield' ? 'spear' : 'axe'),
+    foreR: foreArmGeo(k, holdOf(role)),
     cloak: role === 'chief' ? cloakGeo(k) : null,
     fallen: fallenGeo(k, role),
   }
@@ -430,9 +463,9 @@ function fallenGeo(k: Skin, role: WarriorRole): THREE.BufferGeometry {
   }
 
   // 팔은 벌린 채로 던져진다.
-  const arms: [number, number, number, number, number, 'shield' | 'spear' | 'axe' | 'none'][] = [
+  const arms: [number, number, number, number, number, Hold][] = [
     [SHOULDER_X, 0.95, -0.35, 0.5, 0.45, role === 'shield' ? 'shield' : 'none'],
-    [-SHOULDER_X, -1.15, -0.2, 0.35, -0.5, role === 'shield' ? 'spear' : 'axe'],
+    [-SHOULDER_X, -1.15, -0.2, 0.35, -0.5, holdOf(role)],
   ]
   for (const [x, splay, lift, elbow, elbowZ, hold] of arms) {
     const upper = M(torso, x, SHOULDER_Y, 0, lift, splay)
@@ -703,6 +736,8 @@ const ATTACK = {
   axe: { cock: 2.3, hit: -0.95, elbowCock: 1.3, elbowHit: -0.5, lean: 0.34, twist: 0.3 },
   chief: { cock: 2.15, hit: -0.95, elbowCock: 1.2, elbowHit: -0.5, lean: 0.3, twist: 0.28 },
   shield: { cock: 0.8, hit: -1.05, elbowCock: 1.0, elbowHit: -0.95, lean: 0.24, twist: 0.16 },
+  // 일꾼은 공격하지 않는다. 표를 채워 두는 것은 인덱싱 때문이지 쓰이지 않는다.
+  worker: { cock: 0.9, hit: -0.6, elbowCock: 0.8, elbowHit: -0.4, lean: 0.2, twist: 0.14 },
 } as const
 
 /** 지수적으로 목표를 따라간다. 프레임 간격이 흔들려도 같은 속도로 붙는다. */

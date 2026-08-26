@@ -54,6 +54,9 @@ namespace Chieftain.Core
         /// <summary>경유지에 이만큼 가까우면 도착한 것으로 치고 다음 경유지를 본다.</summary>
         private const double WaypointEps = 0.8;
 
+        /// <summary>일꾼이 갈 곳을 다시 고르는 주기. 병사보다 자주 본다 — 도망쳐야 하기 때문이다.</summary>
+        private const double WorkerThink = 0.8;
+
         public readonly Board Board;
         public readonly Rng Rng;
         public readonly List<Unit> Units = new List<Unit>();
@@ -226,6 +229,9 @@ namespace Chieftain.Core
             foreach (var u in Units)
             {
                 if (u.Fac != side) continue;
+                // 일꾼은 집결 명령을 안 듣는다. 부대와 같이 전선으로 걸어가면
+                // 그냥 죽으러 가는 것이고, 그러면 아무도 일꾼을 안 뽑는다.
+                if (Units_Def(u.Kind).Civilian) continue;
                 // 반경 안 유닛만 즉시 반응한다. 밖은 다음 자율 판단 때 알게 된다.
                 u.ThinkIn = u.Commanded ? 0 : Math.Min(u.ThinkIn, AutonomyThink * 0.5);
                 if (u.Commanded) Repath(u, tile, p.Rally);
@@ -359,17 +365,51 @@ namespace Chieftain.Core
             var p = Players[side];
             var def = Units_Def(kind);
             if (p.Queue.Count >= Tuning.MaxQueue) return false;
-            if (CountUnits(side) + p.Queue.Count >= Tuning.MaxUnits) return false;
+            if (def.Civilian)
+            {
+                if (CountWorkers(side) + Queued(side, true) >= Tuning.MaxWorkers) return false;
+            }
+            else if (CountUnits(side) + Queued(side, false) >= Tuning.MaxUnits)
+            {
+                return false;
+            }
             if (p.Silver < def.Cost) return false;
             p.Silver -= def.Cost;
             p.Queue.Add(new QueueItem { Kind = kind, Remain = def.BuildSeconds });
             return true;
         }
 
+        /// <summary>
+        /// **병력만** 센다. 일꾼은 여기 안 들어간다 (GDD 4.6).
+        /// </summary>
         public int CountUnits(int side)
         {
             int n = 0;
-            foreach (var u in Units) if (u.Fac == side) n++;
+            foreach (var u in Units)
+            {
+                if (u.Fac == side && !Units_Def(u.Kind).Civilian) n++;
+            }
+            return n;
+        }
+
+        public int CountWorkers(int side)
+        {
+            int n = 0;
+            foreach (var u in Units)
+            {
+                if (u.Fac == side && Units_Def(u.Kind).Civilian) n++;
+            }
+            return n;
+        }
+
+        /// <summary>큐에 들어 있는 것 중 일꾼(또는 병사)의 수.</summary>
+        private int Queued(int side, bool civilian)
+        {
+            int n = 0;
+            foreach (var it in Players[side].Queue)
+            {
+                if (Units_Def(it.Kind).Civilian == civilian) n++;
+            }
             return n;
         }
 
@@ -449,7 +489,10 @@ namespace Chieftain.Core
             double r2 = Tuning.CommandRadius * Tuning.CommandRadius;
             foreach (var u in Units)
             {
-                if (u.Fac == Faction.Neutral)
+                // 일꾼은 지휘 반경 보너스를 안 받는다. 그런데 Commanded를 켜 두면
+                // 발밑에 금색 링이 도는데, 그 링은 화면에서 "이 유닛이 지금 보너스를
+                // 받고 있다"는 뜻이다. 안 받는 유닛에 켜면 링이 거짓말을 한다.
+                if (u.Fac == Faction.Neutral || Units_Def(u.Kind).Civilian)
                 {
                     u.Commanded = false;
                     continue;
@@ -467,6 +510,15 @@ namespace Chieftain.Core
                 u.Tile = Board.TileAt(u.Pos);
                 // 교전 깃발은 매 틱 지우고, 실제로 사거리 안에서 칠 때만 다시 켠다.
                 u.Fighting = false;
+
+                // 일꾼은 표적을 고르지 않는다. 싸우는 코드를 통째로 건너뛴다 —
+                // Dps를 0으로 두는 것만으로는 붙어 서서 맞아 죽는 그림이 된다.
+                if (Units_Def(u.Kind).Civilian)
+                {
+                    WorkerThinkStep(u, dt);
+                    Advance(u, dt);
+                    continue;
+                }
 
                 var target = PickTarget(u);
                 if (target != null)
@@ -688,6 +740,98 @@ namespace Chieftain.Core
             Repath(u, p.RallyTile);
         }
 
+        /// <summary>
+        /// 일꾼의 판단 (GDD 4.6).
+        ///
+        /// <para>
+        /// **정원이 안 찬 내 땅 중 본진에서 가장 가까운 칸**으로 간다. 적이 밟고
+        /// 있는 칸은 후보에서 빠지므로 전선이 밀리면 알아서 뒤로 물러난다 —
+        /// 부감에서 일꾼을 하나하나 옮기게 만들면 강림할 손이 없어진다.
+        /// </para>
+        /// <para>
+        /// 뒤에서부터 채우는 것은 의도다. 앞 칸을 일구려면 그 칸을 먼저 안전하게
+        /// 만들어야 하고, 그것이 곧 지휘 반경을 앞으로 옮기는 일이다.
+        /// </para>
+        /// </summary>
+        private void WorkerThinkStep(Unit u, double dt)
+        {
+            u.ThinkIn -= dt;
+            if (u.ThinkIn > 0) return;
+            u.ThinkIn = WorkerThink;
+
+            int side = u.Fac;
+            int want = WorkerTile(u, side);
+            if (want < 0)
+            {
+                // 일굴 땅이 없다. 본진으로 물러나 기다린다.
+                int keep = Players[side].KeepTile;
+                if (u.Tile != keep) Repath(u, keep);
+                return;
+            }
+            if (u.Tile == want)
+            {
+                u.Path.Clear();
+                // 목적지는 남겨 둔다 — 칸별 정원을 셀 때 여기 서 있는 것도 한 자리다.
+                u.DestTile = want;
+                return;
+            }
+            Repath(u, want);
+        }
+
+        /// <summary>이 일꾼이 갈 칸. 없으면 -1. 칸 id 순으로 훑으므로 동점은 낮은 id가 이긴다.</summary>
+        private int WorkerTile(Unit u, int side)
+        {
+            var taken = new int[Board.Defs.Count];
+            foreach (var o in Units)
+            {
+                if (o.Hp <= 0 || o.Id == u.Id) continue;
+                if (o.Fac != side || !Units_Def(o.Kind).Civilian) continue;
+                // 가는 중인 일꾼도 그 칸의 한 자리를 이미 차지한 것으로 센다.
+                // 안 그러면 여섯이 전부 같은 칸으로 몰린다.
+                taken[o.DestTile >= 0 ? o.DestTile : o.Tile]++;
+            }
+
+            var hostile = new HashSet<int>();
+            foreach (var o in Units)
+            {
+                if (o.Hp <= 0 || o.Fac == side) continue;
+                hostile.Add(o.Tile);
+            }
+
+            int best = -1;
+            double bestD = double.PositiveInfinity;
+            int keepTile = Players[side].KeepTile;
+            foreach (var t in Board.Tiles)
+            {
+                int id = t.Def.Id;
+                if (t.Owner != side) continue;
+                if (hostile.Contains(id)) continue;
+                if (taken[id] >= Tuning.WorkersPerTile) continue;
+                double d = Board.TilePath(keepTile, id).Count;
+                if (d < bestD)
+                {
+                    bestD = d;
+                    best = id;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>지금 실제로 땅을 일구고 있는 일꾼 수. 칸마다 정원까지만 센다.</summary>
+        private int WorkedCount(int side)
+        {
+            var on = new int[Board.Defs.Count];
+            foreach (var u in Units)
+            {
+                if (u.Hp <= 0 || u.Fac != side || !Units_Def(u.Kind).Civilian) continue;
+                if (Board.At(u.Tile).Owner != side) continue;
+                on[u.Tile]++;
+            }
+            int n = 0;
+            for (int i = 0; i < on.Length; i++) n += Math.Min(on[i], Tuning.WorkersPerTile);
+            return n;
+        }
+
         private void Repath(Unit u, int destTile, Vec2? finalPoint = null)
         {
             if (u.Tile == destTile && !finalPoint.HasValue)
@@ -861,9 +1005,12 @@ namespace Chieftain.Core
             {
                 int tiles = Board.OwnedBy(p.Side);
                 var forges = ForgesOf(p.Side);
+                // 일꾼은 **자기가 선 내 땅**의 수입을 올린다. 자원 노드가 없는 이유는
+                // 이 게임의 경제가 애초에 땅이기 때문이다(GDD 4.6).
                 p.Silver += (Tuning.SilverBasePerSecond
                              + tiles * Tuning.SilverPerTilePerSecond
-                             + forges.Count * Forge.SilverPerSecond) * dt;
+                             + forges.Count * Forge.SilverPerSecond
+                             + WorkedCount(p.Side) * Tuning.SilverPerWorker) * dt;
 
                 if (p.Queue.Count == 0) continue;
                 var head = p.Queue[0];

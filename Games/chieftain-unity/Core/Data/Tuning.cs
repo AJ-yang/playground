@@ -31,7 +31,24 @@ namespace Chieftain.Core
         public const double SilverBasePerSecond = 2.2;
 
         public const int MaxQueue = 5;
+        /// <summary>병력 상한. 일꾼은 여기서 뺀다.</summary>
         public const int MaxUnits = 14;
+
+        /// <summary>
+        /// 일꾼 상한 (GDD 4.6). 병력 상한과 **따로 센다** — 같은 칸을 두고 다투게
+        /// 하면 "일꾼 하나에 병사 하나"라는 뻣뻣한 교환만 남고, 진짜 결정인
+        /// "언제 은을 경제로 돌릴 것인가"가 사라진다.
+        /// </summary>
+        public const int MaxWorkers = 6;
+
+        /// <summary>
+        /// 칸 하나가 받을 수 있는 일꾼 수. 이 숫자가 경제를 강림에 묶는 장치다 —
+        /// 정원이 차면 더 벌 방법이 땅을 더 먹는 것뿐이다.
+        /// </summary>
+        public const int WorkersPerTile = 2;
+
+        /// <summary>일꾼 하나가 자기 칸에 더해 주는 초당 은. 회수까지 25초쯤.</summary>
+        public const double SilverPerWorker = 1.2;
 
         public const double KeepHp = 900;
 

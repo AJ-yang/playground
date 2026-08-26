@@ -162,6 +162,7 @@ addEventListener('keydown', (e) => {
   }
   if (k === '1') s.game.enqueue(HUMAN, 'shield')
   if (k === '2') s.game.enqueue(HUMAN, 'axe')
+  if (k === '4') s.game.enqueue(HUMAN, 'worker')
   // 3 — 아바타가 선 자리에 전진 기지. 부감·1인칭 어디서나 같은 키다.
   if (k === '3') s.game.build(HUMAN)
   if (k === 'escape' && s.firstPerson) toggleFirstPerson()

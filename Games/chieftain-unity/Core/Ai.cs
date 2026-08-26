@@ -63,11 +63,26 @@ namespace Chieftain.Core
 
             // 방패병이 절반은 되게 유지한다. 도끼병만 뽑으면 반경 밖에서 순식간에
             // 녹고, 그러면 지휘 반경이 있으나 없으나 같은 게임이 되어 버린다.
+            /*
+             * 일꾼을 먼저 본다.
+             *
+             * **AI가 경제를 안 쓰면 사람은 경제를 안 써도 이긴다.** 그러면 GDD 4.6이
+             * 넣은 결정("언제 은을 경제로 돌릴 것인가")이 실험대에 아예 안 오른다.
+             * 목표치는 일굴 땅이 있는 만큼이다 — 정원이 찬 뒤에도 뽑으면 은만 논다.
+             */
+            int workers = g.CountWorkers(_side);
+            int room = g.Board.OwnedBy(_side) * Tuning.WorkersPerTile;
+            if (workers < Math.Min(Tuning.MaxWorkers, room))
+            {
+                if (g.Enqueue(_side, UnitKind.Worker)) return;
+            }
+
             int shields = 0, axes = 0;
             foreach (var u in g.Units)
             {
                 if (u.Fac != _side) continue;
-                if (u.Kind == UnitKind.Shield) shields++; else axes++;
+                if (u.Kind == UnitKind.Shield) shields++;
+                else if (u.Kind == UnitKind.Axe) axes++;
             }
             var want = shields <= axes ? UnitKind.Shield : UnitKind.Axe;
             if (!g.Enqueue(_side, want))

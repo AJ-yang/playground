@@ -50,6 +50,9 @@ const FOCUS_RANGE = 16
 /** 경유지에 이만큼 가까우면 도착한 것으로 치고 다음 경유지를 본다. */
 const WAYPOINT_EPS = 0.8
 
+/** 일꾼이 갈 곳을 다시 고르는 주기. 병사보다 자주 본다 — 도망쳐야 하기 때문이다. */
+const WORKER_THINK = 0.8
+
 /** 전진 기지 (GDD 4.3 확장). */
 export const FORGE = {
   cost: 90,
@@ -251,6 +254,9 @@ export class Game {
     p.rally = this.board.clampToLand(tile, point)
     for (const u of this.units) {
       if (u.faction !== side) continue
+      // 일꾼은 집결 명령을 안 듣는다. 부대와 같이 전선으로 걸어가면
+      // 그냥 죽으러 가는 것이고, 그러면 아무도 일꾼을 안 뽑는다.
+      if (UNITS[u.kind].civilian) continue
       // 반경 안 유닛만 즉시 반응한다. 밖은 다음 자율 판단 때 알게 된다.
       u.thinkIn = u.commanded ? 0 : Math.min(u.thinkIn, AUTONOMY_THINK * 0.5)
       if (u.commanded) this.repath(u, tile, p.rally)
@@ -366,16 +372,46 @@ export class Game {
     const p = this.players[side]
     const def = UNITS[kind]
     if (p.queue.length >= TUNING.maxQueue) return false
-    if (this.countUnits(side) + p.queue.length >= TUNING.maxUnits) return false
+    if (def.civilian) {
+      if (this.countWorkers(side) + this.queued(side, true) >= TUNING.maxWorkers) return false
+    } else if (this.countUnits(side) + this.queued(side, false) >= TUNING.maxUnits) {
+      return false
+    }
     if (p.silver < def.cost) return false
     p.silver -= def.cost
     p.queue.push({ kind, remain: def.buildSeconds })
     return true
   }
 
+  /**
+   * **병력만** 센다. 일꾼은 여기 안 들어간다.
+   *
+   * 상한을 따로 두는 이유는 GDD 4.6에 있다 — 같은 칸을 두고 다투게 하면
+   * "일꾼 하나에 병사 하나"라는 뻣뻣한 교환만 남고, 진짜 결정인 **언제 은을
+   * 경제로 돌릴 것인가**가 사라진다.
+   */
   countUnits(side: Side): number {
     let n = 0
-    for (const u of this.units) if (u.faction === side) n++
+    for (const u of this.units) {
+      if (u.faction === side && !UNITS[u.kind].civilian) n++
+    }
+    return n
+  }
+
+  countWorkers(side: Side): number {
+    let n = 0
+    for (const u of this.units) {
+      if (u.faction === side && UNITS[u.kind].civilian) n++
+    }
+    return n
+  }
+
+  /** 큐에 들어 있는 것 중 일꾼(또는 병사)의 수. */
+  private queued(side: Side, civilian: boolean): number {
+    let n = 0
+    for (const it of this.players[side].queue) {
+      if (!!UNITS[it.kind].civilian === civilian) n++
+    }
     return n
   }
 
@@ -450,7 +486,10 @@ export class Game {
   private markCommanded(): void {
     const r2 = TUNING.commandRadius * TUNING.commandRadius
     for (const u of this.units) {
-      if (u.faction === NEUTRAL) {
+      // 일꾼은 지휘 반경 보너스를 안 받는다. 그런데 `commanded`를 켜 두면
+      // 발밑에 금색 링이 도는데, 그 링은 화면에서 **"이 유닛이 지금 보너스를
+      // 받고 있다"**는 뜻이다. 안 받는 유닛에 켜면 링이 거짓말을 한다.
+      if (u.faction === NEUTRAL || UNITS[u.kind].civilian) {
         u.commanded = false
         continue
       }
@@ -465,6 +504,14 @@ export class Game {
       u.tile = this.board.tileAt(u.pos)
       // 교전 깃발은 매 틱 지우고, 실제로 사거리 안에서 칠 때만 다시 켠다.
       u.fighting = false
+
+      // 일꾼은 표적을 고르지 않는다. 싸우는 코드를 통째로 건너뛴다 —
+      // `dps`를 0으로 두는 것만으로는 붙어 서서 맞아 죽는 그림이 된다.
+      if (UNITS[u.kind].civilian) {
+        this.workerThink(u, dt)
+        this.advance(u, dt)
+        continue
+      }
 
       const target = this.pickTarget(u)
       if (target) {
@@ -666,6 +713,87 @@ export class Game {
     this.repath(u, p.rallyTile)
   }
 
+  /**
+   * 일꾼의 판단 (GDD 4.6).
+   *
+   * **정원이 안 찬 내 땅 중 본진에서 가장 가까운 칸**으로 간다. 적이 밟고 있는
+   * 칸은 후보에서 빠지므로, 전선이 밀리면 일꾼이 알아서 뒤로 물러난다 —
+   * 부감에서 일꾼을 하나하나 옮기게 만들면 강림할 손이 없어진다(GDD 6.5).
+   *
+   * 뒤에서부터 채우는 것은 의도다. 앞 칸을 일구려면 **그 칸을 먼저 안전하게
+   * 만들어야** 하고, 그것이 곧 지휘 반경을 앞으로 옮기는 일이다.
+   */
+  private workerThink(u: Unit, dt: number): void {
+    u.thinkIn -= dt
+    if (u.thinkIn > 0) return
+    u.thinkIn = WORKER_THINK
+
+    const side = u.faction as Side
+    const want = this.workerTile(u, side)
+    if (want < 0) {
+      // 일굴 땅이 없다. 본진으로 물러나 기다린다.
+      const keep = this.players[side].keepTile
+      if (u.tile !== keep) this.repath(u, keep)
+      return
+    }
+    if (u.tile === want) {
+      u.path = []
+      // 목적지는 남겨 둔다 — 칸별 정원을 셀 때 여기 서 있는 것도 한 자리다.
+      u.destTile = want
+      return
+    }
+    this.repath(u, want)
+  }
+
+  /** 이 일꾼이 갈 칸. 없으면 -1. 칸 id 순으로 훑으므로 동점은 낮은 id가 이긴다. */
+  private workerTile(u: Unit, side: Side): number {
+    const taken = new Array<number>(this.board.defs.length).fill(0)
+    for (const o of this.units) {
+      if (o.hp <= 0 || o.id === u.id) continue
+      if (o.faction !== side || !UNITS[o.kind].civilian) continue
+      // 가는 중인 일꾼도 그 칸의 한 자리를 이미 차지한 것으로 센다.
+      // 안 그러면 여섯이 전부 같은 칸으로 몰린다.
+      taken[o.destTile >= 0 ? o.destTile : o.tile]!++
+    }
+
+    const hostile = new Set<number>()
+    for (const o of this.units) {
+      if (o.hp <= 0 || o.faction === side) continue
+      hostile.add(o.tile)
+    }
+
+    let best = -1
+    let bestD = Infinity
+    const keep = this.players[side].keepTile
+    for (const t of this.board.tiles) {
+      const id = t.def.id
+      if (t.owner !== side) continue
+      if (hostile.has(id)) continue
+      if (taken[id]! >= TUNING.workersPerTile) continue
+      const d = this.board.tilePath(keep, id).length
+      if (d < bestD) {
+        bestD = d
+        best = id
+      }
+    }
+    return best
+  }
+
+  /** 지금 실제로 땅을 일구고 있는 일꾼 수. 칸마다 정원까지만 센다. */
+  private workedCount(side: Side): number {
+    const on = new Array<number>(this.board.defs.length).fill(0)
+    for (const u of this.units) {
+      if (u.hp <= 0 || u.faction !== side || !UNITS[u.kind].civilian) continue
+      if (this.board.at(u.tile).owner !== side) continue
+      on[u.tile]!++
+    }
+    let n = 0
+    for (let i = 0; i < on.length; i++) {
+      n += Math.min(on[i]!, TUNING.workersPerTile)
+    }
+    return n
+  }
+
   private repath(u: Unit, destTile: number, finalPoint?: Vec2): void {
     if (u.tile === destTile && !finalPoint) {
       u.path = []
@@ -809,10 +937,13 @@ export class Game {
     for (const p of this.players) {
       const tiles = this.board.ownedBy(p.side)
       const forges = this.forgesOf(p.side)
+      // 일꾼은 **자기가 선 내 땅**의 수입을 올린다. 자원 노드가 없는 이유는
+      // 이 게임의 경제가 애초에 땅이기 때문이다(GDD 4.6).
       p.silver +=
         (TUNING.silverBasePerSecond +
           tiles * TUNING.silverPerTilePerSecond +
-          forges.length * FORGE.silverPerSecond) *
+          forges.length * FORGE.silverPerSecond +
+          this.workedCount(p.side) * TUNING.silverPerWorker) *
         dt
 
       const head = p.queue[0]

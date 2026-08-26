@@ -25,7 +25,8 @@ internal static class Program
     private static string B(bool v) => v ? "1" : "0";
 
     /// <summary>TS 쪽은 유닛 종류를 문자열로 들고 있다. 형식을 맞춘다.</summary>
-    private static string K(UnitKind k) => k == UnitKind.Shield ? "shield" : "axe";
+    private static string K(UnitKind k) =>
+        k == UnitKind.Shield ? "shield" : k == UnitKind.Axe ? "axe" : "worker";
 
     private static string N(NeutralKind k) =>
         k == NeutralKind.Mercenary ? "mercenary" : k == NeutralKind.Creature ? "creature" : "ruin";
