@@ -89,6 +89,16 @@ namespace Chieftain.Core
         public double Yaw;
         /// <summary>부감에서 내린 이동 명령의 목적지. 직접 몰 때는 null.</summary>
         public Vec2? MoveTarget;
+        /// <summary>
+        /// 그 목적지까지의 경유지.
+        ///
+        /// <para>
+        /// 예전에는 매 틱 경로를 다시 냈다. 아홉 칸짜리 판에서는 공짜였지만, 지금은
+        /// 통행 격자 8,640칸을 훑는 탐색이라 매 틱 돌릴 수가 없다. 명령을 받을 때
+        /// 한 번 내고 경유지를 하나씩 지운다.
+        /// </para>
+        /// </summary>
+        public List<Vec2> Path = new List<Vec2>();
         /// <summary>이 아바타를 지금 1인칭으로 몰고 있는가 (GDD 3.2).</summary>
         public bool Driving;
     }
@@ -106,7 +116,7 @@ namespace Chieftain.Core
 
     public sealed class Tile
     {
-        public TileDef Def = null!;
+        public RegionDef Def = null!;
         /// <summary>점유도. +1이면 완전히 0번, -1이면 완전히 1번의 땅이다.</summary>
         public double Hold;
         public int Owner = Faction.Nobody;

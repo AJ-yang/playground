@@ -14,8 +14,15 @@ namespace Chieftain.Core
         /// </summary>
         public const double Hp = 850;
         public const double SilverPerSecond = 1.3;
-        /// <summary>전초와 같은 눈. 세우면 그 칸 둘레가 보인다.</summary>
-        public const double Vision = 34 * 0.9;
+        /// <summary>
+        /// 세우면 그 둘레가 보인다.
+        ///
+        /// <para>
+        /// 예전에는 34 * 0.9였다. 34는 사라진 옛 칸 크기였고, 지역이 60으로
+        /// 커진 뒤로는 자기가 선 지역조차 다 안 보이는 눈이 됐다.
+        /// </para>
+        /// </summary>
+        public const double Vision = Tuning.TILE * 0.9;
     }
 
     /// <summary>
@@ -88,9 +95,9 @@ namespace Chieftain.Core
         {
             Rng = new Rng(seed);
             HumanSide = humanSide;
-            Board = new Board(seed, Fjord.KeepP0, Fjord.KeepP1);
+            Board = new Board(seed, LandMap.KeepP0, LandMap.KeepP1);
 
-            Players = new[] { MakePlayer(0, Fjord.KeepP0), MakePlayer(1, Fjord.KeepP1) };
+            Players = new[] { MakePlayer(0, LandMap.KeepP0), MakePlayer(1, LandMap.KeepP1) };
             SpawnNeutralGuards();
 
             // 시작 병력. 아무것도 없이 시작하면 첫 30초가 빈 화면이 된다.
@@ -106,13 +113,14 @@ namespace Chieftain.Core
 
         private PlayerState MakePlayer(int side, int keepTile)
         {
-            var d = Board.Defs[keepTile];
+            // 지역 **중심**이 아니라 대표점을 쓴다. 중심은 물일 수 있다(Board.Anchor).
+            var home = Board.Anchor(keepTile);
             return new PlayerState
             {
                 Side = side,
                 Silver = Tuning.StartingSilver,
                 Queue = new List<QueueItem>(),
-                Rally = new Vec2(d.X, d.Z),
+                Rally = new Vec2(home.X, home.Z),
                 RallyTile = keepTile,
                 KeepHp = Tuning.KeepHp,
                 KeepTile = keepTile,
@@ -122,9 +130,10 @@ namespace Chieftain.Core
                     Side = side,
                     // 아바타는 롱하우스 **밖**에 선다. 건물 안에서 시작하면 강림한 첫
                     // 화면이 벽이라, 1인칭이 무엇을 보여주는지 알기도 전에 인상이 정해진다.
-                    Pos = new Vec2(d.X + (side == 0 ? 10 : -10), d.Z + 6),
+                    Pos = Board.ClampToLand(new Vec2(home.X + (side == 0 ? 10 : -10), home.Z + 6)),
                     Yaw = side == 0 ? 0 : Math.PI,
                     MoveTarget = null,
+                    Path = new List<Vec2>(),
                     Driving = false,
                 },
             };
@@ -148,7 +157,7 @@ namespace Chieftain.Core
 
         private Unit MakeGuard(NeutralDef def, int tileId, int index)
         {
-            var d = Board.Defs[tileId];
+            var d = Board.Anchor(tileId);
             double a = ((double)index / Math.Max(1, def.Guards)) * Math.PI * 2;
             return new Unit
             {
@@ -156,7 +165,7 @@ namespace Chieftain.Core
                 Fac = Faction.Neutral,
                 // 중립도 유닛 틀을 그대로 쓴다. 생김새만 다르고 규칙은 같다.
                 Kind = UnitKind.Axe,
-                Pos = new Vec2(d.X + Det.Cos(a) * 5, d.Z + Det.Sin(a) * 5),
+                Pos = Board.ClampToLand(new Vec2(d.X + Det.Cos(a) * 9, d.Z + Det.Sin(a) * 9)),
                 Hp = def.GuardHp,
                 MaxHp = def.GuardHp,
                 Tile = tileId,
@@ -177,15 +186,15 @@ namespace Chieftain.Core
 
         public Unit SpawnUnit(int side, UnitKind kind, int tileId)
         {
-            var d = Board.Defs[tileId];
+            var d = Board.Anchor(tileId);
             double a = Rng.Range(0, Math.PI * 2);
-            double r = Rng.Range(2, 8);
+            double r = Rng.Range(3, 13);
             var u = new Unit
             {
                 Id = _nextId++,
                 Fac = side,
                 Kind = kind,
-                Pos = Board.ClampToLand(tileId, new Vec2(d.X + Det.Cos(a) * r, d.Z + Det.Sin(a) * r)),
+                Pos = Board.ClampToLand(new Vec2(d.X + Det.Cos(a) * r, d.Z + Det.Sin(a) * r)),
                 Hp = Units_Def(kind).Hp,
                 MaxHp = Units_Def(kind).Hp,
                 Tile = tileId,
@@ -225,7 +234,7 @@ namespace Chieftain.Core
             p.FocusId = EnemyNear(side, point, 5.5);
             int tile = Board.TileAt(point);
             p.RallyTile = tile;
-            p.Rally = Board.ClampToLand(tile, point);
+            p.Rally = Board.ClampToLand(point);
             foreach (var u in Units)
             {
                 if (u.Fac != side) continue;
@@ -243,8 +252,9 @@ namespace Chieftain.Core
         {
             var a = Players[side].Avatar;
             if (a.Driving) return;
-            int tile = Board.TileAt(point);
-            a.MoveTarget = Board.ClampToLand(tile, point);
+            a.MoveTarget = Board.ClampToLand(point);
+            // 경로는 **여기서 한 번만** 낸다. 매 틱 다시 내면 격자 탐색이 프레임을 먹는다.
+            a.Path = Board.Route(a.Pos, a.MoveTarget.Value);
         }
 
         /// <summary>강림·복귀 (GDD 3.2).</summary>
@@ -334,7 +344,7 @@ namespace Chieftain.Core
                 Id = _nextId++,
                 Side = side,
                 Tile = tileId,
-                Pos = Board.ClampToLand(tileId, p.Avatar.Pos),
+                Pos = Board.ClampToLand(p.Avatar.Pos),
                 Hp = Forge.Hp,
                 MaxHp = Forge.Hp,
                 Raising = Forge.RaiseSeconds,
@@ -451,24 +461,13 @@ namespace Chieftain.Core
                 if (!a.MoveTarget.HasValue) continue;
                 var target = a.MoveTarget.Value;
 
-                int from = Board.TileAt(a.Pos);
-                int to = Board.TileAt(target);
-                var route = Board.Route(from, to, target);
-
-                // **이미 도착한 경유지는 건너뛴다.**
-                //
-                // 경로를 매 틱 다시 계산하기 때문에, 다리 한가운데에 서면 route[0]이
-                // 지금 서 있는 바로 그 지점이 된다. 그러면 이동량이 0이 되어 아바타가
-                // 다리 위에서 영영 멈춘다.
-                var next = route[route.Count - 1];
-                foreach (var w in route)
+                // 경로는 CommandAvatar가 한 번 냈다. 도착한 경유지를 지워 가며 걷고,
+                // 다 지우면 마지막으로 목적지 자체를 향한다.
+                while (a.Path.Count > 1 && Det.Dist(a.Pos, a.Path[0]) <= WaypointEps)
                 {
-                    if (Det.Dist(a.Pos, w) > WaypointEps)
-                    {
-                        next = w;
-                        break;
-                    }
+                    a.Path.RemoveAt(0);
                 }
+                var next = a.Path.Count > 0 ? a.Path[0] : target;
 
                 double step = Tuning.AvatarSpeedCommanded * dt;
                 var moved = Det.MoveToward(a.Pos, next, step);
@@ -627,9 +626,8 @@ namespace Chieftain.Core
             {
                 double sp = def.Speed * (u.Commanded ? CommandedBonus.Speed : 1);
                 var next = Det.MoveToward(u.Pos, target.Pos, sp * dt);
-                // 쫓아갈 때는 자기 칸을 벗어나지 않는다. 다리를 건너 흩어지면
-                // 지휘 반경이 의미를 잃는다.
-                u.Pos = Board.ClampToLand(u.Tile, next);
+                // 쫓아갈 때도 물에는 안 들어간다. 해안에 비스듬히 부딪히면 미끄러진다.
+                u.Pos = Board.Slide(u.Pos, next);
                 return;
             }
 
@@ -841,7 +839,8 @@ namespace Chieftain.Core
                 return;
             }
             u.DestTile = destTile;
-            u.Path = Board.Route(u.Tile, destTile, finalPoint);
+            // 지역 중심이 물일 수 있으므로 대표점을 쓴다(Board.Anchor).
+            u.Path = Board.Route(u.Pos, finalPoint ?? Board.Anchor(destTile));
         }
 
         private void Advance(Unit u, double dt)
@@ -1103,6 +1102,6 @@ namespace Chieftain.Core
             return n;
         }
 
-        public int CenterTile() => Fjord.Center;
+        public int CenterTile() => LandMap.Center;
     }
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { TILE_LAND } from '../data/fjord'
+import { COLS, type Land, MAP_H, MAP_W, ROWS } from '../data/land'
 import { TUNING } from '../data/tuning'
 import { UNITS } from '../data/units'
 import type { Game } from '../game/Game'
@@ -30,8 +30,23 @@ export class Actors {
   readonly root = new THREE.Group()
 
   private readonly unitNodes = new Map<number, UnitNode>()
-  private readonly tileTint: THREE.Mesh[] = []
-  private readonly tileFog: THREE.Mesh[] = []
+  /**
+   * 소유권과 안개를 **판 하나씩**으로 그린다.
+   *
+   * 예전에는 지역마다 네모 판을 하나씩 깔았다. 섬이 아홉 개일 때는 섬이
+   * 원래 네모라 티가 안 났는데, 땅이 이어진 지금은 **연속된 벌판 위에 네모난
+   * 스티커**가 붙은 꼴이 된다.
+   *
+   * 지금은 지역 수만 한 작은 텍스처(5×3)를 만들어 맵 전체를 덮는 판 하나에
+   * 물린다. 선형 보간이 켜져 있으므로 지역 사이가 저절로 번져서, 정보는
+   * 지역 단위 그대로면서 그림은 부드럽다.
+   */
+  private tintTex!: THREE.DataTexture
+  private fogTex!: THREE.DataTexture
+  // `ArrayBuffer`를 명시적으로 깔아 준다. 그냥 길이로 만들면 타입이
+  // `Uint8Array<ArrayBufferLike>`가 되어 `DataTexture`가 안 받는다.
+  private readonly tintData = new Uint8Array(new ArrayBuffer(COLS * ROWS * 4))
+  private readonly fogData = new Uint8Array(new ArrayBuffer(COLS * ROWS * 4))
   private readonly avatarNodes: AvatarNode[] = []
   /**
    * 1인칭 카메라에 먹일 걸음 흔들림. `sync`가 채우고 `main`이 카메라에 얹는다.
@@ -106,44 +121,72 @@ export class Actors {
    * 규칙이 안 읽힌다. 격자로 쪼개 높이를 먹인다 — 칸당 17×17이면 충분하고,
    * 판을 시작할 때 한 번만 만든다.
    */
-  private hugGeo(size: number, cx: number, cz: number, lift: number): THREE.BufferGeometry {
-    const geo = new THREE.PlaneGeometry(size, size, 16, 16)
+  /** 맵 전체를 덮는 지형 밀착 판 하나. 소유권과 안개가 각각 하나씩 쓴다. */
+  /**
+   * 소유·안개를 얹을 판.
+   *
+   * **바다 위에서는 사라진다.** 예전에는 판 전체를 덮는 사각형 한 장이었는데,
+   * 땅이 넓어져 부감이 바다까지 담게 되자 그 한 장이 바다 위에 씌운 회색
+   * 비닐처럼 보였다 — 위에서 내려다본 판이 통째로 납작한 사각형으로 읽혔다.
+   *
+   * 꼭짓점마다 땅인지 물어보고 알파를 0/1로 넣는다. 정점 색의 알파는 재질의
+   * 투명도에 곱해지므로, 해안선에서 오버레이가 저절로 흐려지며 끝난다. 지역
+   * 해상도(5×3)로는 못 하는 일이라 여기서 하는 것이다.
+   */
+  private overlayGeo(lift: number, land: Land): THREE.BufferGeometry {
+    // 해안선을 알파로 자르므로 격자가 곧 그 선의 해상도다. 110×70에서는
+    // 3단위짜리 계단이 눈에 띄었다.
+    const geo = new THREE.PlaneGeometry(MAP_W + 40, MAP_H + 40, 220, 140)
     geo.rotateX(-Math.PI / 2)
-    this.terrain.displace(geo, lift, cx, cz)
+    this.terrain.displace(geo, lift)
+
+    const pos = geo.getAttribute('position')
+    const rgba = new Float32Array(pos.count * 4)
+    for (let i = 0; i < pos.count; i++) {
+      rgba[i * 4] = 1
+      rgba[i * 4 + 1] = 1
+      rgba[i * 4 + 2] = 1
+      rgba[i * 4 + 3] = land.solidAt(pos.getX(i), pos.getZ(i)) ? 1 : 0
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4))
+
     this.disposables.push(geo)
     return geo
   }
 
   private buildTiles(game: Game): void {
-    for (const d of game.board.defs) {
-      const tintMat = new THREE.MeshBasicMaterial({
-        color: C.side[0],
+    const mk = (
+      lift: number,
+      order: number,
+      data: Uint8Array<ArrayBuffer>,
+    ): THREE.DataTexture => {
+      const tex = new THREE.DataTexture(data, COLS, ROWS, THREE.RGBAFormat)
+      // **선형 보간이 이 방식의 전부다.** 5×3짜리 텍스처를 맵 전체로 늘리면
+      // 지역 사이가 저절로 번져서 네모난 경계가 사라진다.
+      // **색공간을 못 박는다.** `DataTexture`는 기본이 선형이라, sRGB로 담은
+      // 바이트를 그대로 읽으면 거의 검은 안개가 흰 안개가 되어 판이 통째로
+      // 뿌예진다. 실제로 그렇게 나왔다.
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.minFilter = THREE.LinearFilter
+      tex.magFilter = THREE.LinearFilter
+      tex.wrapS = THREE.ClampToEdgeWrapping
+      tex.wrapT = THREE.ClampToEdgeWrapping
+      tex.needsUpdate = true
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
         transparent: true,
-        opacity: 0,
         depthWrite: false,
+        // 해안에서 오버레이를 끄는 알파가 여기 실려 있다(`overlayGeo`).
+        vertexColors: true,
       })
-      this.disposables.push(tintMat)
-      const tint = new THREE.Mesh(this.hugGeo(TILE_LAND, d.x, d.z, 0.06), tintMat)
-      tint.position.set(d.x, 0, d.z)
-      tint.renderOrder = 2
-      this.tileTint.push(tint)
-      this.root.add(tint)
-
-      const fogMat = new THREE.MeshBasicMaterial({
-        color: C.fog,
-        transparent: true,
-        opacity: 0.92,
-        depthWrite: false,
-      })
-      this.disposables.push(fogMat)
-      // 판을 칸의 평지에 딱 맞춘다. 전에는 칸보다 6 넓었는데, 지형이 생긴
-      // 뒤로는 그 여분이 벼랑을 타고 내려가 **검은 벽**이 되었다.
-      const fog = new THREE.Mesh(this.hugGeo(TILE_LAND + 1.5, d.x, d.z, 0.55), fogMat)
-      fog.position.set(d.x, 0, d.z)
-      fog.renderOrder = 6
-      this.tileFog.push(fog)
-      this.root.add(fog)
+      this.disposables.push(tex, mat)
+      const mesh = new THREE.Mesh(this.overlayGeo(lift, game.board.land), mat)
+      mesh.renderOrder = order
+      this.root.add(mesh)
+      return tex
     }
+    this.tintTex = mk(0.06, 2, this.tintData)
+    this.fogTex = mk(0.5, 6, this.fogData)
   }
 
   /**
@@ -533,21 +576,26 @@ export class Actors {
      */
     const strength = firstPerson ? 0.28 : 1
     for (const t of game.board.tiles) {
-      const tint = this.tileTint[t.def.id]!
-      const mat = tint.material as THREE.MeshBasicMaterial
-      const hold = t.hold
-      const side: Side = hold >= 0 ? 0 : 1
-      mat.color.setHex(C.side[side])
+      const i = t.def.id * 4
+      const side: Side = t.hold >= 0 ? 0 : 1
+      _c.setHex(C.side[side], THREE.SRGBColorSpace).convertLinearToSRGB()
+      this.tintData[i] = Math.round(_c.r * 255)
+      this.tintData[i + 1] = Math.round(_c.g * 255)
+      this.tintData[i + 2] = Math.round(_c.b * 255)
       // 점유도가 곧 진하기다. 점령이 차오르는 것이 그대로 보인다.
-      mat.opacity = Math.min(0.42, Math.abs(hold) * 0.42) * strength
+      this.tintData[i + 3] = Math.round(
+        Math.min(0.42, Math.abs(t.hold) * 0.42) * strength * 255,
+      )
 
-      const fog = this.tileFog[t.def.id]!
-      const fogMat = fog.material as THREE.MeshBasicMaterial
-      const seen = t.seen[viewer]
-      const vis = game.visible[viewer].has(t.def.id)
-      fogMat.opacity = vis ? 0 : seen ? 0.5 : 0.93
-      fog.visible = fogMat.opacity > 0.01
+      const vis = this.revealed || game.visible[viewer].has(t.def.id)
+      const a = vis ? 0 : t.seen[viewer] ? 0.5 : 0.9
+      this.fogData[i] = FOG_RGB[0]!
+      this.fogData[i + 1] = FOG_RGB[1]!
+      this.fogData[i + 2] = FOG_RGB[2]!
+      this.fogData[i + 3] = Math.round(a * 255)
     }
+    this.tintTex.needsUpdate = true
+    this.fogTex.needsUpdate = true
   }
 
   private syncRally(game: Game, viewer: Side): void {
@@ -730,11 +778,13 @@ export class Actors {
 
   /** 승패가 갈리면 안개를 걷는다. 무엇이 있었는지 보여주는 것이 예의다. */
   revealAll(): void {
-    for (const fog of this.tileFog) {
-      ;(fog.material as THREE.MeshBasicMaterial).opacity = 0
-      fog.visible = false
-    }
+    this.revealed = true
+    for (let i = 3; i < this.fogData.length; i += 4) this.fogData[i] = 0
+    this.fogTex.needsUpdate = true
   }
+
+  /** 판이 끝난 뒤에는 안개를 다시 덮지 않는다. */
+  private revealed = false
 
   ownerOf(tileOwner: number): number {
     return tileOwner === NOBODY ? -1 : tileOwner
@@ -782,3 +832,11 @@ function windupOf(u: Unit): number {
   const lead = Math.min(0.3, UNITS[u.kind].swing * 0.5)
   return Math.max(0, Math.min(1, (lead - u.swingIn) / lead))
 }
+
+const _c = new THREE.Color()
+
+/** 안개 색. 매 프레임 다시 안 구하려고 미리 잡아 둔다. */
+const FOG_RGB = (() => {
+  const c = new THREE.Color().setHex(C.fog, THREE.SRGBColorSpace).convertLinearToSRGB()
+  return [Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)]
+})()

@@ -1,20 +1,29 @@
 import * as THREE from 'three'
 import type { Vec2 } from '../core/vec2'
 import { clamp } from '../core/vec2'
-import { TILE_LAND } from '../data/fjord'
-import { COLS, ROWS } from '../data/fjord'
-import { TILE } from '../data/tuning'
+import { MAP_H, MAP_W } from '../data/land'
 import { PLATEAU, type Terrain } from './terrain'
 
 /**
  * 카메라 둘 — 부감과 1인칭.
  *
- * **부감은 고정이다.** 팬도 줌도 없다. 아홉 칸이 한 화면에 다 들어오므로
- * 움직일 이유가 없고, 무엇보다 배울 것이 하나 줄어든다(판정자가 규칙 모르는
- * 사람 3명이다 — GDD 6.5).
+ * ## 부감이 고정에서 스크롤로 바뀌었다
  *
- * 그리고 이 고정이 설계를 강화한다. 부감은 *전부 보는 시점*이고 1인칭은
- * *한 곳만 보는 시점*이라는 대비가 조작 없이 그대로 드러나기 때문이다.
+ * 아홉 칸짜리 판일 때는 **고정**이었다. 판이 한 화면에 다 들어오니 움직일
+ * 이유가 없었고, 배울 것이 하나 줄어드는 것도 값이었다(GDD 6.5).
+ *
+ * 맵이 300×180으로 넓어지면서 그게 불가능해졌다. 다 넣으려면 유닛이 점이 되고,
+ * 유닛이 점이 되면 **발밑 링이 안 보인다** — 이 게임의 시각적 규칙 전달이
+ * 통째로 거기 걸려 있다(GDD 6.2).
+ *
+ * 그래서 **아바타를 따라간다.** 새 조작을 배울 필요가 없다는 성질을 지키면서
+ * 스크롤을 얻는 방법이고, 무엇보다 이 게임에서 아바타는 이미 화면의 중심이다 —
+ * 지휘 반경이 그를 따라다니므로 그가 있는 곳이 곧 지금 중요한 곳이다.
+ * 둘러보고 싶으면 WASD로 밀 수 있고, 손을 떼면 다시 아바타에게 돌아온다.
+ *
+ * 대가는 정직하게 적어 둔다: 부감이 더 이상 *전부 보는 시점*이 아니다. 강림의
+ * 대가가 그만큼 싸졌다는 뜻이고, 이건 GDD 3.3이 세운 대비를 약하게 만든다.
+ * 대신 미니맵이 판 전체의 소유권과 아군 위치를 늘 보여 준다.
  */
 export class Cameras {
   readonly overhead: THREE.PerspectiveCamera
@@ -22,6 +31,16 @@ export class Cameras {
 
   /** 1인칭 시선. yaw는 Game의 아바타와 공유하고, pitch는 여기만 안다. */
   pitch = 0
+
+  /** 부감이 지금 겨누는 곳. 아바타를 따라가되 손으로 밀 수 있다. */
+  private focusX = 0
+  private focusZ = 0
+  /** 손으로 민 양. 손을 떼면 0으로 돌아온다. */
+  private panX = 0
+  private panZ = 0
+  /** 카메라를 판 위에 띄우는 높이와 거리. `layout`이 정한다. */
+  private lift = 0
+  private back = 0
 
   private readonly raycaster = new THREE.Raycaster()
   private readonly hit = new THREE.Vector3()
@@ -40,24 +59,75 @@ export class Cameras {
    * 들어온다. 이걸 안 하면 좁은 창에서 맵 위아래가 잘린다.
    */
   layout(aspect: number): void {
-    // 물까지 맞추면 화면의 절반이 빈 바다가 된다. **아홉 칸**에 맞춘다.
-    const boardHalf = (TILE * (Math.max(COLS, ROWS) - 1)) / 2 + TILE_LAND / 2
-    const need = boardHalf * 1.12
+    // 화면 세로에 담을 월드 거리. 유닛이 점이 되지 않는 선이 이 값의 유일한
+    // 제약이다 — 발밑 링이 보여야 지휘 반경 규칙이 전달된다(GDD 6.2).
+    const need = Cameras.VIEW_SPAN / 2
     const vFov = (this.overhead.fov * Math.PI) / 180
     const hFit = need / Math.tan(vFov / 2)
     const wFit = need / (Math.tan(vFov / 2) * aspect)
     const d = Math.max(hFit, wFit)
 
-    // 45도보다 눕히면 앞쪽 칸이 뒤쪽 칸을 가린다. 60도쯤이 균형점이다.
+    // 45도보다 눕히면 앞쪽이 뒤쪽을 가린다. 60도쯤이 균형점이다.
     const tilt = (60 * Math.PI) / 180
-    // 판이 해수면보다 `PLATEAU`만큼 올라앉았으므로 겨누는 곳도 같이 올린다.
-    this.overhead.position.set(0, PLATEAU + Math.sin(tilt) * d, Math.cos(tilt) * d)
-    this.overhead.lookAt(0, PLATEAU, 0)
+    this.lift = Math.sin(tilt) * d
+    this.back = Math.cos(tilt) * d
+
     this.overhead.aspect = aspect
     this.overhead.updateProjectionMatrix()
-
     this.first.aspect = aspect
     this.first.updateProjectionMatrix()
+    this.placeOverhead({ x: this.focusX, z: this.focusZ }, 1)
+  }
+
+  /** 화면 세로에 담는 월드 거리. */
+  private static readonly VIEW_SPAN = 168
+
+  /** 손으로 밀 수 있는 최대 거리. 이보다 멀리 가면 아바타를 잃어버린다. */
+  private static readonly PAN_LIMIT = 90
+
+  /**
+   * 부감을 자리잡는다. `follow`는 0~1로, 1이면 즉시 아바타에게 붙는다.
+   *
+   * 부드럽게 따라가는 것이 중요하다 — 아바타가 한 걸음 옮길 때마다 화면이
+   * 딱딱 끊기면 부감이 아니라 추적 카메라가 된다.
+   */
+  placeOverhead(target: Vec2, follow: number): void {
+    const wantX = clamp(target.x + this.panX, -MAP_W / 2, MAP_W / 2)
+    const wantZ = clamp(target.z + this.panZ, -MAP_H / 2, MAP_H / 2)
+    this.focusX += (wantX - this.focusX) * follow
+    this.focusZ += (wantZ - this.focusZ) * follow
+
+    this.overhead.position.set(this.focusX, PLATEAU + this.lift, this.focusZ + this.back)
+    this.overhead.lookAt(this.focusX, PLATEAU, this.focusZ)
+    this.overhead.updateMatrixWorld()
+  }
+
+  /** 지금 부감이 보고 있는 판 위의 점. 미니맵이 시야 사각형을 여기에 그린다. */
+  get focus(): Vec2 {
+    return { x: this.focusX, z: this.focusZ }
+  }
+
+  /** 화면 세로에 담기는 월드 거리. 미니맵의 사각형 크기가 여기서 나온다. */
+  get span(): number {
+    return Cameras.VIEW_SPAN
+  }
+
+  /**
+   * 부감을 손으로 민다. `dir`는 정규화된 화면 방향, `dt`는 프레임 간격.
+   *
+   * 아무 키도 안 눌리면 밀어 둔 양이 0으로 돌아온다 — **놓으면 아바타에게
+   * 돌아온다**는 성질이 있어야 화면을 잃어버리지 않는다.
+   */
+  panOverhead(dx: number, dz: number, dt: number): void {
+    const SPEED = 130
+    if (dx === 0 && dz === 0) {
+      const k = 1 - Math.exp(-dt * 2.4)
+      this.panX -= this.panX * k
+      this.panZ -= this.panZ * k
+      return
+    }
+    this.panX = clamp(this.panX + dx * SPEED * dt, -Cameras.PAN_LIMIT, Cameras.PAN_LIMIT)
+    this.panZ = clamp(this.panZ + dz * SPEED * dt, -Cameras.PAN_LIMIT, Cameras.PAN_LIMIT)
   }
 
   /**

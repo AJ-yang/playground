@@ -11,6 +11,7 @@ import { C } from './render/palette'
 import { bakeSky } from './render/sky'
 import { World } from './render/World'
 import { Banner, Hud } from './ui/Hud'
+import { Minimap } from './ui/Minimap'
 
 /**
  * 진입점 — 판을 만들고, 입력을 붙이고, 루프를 돌린다.
@@ -26,6 +27,7 @@ const HUMAN: Side = 0
 const app = document.getElementById('app')!
 const hudRoot = document.getElementById('hud')!
 const bannerRoot = document.getElementById('banner')!
+const minimapRoot = document.getElementById('minimap')!
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
@@ -53,6 +55,18 @@ const sky = bakeSky()
 
 const hud = new Hud(hudRoot)
 const banner = new Banner(bannerRoot)
+
+/**
+ * 미니맵은 판보다 오래 산다.
+ *
+ * 판이 새로 깔릴 때마다 만들면 캔버스와 이벤트 핸들러가 계속 쌓인다. 하나
+ * 만들어 두고 `reset`으로 지형만 갈아 끼운다.
+ */
+const minimap = new Minimap(
+  minimapRoot,
+  (p) => session && !session.ended && session.game.setRally(HUMAN, p),
+  (p) => session && !session.ended && session.game.commandAvatar(HUMAN, p),
+)
 
 let session: Session | null = null
 
@@ -105,6 +119,7 @@ function start(seed = Math.floor(Math.random() * 0x7fffffff)): void {
     keys: new Set(),
     ended: false,
   }
+  minimap.reset(game.board.land)
   resize()
 }
 
@@ -255,6 +270,27 @@ function walkDir(keys: Set<string>, yaw: number): Vec2 {
 const TURN_RATE = 2.1
 
 /**
+ * 부감에서 화면을 미는 방향. 1인칭의 `walkDir`와 같은 키를 쓴다.
+ *
+ * 같은 키가 시점에 따라 **다른 것을 움직인다** — 1인칭에서는 몸이 가고
+ * 부감에서는 화면이 간다. 배울 것이 늘지 않으면서 둘 다 자연스럽다.
+ */
+function panDir(keys: Set<string>): { x: number; z: number } {
+  let x = 0
+  let z = 0
+  if (keys.has('a') || keys.has('arrowleft')) x -= 1
+  if (keys.has('d') || keys.has('arrowright')) x += 1
+  if (keys.has('w') || keys.has('arrowup')) z -= 1
+  if (keys.has('s') || keys.has('arrowdown')) z += 1
+  if (x !== 0 && z !== 0) {
+    const k = Math.SQRT1_2
+    x *= k
+    z *= k
+  }
+  return { x, z }
+}
+
+/**
  * 렌더 프레임 간격을 재는 시계.
  *
  * 시뮬레이션은 고정 1/60초로 돌지만(`GameLoop`), **애니메이션은 실제 프레임
@@ -293,18 +329,39 @@ const loop = new GameLoop({
     const s = session
     if (!s) return
     const cam = s.firstPerson ? s.cameras.first : s.cameras.overhead
+    const dt = renderClock.getDelta()
+    const me = s.game.players[HUMAN].avatar
     if (s.firstPerson) {
-      const a = s.game.players[HUMAN].avatar
-      s.cameras.placeFirst(a.pos, a.yaw)
+      s.cameras.placeFirst(me.pos, me.yaw)
+    } else {
+      /**
+       * 부감은 아바타를 따라간다.
+       *
+       * 맵이 넓어져서 한 화면에 다 안 들어온다(`Cameras`). 새 조작을 배우게
+       * 하지 않으면서 스크롤을 얻는 방법이고, 이 게임에서 아바타는 이미 화면의
+       * 중심이다 — 지휘 반경이 그를 따라다니므로 그가 있는 곳이 곧 지금
+       * 중요한 곳이다. WASD로 밀 수 있고 놓으면 돌아온다.
+       */
+      const pan = panDir(s.keys)
+      s.cameras.panOverhead(pan.x, pan.z, dt)
+      s.cameras.placeOverhead(me.pos, 1 - Math.exp(-dt * 3.5))
     }
     applyFog(s.scene, s.firstPerson)
     s.world.sync(s.game, HUMAN)
     // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
-    s.actors.sync(s.game, HUMAN, s.firstPerson, cam, renderClock.getDelta())
+    s.actors.sync(s.game, HUMAN, s.firstPerson, cam, dt)
     // 걸음 흔들림은 뼈대가 굴린 위상에서 나오므로 sync 뒤에 얹는다.
     if (s.firstPerson) s.cameras.applyFirstBob(s.actors.viewerBob)
     renderer.render(s.scene, cam)
     hud.render(s.game, s.firstPerson)
+    // 미니맵은 1인칭에서도 그린다. 눈앞만 보이는 시점일수록 판 전체를 보는
+    // 눈이 더 필요하고, 강림한 채로 부대를 보낼 수 있다는 것이 강림의 값을
+    // 깎지 않는 유일한 방법이다(GDD 3.2).
+    minimap.render(
+      s.game,
+      HUMAN,
+      s.firstPerson ? null : { focus: s.cameras.focus, span: s.cameras.span },
+    )
   },
 })
 

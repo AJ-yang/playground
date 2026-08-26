@@ -1,6 +1,6 @@
 import type { Vec2 } from '../core/vec2'
 import type { NeutralKind } from '../data/neutrals'
-import type { TileDef } from '../data/fjord'
+import type { RegionDef } from '../data/land'
 import type { UnitKind } from '../data/units'
 
 /** 0·1은 플레이어, 2는 중립 수비대. 중립도 유닛으로 다루면 전투 코드가 하나로 끝난다. */
@@ -106,6 +106,14 @@ export interface Avatar {
   yaw: number
   /** 부감에서 내린 이동 명령의 목적지. 직접 몰 때는 null. */
   moveTarget: Vec2 | null
+  /**
+   * 그 목적지까지의 경유지.
+   *
+   * 예전에는 매 틱 경로를 다시 냈다. 아홉 칸짜리 판에서는 공짜였지만, 지금은
+   * 통행 격자 8,640칸을 훑는 탐색이라 매 틱 돌릴 수가 없다. 명령을 받을 때
+   * 한 번 내고 경유지를 하나씩 지운다.
+   */
+  path: Vec2[]
   /** 이 아바타를 지금 1인칭으로 몰고 있는가 (GDD 3.2). */
   driving: boolean
 }
@@ -121,7 +129,7 @@ export interface NeutralCamp {
 }
 
 export interface Tile {
-  def: TileDef
+  def: RegionDef
   /** 점유도. +1이면 완전히 0번, -1이면 완전히 1번의 땅이다. */
   hold: number
   owner: Owner

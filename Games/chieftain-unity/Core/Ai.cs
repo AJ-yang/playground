@@ -116,14 +116,14 @@ namespace Chieftain.Core
             int target = ChooseTarget();
             if (target < 0) return;
             var g = _game;
-            var d = g.Board.Defs[target];
-            g.SetRally(_side, new Vec2(d.X, d.Z));
+            // 지역 중심이 물일 수 있으므로 대표점을 쓴다(Board.Anchor).
+            var goal = g.Board.Anchor(target);
+            g.SetRally(_side, goal);
 
             if (target != _targetTile)
             {
                 _targetTile = target;
-                int from = g.Board.TileAt(g.Players[_side].Avatar.Pos);
-                _route = g.Board.Route(from, target);
+                _route = g.Board.Route(g.Players[_side].Avatar.Pos, goal);
             }
         }
 
@@ -223,8 +223,7 @@ namespace Chieftain.Core
             var a = g.Players[_side].Avatar;
             if (_targetTile < 0) return;
 
-            var goal = g.Board.Defs[_targetTile];
-            var goalPoint = new Vec2(goal.X, goal.Z);
+            var goalPoint = g.Board.Anchor(_targetTile);
 
             // 다 왔으면 올라와서 자리를 지킨다.
             if (Det.Dist(a.Pos, goalPoint) < Tuning.CommandRadius * 0.45)
@@ -237,7 +236,7 @@ namespace Chieftain.Core
 
             if (_route.Count == 0)
             {
-                _route = g.Board.Route(g.Board.TileAt(a.Pos), _targetTile);
+                _route = g.Board.Route(a.Pos, goalPoint);
             }
             if (_route.Count == 0) return;
             var next = _route[0];

@@ -1,9 +1,9 @@
 import { atan2, cos, hypot, sin } from '../core/det'
 import { Rng } from '../core/rng'
 import { clamp, dist, dist2, moveToward, norm, type Vec2 } from '../core/vec2'
-import { CENTER, KEEP_P0, KEEP_P1, TILE_LAND } from '../data/fjord'
+import { CENTER, KEEP_P0, KEEP_P1, MAP_H, MAP_W } from '../data/land'
 import { FJORD_NEUTRALS, type NeutralDef } from '../data/neutrals'
-import { COMMANDED_BONUS, TUNING } from '../data/tuning'
+import { COMMANDED_BONUS, TILE, TUNING } from '../data/tuning'
 import { UNITS, type UnitDef, type UnitKind } from '../data/units'
 import { Board } from './Board'
 import {
@@ -68,8 +68,14 @@ export const FORGE = {
   hp: 850,
   /** 초당 은 수입. 본진 기본 수입의 절반쯤. */
   silverPerSecond: 1.3,
-  /** 전초와 같은 눈. 세우면 그 칸 둘레가 보인다. */
-  vision: 34 * 0.9,
+  /**
+   * 세우면 그 둘레가 보인다.
+   *
+   * 예전에는 `34 * 0.9`라고 적혀 있었다. 34는 사라진 옛 칸 크기였고, 지역이
+   * 60으로 커진 뒤로는 자기가 선 지역조차 다 안 보이는 눈이 됐다. 지역
+   * 크기에 묶어 둔다.
+   */
+  vision: TILE * 0.9,
 } as const
 
 export interface GameOptions {
@@ -138,8 +144,8 @@ export class Game {
   // ────────────────────────────────────────────────────────────── 만들기
 
   private makePlayer(side: Side, keepTile: number): PlayerState {
-    const d = this.board.defs[keepTile]!
-    const home = { x: d.x, z: d.z }
+    // 지역 **중심**이 아니라 대표점을 쓴다. 중심은 물일 수 있다(`Board.anchor`).
+    const home = this.board.anchor(keepTile)
     return {
       side,
       silver: TUNING.startingSilver,
@@ -153,9 +159,13 @@ export class Game {
         side,
         // 아바타는 롱하우스 **밖**에 선다. 건물 안에서 시작하면 강림한 첫
         // 화면이 벽이라, 1인칭이 무엇을 보여주는지 알기도 전에 인상이 정해진다.
-        pos: { x: d.x + (side === 0 ? 10 : -10), z: d.z + 6 },
+        pos: this.board.clampToLand({
+          x: home.x + (side === 0 ? 10 : -10),
+          z: home.z + 6,
+        }),
         yaw: side === 0 ? 0 : Math.PI,
         moveTarget: null,
+        path: [],
         driving: false,
       },
     }
@@ -175,14 +185,14 @@ export class Game {
   }
 
   private makeGuard(def: NeutralDef, tileId: number, index: number): Unit {
-    const d = this.board.defs[tileId]!
+    const d = this.board.anchor(tileId)
     const a = (index / Math.max(1, def.guards)) * Math.PI * 2
     return {
       id: this.nextId++,
       faction: NEUTRAL,
       // 중립도 유닛 틀을 그대로 쓴다. 생김새만 다르고 규칙은 같다.
       kind: 'axe',
-      pos: { x: d.x + cos(a) * 5, z: d.z + sin(a) * 5 },
+      pos: this.board.clampToLand({ x: d.x + cos(a) * 9, z: d.z + sin(a) * 9 }),
       hp: def.guardHp,
       maxHp: def.guardHp,
       tile: tileId,
@@ -202,17 +212,14 @@ export class Game {
   }
 
   spawnUnit(side: Side, kind: UnitKind, tileId: number): Unit {
-    const d = this.board.defs[tileId]!
+    const d = this.board.anchor(tileId)
     const a = this.rng.range(0, Math.PI * 2)
-    const r = this.rng.range(2, 8)
+    const r = this.rng.range(3, 13)
     const u: Unit = {
       id: this.nextId++,
       faction: side,
       kind,
-      pos: this.board.clampToLand(tileId, {
-        x: d.x + cos(a) * r,
-        z: d.z + sin(a) * r,
-      }),
+      pos: this.board.clampToLand({ x: d.x + cos(a) * r, z: d.z + sin(a) * r }),
       hp: UNITS[kind].hp,
       maxHp: UNITS[kind].hp,
       tile: tileId,
@@ -251,7 +258,7 @@ export class Game {
     p.focusId = this.enemyNear(side, point, 5.5)
     const tile = this.board.tileAt(point)
     p.rallyTile = tile
-    p.rally = this.board.clampToLand(tile, point)
+    p.rally = this.board.clampToLand(point)
     for (const u of this.units) {
       if (u.faction !== side) continue
       // 일꾼은 집결 명령을 안 듣는다. 부대와 같이 전선으로 걸어가면
@@ -267,8 +274,9 @@ export class Game {
   commandAvatar(side: Side, point: Vec2): void {
     const a = this.players[side].avatar
     if (a.driving) return
-    const tile = this.board.tileAt(point)
-    a.moveTarget = this.board.clampToLand(tile, point)
+    a.moveTarget = this.board.clampToLand(point)
+    // 경로는 **여기서 한 번만** 낸다. 매 틱 다시 내면 격자 탐색이 프레임을 먹는다.
+    a.path = this.board.route(a.pos, a.moveTarget)
   }
 
   /** 강림·복귀 (GDD 3.2). */
@@ -278,6 +286,7 @@ export class Game {
     a.driving = on
     if (on) {
       a.moveTarget = null
+      a.path = []
       if (side === this.humanSide) {
         this.telemetry.descents++
         this.telemetry.lastDescentAt = this.telemetry.elapsed
@@ -349,7 +358,7 @@ export class Game {
       id: this.nextId++,
       side,
       tile: tileId,
-      pos: this.board.clampToLand(tileId, { ...p.avatar.pos }),
+      pos: this.board.clampToLand({ ...p.avatar.pos }),
       hp: FORGE.hp,
       maxHp: FORGE.hp,
       raising: FORGE.raiseSeconds,
@@ -448,25 +457,15 @@ export class Game {
       const a = p.avatar
       if (a.driving) continue
       if (!a.moveTarget) continue
-      // 부감 명령은 다리를 거쳐 느리게 간다. 직접 모는 것보다 느린 이 차이가
-      // 강림의 유일한 유인이다(GDD 3.2, tuning.ts).
-      const from = this.board.tileAt(a.pos)
-      const to = this.board.tileAt(a.moveTarget)
-      const route = this.board.route(from, to, a.moveTarget)
-
-      // **이미 도착한 경유지는 건너뛴다.**
+      // 부감 명령은 느리게 간다. 직접 모는 것보다 느린 이 차이가 강림의
+      // 유일한 유인이다(GDD 3.2, tuning.ts).
       //
-      // 경로를 매 틱 다시 계산하기 때문에, 다리 한가운데에 서면 `route[0]`이
-      // 지금 서 있는 바로 그 지점이 된다. 그러면 이동량이 0이 되어 아바타가
-      // 다리 위에서 영영 멈춘다 — 부감 이동 명령으로는 칸을 넘어갈 수가
-      // 없었다. 첫 판을 돌려보고서야 보인 버그다.
-      let next = route[route.length - 1]!
-      for (const w of route) {
-        if (dist(a.pos, w) > WAYPOINT_EPS) {
-          next = w
-          break
-        }
+      // 경로는 `commandAvatar`가 한 번 냈다. 도착한 경유지를 지워 가며 걷고,
+      // 다 지우면 마지막으로 목적지 자체를 향한다.
+      while (a.path.length > 1 && dist(a.pos, a.path[0]!) <= WAYPOINT_EPS) {
+        a.path.shift()
       }
+      const next = a.path[0] ?? a.moveTarget
 
       const step = TUNING.avatarSpeedCommanded * dt
       const moved = moveToward(a.pos, next, step)
@@ -607,9 +606,8 @@ export class Game {
     if (d > reach) {
       const speed = def.speed * (u.commanded ? COMMANDED_BONUS.speed : 1)
       const next = moveToward(u.pos, target.pos, speed * dt)
-      // 쫓아갈 때는 자기 칸을 벗어나지 않는다. 다리를 건너 흩어지면
-      // 지휘 반경이 의미를 잃는다.
-      u.pos = this.board.clampToLand(u.tile, next)
+      // 쫓아갈 때도 물에는 안 들어간다. 해안에 비스듬히 부딪히면 미끄러진다.
+      u.pos = this.board.slide(u.pos, next)
       return
     }
 
@@ -801,7 +799,8 @@ export class Game {
       return
     }
     u.destTile = destTile
-    u.path = this.board.route(u.tile, destTile, finalPoint)
+    // 지역 중심이 물일 수 있으므로 대표점을 쓴다(`Board.anchor`).
+    u.path = this.board.route(u.pos, finalPoint ?? this.board.anchor(destTile))
   }
 
   private advance(u: Unit, dt: number): void {
@@ -1038,10 +1037,12 @@ export class Game {
     return CENTER
   }
 
-  /** 아바타가 서 있는 칸 안에서의 상대 위치(0~1). 미니맵용. */
+  /** 맵 안에서의 상대 위치(-1~1). 미니맵용. */
   normalized(p: Vec2): Vec2 {
-    const half = (this.board.defs.length ** 0.5 * TILE_LAND) / 2
-    return { x: clamp(p.x / half, -1, 1), z: clamp(p.z / half, -1, 1) }
+    return {
+      x: clamp(p.x / (MAP_W / 2), -1, 1),
+      z: clamp(p.z / (MAP_H / 2), -1, 1),
+    }
   }
 
   /** 정규화된 방향 벡터를 만든다. 입력 처리에서 쓴다. */

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { Rng } from '../core/rng'
-import { TILE_LAND } from '../data/fjord'
+import { REGION } from '../data/land'
 import type { Game } from '../game/Game'
 import { bakeGround, bakeGroundNormals, GROUND_EXTENT } from './ground'
 import { C } from './palette'
@@ -61,7 +61,7 @@ export class World {
   private water: Water | null = null
 
   constructor(game: Game, seed: number, sky: THREE.Texture) {
-    this.terrain = new Terrain(game.board.defs, seed)
+    this.terrain = new Terrain(game.board.land, seed)
     for (const d of game.board.defs) {
       const g = new THREE.Group()
       this.tileGroups.set(d.id, g)
@@ -200,11 +200,11 @@ export class World {
   /** 롱하우스 — 긴 몸통 위에 삼각 지붕. 프리미티브 셋이면 충분히 읽힌다. */
   private buildKeeps(game: Game): void {
     for (const p of game.players) {
-      const d = game.board.defs[p.keepTile]!
+      // 지역 중심이 물일 수 있으므로 대표점 위에 세운다(`Board.anchor`).
+      const d = game.board.anchor(p.keepTile)
       const g = new THREE.Group()
       g.position.set(d.x, this.terrain.heightAt(d.x, d.z), d.z)
-      // 칸 한 변이 28인데 예전에는 롱하우스가 15×12였다 — 1인칭으로 내려가면
-      // 시야를 통째로 막았다. 칸의 3분의 1을 넘지 않게 줄인다.
+      // 1인칭으로 내려가면 시야를 통째로 막던 크기라 줄여 뒀다.
       g.scale.setScalar(0.62)
 
       const wallGeo = new THREE.BoxGeometry(15, 5.2, 8)
@@ -263,13 +263,16 @@ export class World {
 
     for (const d of game.board.defs) {
       const isKeep = keeps.has(d.id)
-      const trees = isKeep ? 3 : 7
-      const half = TILE_LAND / 2 - 2
+      // 지역이 넓어졌으므로 나무도 늘린다. 예전 밀도로 두면 벌판이 된다.
+      const trees = isKeep ? 8 : 22
+      const half = REGION / 2 - 2
       for (let i = 0; i < trees; i++) {
         const x = d.x + rng.range(-half, half)
         const z = d.z + rng.range(-half, half)
-        // 칸 한가운데는 비워 둔다 — 부대가 모이고 싸우는 자리다.
-        if (Math.hypot(x - d.x, z - d.z) < 6) continue
+        // 물에는 안 심는다. 지역이 물을 걸치고 있을 수 있다.
+        if (!game.board.land.walkableAt({ x, z })) continue
+        // 지역 한가운데는 비워 둔다 — 부대가 모이고 싸우는 자리다.
+        if (Math.hypot(x - d.x, z - d.z) < 8) continue
         const s = rng.range(0.75, 1.25)
         // 나무는 제가 선 자리의 높이 위에 선다. 이걸 빼면 언덕에 심은 나무가
         // 허리까지 땅에 묻힌다.

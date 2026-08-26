@@ -1,6 +1,5 @@
 import { Rng } from '../core/rng'
-import { COLS, ROWS, TILE_LAND, type TileDef } from '../data/fjord'
-import { TILE } from '../data/tuning'
+import { MAP_H, MAP_W, REGION, type RegionDef } from '../data/land'
 import { C, hex } from './palette'
 import type { Terrain } from './terrain'
 
@@ -25,8 +24,13 @@ import type { Terrain } from './terrain'
  * 성긴 격자에 한 번 재 두고 그 사이를 보간해서 쓴다.
  */
 
-/** 텍스처가 덮는 월드 범위. 맵 바깥 여백까지 포함한다. */
-export const GROUND_EXTENT = TILE * (Math.max(COLS, ROWS) - 1) / 2 + TILE_LAND / 2 + 26
+/**
+ * 텍스처가 덮는 월드 범위. 맵 바깥 여백까지 포함한다.
+ *
+ * 맵이 가로로 길어졌지만(300×180) 텍스처는 정사각형으로 둔다. 긴 쪽에 맞추면
+ * 짧은 쪽에 바다가 더 들어갈 뿐이고, 어차피 그 바깥은 전부 바다다.
+ */
+export const GROUND_EXTENT = Math.max(MAP_W, MAP_H) / 2 + 30
 
 const PX = 1024
 
@@ -37,7 +41,7 @@ const NORMAL_PX = 512
 const HGRID = 128
 
 export function bakeGround(
-  tiles: TileDef[],
+  regions: RegionDef[],
   seed: number,
   terrain: Terrain,
 ): HTMLCanvasElement {
@@ -140,11 +144,11 @@ export function bakeGround(
   }
   g.putImageData(img, 0, 0)
 
-  // ── 얼룩. 아홉 칸이 서로 복사본으로 안 보이게 하는 것은 이쪽 몫이다.
-  for (const t of tiles) {
+  // ── 얼룩. 지역이 서로 복사본으로 안 보이게 하는 것은 이쪽 몫이다.
+  for (const t of regions) {
     const cx = toPx(t.x)
     const cy = toPx(t.z)
-    const half = (TILE_LAND / 2) * scale
+    const half = (REGION / 2) * scale
     for (let i = 0; i < 34; i++) {
       const a = rng.range(0, Math.PI * 2)
       const r = rng.range(0, half * 0.95)
@@ -169,73 +173,9 @@ export function bakeGround(
     g.globalAlpha = 1
   }
 
-  // ── 다리. 이웃한 칸을 잇는 널판.
-  for (const a of tiles) {
-    for (const b of tiles) {
-      if (b.id <= a.id) continue
-      const sameRow = a.row === b.row && Math.abs(a.col - b.col) === 1
-      const sameCol = a.col === b.col && Math.abs(a.row - b.row) === 1
-      if (!sameRow && !sameCol) continue
-      // 널판은 **물 위만** 덮는다. 칸 중심에서 중심까지 그으면 다리가 아니라
-      // 섬을 가로지르는 흙길이 되어, 애써 칠한 풀밭을 갈색 띠가 관통한다.
-      const cut = (TILE_LAND / 2 - 2.5) / TILE
-      const ax = a.x + (b.x - a.x) * cut
-      const az = a.z + (b.z - a.z) * cut
-      const bx = b.x - (b.x - a.x) * cut
-      const bz = b.z - (b.z - a.z) * cut
-      drawBridge(g, toPx(ax), toPx(az), toPx(bx), toPx(bz), scale)
-    }
-  }
-
   return cv
 }
 
-function drawBridge(
-  g: CanvasRenderingContext2D,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  scale: number,
-): void {
-  const w = 5.6 * scale
-  g.save()
-  g.translate((ax + bx) / 2, (ay + by) / 2)
-  g.rotate(Math.atan2(by - ay, bx - ax))
-  const len = Math.hypot(bx - ax, by - ay)
-
-  g.fillStyle = hex(C.plankDark)
-  g.fillRect(-len / 2, -w / 2 - 1.5, len, w + 3)
-  g.fillStyle = hex(C.plank)
-  g.fillRect(-len / 2, -w / 2, len, w)
-
-  // 널판 이음매. 다리라는 것이 한눈에 읽히게 하는 유일한 디테일이다.
-  g.strokeStyle = hex(C.plankDark)
-  g.lineWidth = 1.4
-  const step = 7 * scale
-  for (let x = -len / 2 + step; x < len / 2; x += step) {
-    g.beginPath()
-    g.moveTo(x, -w / 2)
-    g.lineTo(x, w / 2)
-    g.stroke()
-  }
-  g.restore()
-}
-
-/**
- * 구운 색에서 법선맵을 뽑는다.
- *
- * 지형 메시가 주는 굴곡은 격자 한 칸(약 1.2)보다 잘게는 못 간다. 풀결·자갈·
- * 널판 이음새 같은 잔 요철은 메시로 못 만들고, 그게 없으면 가까이서 봤을 때
- * 땅이 다시 매끈한 판이 된다.
- *
- * 따로 그리지 않고 **이미 칠한 그림의 밝기 변화**를 높이로 읽는다. 그러면
- * 바위 얼룩이 있는 자리에 정확히 요철이 생기고, 널판 이음매가 실제로 파인
- * 홈이 된다 — 두 그림이 어긋날 수가 없다.
- *
- * 큰 그라디언트는 걱정하지 않아도 된다. 이웃 픽셀과의 차이를 보는 방식이라
- * 완만한 변화는 애초에 거의 0으로 떨어진다.
- */
 export function bakeGroundNormals(src: HTMLCanvasElement): HTMLCanvasElement {
   const n = NORMAL_PX
   const small = document.createElement('canvas')

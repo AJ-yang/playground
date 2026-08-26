@@ -115,13 +115,13 @@ export class Ai {
     const target = this.chooseTarget()
     if (target < 0) return
     const g = this.game
-    const d = g.board.defs[target]!
-    g.setRally(this.side, { x: d.x, z: d.z })
+    // 지역 중심이 물일 수 있으므로 대표점을 쓴다(`Board.anchor`).
+    const goal = g.board.anchor(target)
+    g.setRally(this.side, goal)
 
     if (target !== this.targetTile) {
       this.targetTile = target
-      const from = g.board.tileAt(g.players[this.side].avatar.pos)
-      this.route = g.board.route(from, target)
+      this.route = g.board.route(g.players[this.side].avatar.pos, goal)
     }
   }
 
@@ -212,8 +212,7 @@ export class Ai {
     const a = g.players[this.side].avatar
     if (this.targetTile < 0) return
 
-    const goal = g.board.defs[this.targetTile]!
-    const goalPoint = { x: goal.x, z: goal.z }
+    const goalPoint = g.board.anchor(this.targetTile)
 
     // 다 왔으면 올라와서 자리를 지킨다.
     if (dist(a.pos, goalPoint) < TUNING.commandRadius * 0.45) {
@@ -224,7 +223,7 @@ export class Ai {
     }
 
     if (this.route.length === 0) {
-      this.route = g.board.route(g.board.tileAt(a.pos), this.targetTile)
+      this.route = g.board.route(a.pos, goalPoint)
     }
     const next = this.route[0]
     if (!next) return

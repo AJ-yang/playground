@@ -11,14 +11,14 @@ namespace Chieftain.Core
     public static class Tuning
     {
         /// <summary>타일 한 칸의 한 변 길이(월드 단위).</summary>
-        public const double TILE = 34;
+        public const double TILE = LandMap.Region;
 
         /// <summary>지휘 반경 (GDD 3.1). 한 칸보다 크고 두 칸보다 작다.</summary>
-        public const double CommandRadius = TILE * 0.62;
+        public const double CommandRadius = TILE * 0.5;
 
         /// <summary>부감 이동 명령 속도. 강림의 유일한 유인이 이 둘의 비율이다.</summary>
-        public const double AvatarSpeedCommanded = 7.0;
-        public const double AvatarSpeedDriven = 15.4;
+        public const double AvatarSpeedCommanded = 10.5;
+        public const double AvatarSpeedDriven = 23.1;
 
         public const double LookSensitivity = 0.0022;
 
@@ -52,10 +52,10 @@ namespace Chieftain.Core
 
         public const double KeepHp = 900;
 
-        public const double VisionUnit = TILE * 0.42;
-        public const double VisionKeep = TILE * 0.62;
-        public const double VisionAvatar = TILE * 0.55;
-        public const double VisionOutpost = TILE * 1.15;
+        public const double VisionUnit = TILE * 0.55;
+        public const double VisionKeep = TILE * 0.8;
+        public const double VisionAvatar = TILE * 0.72;
+        public const double VisionOutpost = TILE * 1.45;
 
         public const double EndBannerDelay = 1.2;
     }

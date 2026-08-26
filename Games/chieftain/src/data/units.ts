@@ -61,7 +61,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
     // 방패병은 느리고 무겁게 친다.
     swing: 1.15,
     damageTaken: 1,
-    speed: 7.5,
+    speed: 11,
     range: 3.2,
     radius: 1.15,
     height: 3.4,
@@ -78,7 +78,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
     dps: 0,
     swing: 1,
     damageTaken: 1.3,
-    speed: 9,
+    speed: 13,
     range: 0,
     radius: 0.9,
     height: 3.0,
@@ -95,7 +95,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
     // 타격이 잦아야 그 차이가 보인다.
     swing: 0.7,
     damageTaken: 1.25,
-    speed: 10.5,
+    speed: 15,
     range: 2.6,
     radius: 1.0,
     height: 3.2,
