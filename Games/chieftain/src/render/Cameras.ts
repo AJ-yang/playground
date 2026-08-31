@@ -59,16 +59,47 @@ export class Cameras {
   /**
    * 부감 위치. 화면비에 따라 뒤로 물러난다.
    *
-   * 세로로 긴 창에서는 세로 화각이 좁아지므로 더 멀리서 봐야 아홉 칸이 다
+   * 세로로 긴 창에서는 세로 화각이 좁아지므로 더 멀리서 봐야 같은 넓이가
    * 들어온다. 이걸 안 하면 좁은 창에서 맵 위아래가 잘린다.
    */
   layout(aspect: number): void {
-    // 화면 세로에 담을 월드 거리. 유닛이 점이 되지 않는 선이 이 값의 유일한
-    // 제약이다 — 발밑 링이 보여야 지휘 반경 규칙이 전달된다(GDD 6.2).
-    const need = Cameras.VIEW_SPAN / 2
+    this.aspect = aspect
+    this.spanCap = Cameras.capFor(aspect)
+    this.viewSpan = clamp(this.viewSpan, Cameras.MIN_SPAN, this.spanCap)
+    this.overhead.aspect = aspect
+    this.overhead.updateProjectionMatrix()
+    this.first.aspect = aspect
+    this.first.updateProjectionMatrix()
+    this.rig()
+  }
+
+  /**
+   * 가장 멀리 물러설 수 있는 배율. **화면비를 따라간다.**
+   *
+   * 고정값으로 두면 넓은 창에서는 맵이 다 들어오고도 화면의 4분의 1이 바다이고,
+   * 좁은 창에서는 다 들어오지도 않는다. 맵이 딱 들어오는 배율을 구해 5%만
+   * 여유를 얹는다 — 그 너머는 바다만 넓어질 뿐이다.
+   *
+   * `viewSpan`은 화면의 **짧은 쪽**에 담는 거리라 화면비를 기준으로 갈린다
+   * (`rig`가 `need`를 어느 축에 걸지 정하는 것과 같은 갈림이다).
+   */
+  private static capFor(aspect: number): number {
+    const fit =
+      aspect >= 1
+        ? Math.max(MAP_H, MAP_W / aspect)
+        : Math.max(MAP_W, MAP_H * aspect)
+    return fit * 1.05
+  }
+
+  /**
+   * 지금 배율과 화면비로 부감 카메라의 높이·거리, 그리고 초점이 갈 수 있는
+   * 범위를 다시 잡는다. 배율이 바뀌거나 창이 바뀌면 부른다.
+   */
+  private rig(): void {
+    const need = this.viewSpan / 2
     const vFov = (this.overhead.fov * Math.PI) / 180
     const hFit = need / Math.tan(vFov / 2)
-    const wFit = need / (Math.tan(vFov / 2) * aspect)
+    const wFit = need / (Math.tan(vFov / 2) * this.aspect)
     const d = Math.max(hFit, wFit)
 
     // 45도보다 눕히면 앞쪽이 뒤쪽을 가린다. 60도쯤이 균형점이다.
@@ -76,15 +107,92 @@ export class Cameras {
     this.lift = Math.sin(tilt) * d
     this.back = Math.cos(tilt) * d
 
-    this.overhead.aspect = aspect
-    this.overhead.updateProjectionMatrix()
-    this.first.aspect = aspect
-    this.first.updateProjectionMatrix()
+    // 지금 화면에 실제로 담기는 절반 크기. 화면비가 1을 넘으면 `need`가 세로,
+    // 넘지 않으면 가로가 되므로 두 축을 따로 구한다.
+    this.halfH = d * Math.tan(vFov / 2)
+    this.halfW = this.halfH * this.aspect
+
+    this.clampFocus()
     this.placeOverhead()
   }
 
-  /** 화면 세로에 담는 월드 거리. */
-  private static readonly VIEW_SPAN = 168
+  /**
+   * 초점을 맵 안쪽으로 되돌린다.
+   *
+   * **화면 끝이 맵 끝에 닿으면 멈춘다.** 예전에는 초점만 ±맵 절반으로 잘라서,
+   * 끝까지 밀면 화면의 절반 넘게가 빈 바다였다 — 가장자리 스크롤이 생기면서
+   * 그 자리에 닿기가 너무 쉬워졌고, 배율을 줄이면 판이 통째로 화면 밖으로
+   * 나갈 수도 있다.
+   *
+   * 딱 맞게 자르지는 않는다. `OVERSCROLL`만큼 여유를 둬서 해안선이 화면
+   * 가장자리에 붙지 않게 한다 — 가장 바깥 지역에서 싸울 때 그 부대가 화면
+   * 맨 끝에 걸리면 보고 있기가 어렵다.
+   *
+   * 화면이 맵보다 넓어지면(많이 줄였을 때) 갈 곳이 없으므로 한가운데로 묶인다.
+   */
+  private clampFocus(): void {
+    const limitX = Math.max(0, MAP_W / 2 - this.halfW * (1 - Cameras.OVERSCROLL))
+    const limitZ = Math.max(0, MAP_H / 2 - this.halfH * (1 - Cameras.OVERSCROLL))
+    this.focusX = clamp(this.focusX, -limitX, limitX)
+    this.focusZ = clamp(this.focusZ, -limitZ, limitZ)
+  }
+
+  /**
+   * 배율을 바꾼다. `notches`가 양수면 멀어지고 음수면 가까워진다.
+   *
+   * 더하지 않고 **곱한다.** 가까이서 한 칸이 멀리서 한 칸과 같은 비율로
+   * 느껴져야 하는데, 더하면 가까울수록 한 칸이 거칠어진다.
+   *
+   * 바뀌었으면 true. 초점을 커서 아래에 붙들어 두려면 부르는 쪽이 바꾸기 전후의
+   * 지면 좌표를 재야 하는데, 안 바뀌었으면 그 일이 통째로 헛돈다.
+   */
+  zoomBy(notches: number): boolean {
+    const next = clamp(
+      this.viewSpan * Math.pow(Cameras.ZOOM_STEP, notches),
+      Cameras.MIN_SPAN,
+      this.spanCap,
+    )
+    if (next === this.viewSpan) return false
+    this.viewSpan = next
+    this.rig()
+    return true
+  }
+
+  /** 초점을 그만큼 옮긴다. 배율을 바꾼 뒤 커서 아래를 붙들 때 쓴다. */
+  nudge(dx: number, dz: number): void {
+    this.focusX += dx
+    this.focusZ += dz
+    this.clampFocus()
+    this.placeOverhead()
+  }
+
+  /**
+   * 화면의 짧은 쪽에 담는 월드 거리. 배율이 이 값 하나다.
+   *
+   * 기본값 168은 유닛이 점이 되지 않는 선에서 잡았다 — 발밑 링이 보여야 지휘
+   * 반경 규칙이 전달된다(GDD 6.2). 아래위로 열어 두되, 멀어지는 쪽은 맵이 딱
+   * 들어오는 데까지만 간다(`capFor`). 더 가면 유닛이 먼지가 되어 화면이
+   * 미니맵의 못생긴 사본이 된다.
+   */
+  private static readonly DEFAULT_SPAN = 168
+  private static readonly MIN_SPAN = 70
+  private viewSpan = Cameras.DEFAULT_SPAN
+  /** 지금 화면비에서 가장 멀리 물러설 수 있는 배율. `layout`이 정한다. */
+  private spanCap = Cameras.DEFAULT_SPAN
+  /**
+   * 휠 한 칸의 배율.
+   *
+   * 1.12로 잡았더니 기본에서 상한까지 세 칸이라 한 번 굴리면 끝까지 튀었다.
+   * 1.08이면 하한에서 상한까지 열여섯 칸쯤 되어 손으로 고를 수 있다.
+   */
+  private static readonly ZOOM_STEP = 1.08
+  /** 맵 밖으로 내다볼 수 있는 여유. 화면 절반 크기에 대한 비율이다. */
+  private static readonly OVERSCROLL = 0.2
+
+  /** 지금 화면에 담기는 절반 크기. `rig`가 정한다. */
+  private halfW = 0
+  private halfH = 0
+  private aspect = 1
 
   /** 부감 카메라를 지금 겨누는 곳에 맞춰 세운다. */
   placeOverhead(): void {
@@ -95,8 +203,9 @@ export class Cameras {
 
   /** 그 점으로 화면을 옮긴다. 미니맵 좌클릭과 승천이 쓴다. */
   lookAtPoint(p: Vec2): void {
-    this.focusX = clamp(p.x, -MAP_W / 2, MAP_W / 2)
-    this.focusZ = clamp(p.z, -MAP_H / 2, MAP_H / 2)
+    this.focusX = p.x
+    this.focusZ = p.z
+    this.clampFocus()
     this.placeOverhead()
   }
 
@@ -105,9 +214,14 @@ export class Cameras {
     return { x: this.focusX, z: this.focusZ }
   }
 
-  /** 화면 세로에 담기는 월드 거리. 미니맵의 사각형 크기가 여기서 나온다. */
+  /** 화면에 담기는 월드 거리. 미니맵의 사각형 크기가 여기서 나온다. */
   get span(): number {
-    return Cameras.VIEW_SPAN
+    return this.viewSpan
+  }
+
+  /** 기본 배율에 대한 비율. 1이면 기본, 크면 멀리서 본다. 안개가 이걸 따라간다. */
+  get zoom(): number {
+    return this.viewSpan / Cameras.DEFAULT_SPAN
   }
 
   /**
@@ -128,9 +242,13 @@ export class Cameras {
       dx /= len
       dz /= len
     }
-    const SPEED = 150
-    this.focusX = clamp(this.focusX + dx * SPEED * dt, -MAP_W / 2, MAP_W / 2)
-    this.focusZ = clamp(this.focusZ + dz * SPEED * dt, -MAP_H / 2, MAP_H / 2)
+    // 미는 속도는 **배율을 따라간다.** 화면에 담긴 넓이에 대해 같은 비율로
+    // 움직여야 가까이서도 멀리서도 같은 손맛이 난다. 고정 속도로 두면 많이
+    // 당겼을 때 판이 총알처럼 튀고, 많이 줄였을 때는 기어간다.
+    const speed = 150 * (this.viewSpan / Cameras.DEFAULT_SPAN)
+    this.focusX += dx * speed * dt
+    this.focusZ += dz * speed * dt
+    this.clampFocus()
     this.placeOverhead()
   }
 

@@ -380,6 +380,38 @@ function rallyAhead(s: Session): void {
   else s.game.setRally(HUMAN, point)
 }
 
+/**
+ * 휠로 배율을 바꾼다.
+ *
+ * **커서 아래의 땅을 붙들어 둔다.** 화면 한가운데를 기준으로 당기면, 보려던
+ * 자리가 당길수록 화면 밖으로 밀려나서 밀고 당기기를 번갈아 해야 한다. 바꾸기
+ * 전후로 커서가 짚는 지면 좌표를 재서 그 차이만큼 초점을 되민다 — 손가락으로
+ * 지도를 짚고 당기는 것과 같은 느낌이 된다.
+ *
+ * `passive: false`로 붙이고 `preventDefault`를 부른다. 안 그러면 Ctrl+휠이
+ * 브라우저 자체를 확대해 게임 위에 얹힌다.
+ *
+ * 1인칭에서는 아무 일도 안 한다 — 거기서 화각을 건드리면 걸어 들어간 사람의
+ * 눈이 아니라 망원경이 된다.
+ */
+addEventListener(
+  'wheel',
+  (e) => {
+    const s = session
+    if (!s || s.firstPerson) return
+    e.preventDefault()
+    // deltaY의 크기는 장치마다 제멋대로다(픽셀·줄·페이지). 방향만 쓴다.
+    const notches = Math.sign(e.deltaY)
+    if (notches === 0) return
+    const before = s.cameras.screenToGround(pointer.x, pointer.y, innerWidth, innerHeight)
+    if (!s.cameras.zoomBy(notches)) return
+    if (!before) return
+    const after = s.cameras.screenToGround(pointer.x, pointer.y, innerWidth, innerHeight)
+    if (after) s.cameras.nudge(before.x - after.x, before.z - after.z)
+  },
+  { passive: false },
+)
+
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault())
 
 renderer.domElement.addEventListener('mousedown', (e) => {
@@ -631,7 +663,7 @@ const loop = new GameLoop({
       s.actors.aimAt(null, false)
     }
 
-    applyFog(s.scene, s.firstPerson)
+    applyFog(s.scene, s.firstPerson, s.cameras.zoom)
     s.world.sync(s.game, HUMAN)
     // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
     s.actors.sync(s.game, HUMAN, s.firstPerson, cam, dt)
@@ -658,12 +690,22 @@ const loop = new GameLoop({
  * 없고, 1인칭이 멀쩡하면 부감에서 맵 전체가 뿌예진다. 그래서 시점이 바뀔 때
  * 거리만 갈아 끼운다. 색은 지평선 하나로 공유한다.
  */
+/**
+ * 부감 안개. **배율을 곱해서 쓴다**(`applyFog`).
+ *
+ * 이 두 값은 기본 배율에서 카메라가 판까지 219쯤 떨어져 있다는 전제로 잡혔다.
+ * 멀리 당기면 그 거리가 313까지 늘어나는데, 고정해 두면 판 전체가 하늘색으로
+ * 씻겨 나가 미니맵만 남는다. 거리에 비례해 밀면 어느 배율에서나 같은 정도의
+ * 아지랑이가 걸린다.
+ */
 const FOG_OVERHEAD: readonly [number, number] = [170, 400]
 const FOG_FIRST: readonly [number, number] = [45, 165]
 
-function applyFog(scene: THREE.Scene, firstPerson: boolean): void {
+function applyFog(scene: THREE.Scene, firstPerson: boolean, zoom: number): void {
   const fog = scene.fog as THREE.Fog
-  const [near, far] = firstPerson ? FOG_FIRST : FOG_OVERHEAD
+  const [near, far] = firstPerson
+    ? FOG_FIRST
+    : ([FOG_OVERHEAD[0] * zoom, FOG_OVERHEAD[1] * zoom] as const)
   fog.near = near
   fog.far = far
 }
