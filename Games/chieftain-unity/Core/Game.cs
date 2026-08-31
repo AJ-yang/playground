@@ -242,7 +242,9 @@ namespace Chieftain.Core
                 // 일꾼은 집결 명령을 안 듣는다. 부대와 같이 전선으로 걸어가면
                 // 그냥 죽으러 가는 것이고, 그러면 아무도 일꾼을 안 뽑는다.
                 if (Units_Def(u.Kind).Civilian) continue;
-                if (u.Ordered) continue;
+                // **집결 지점이 명령을 푼다.** 우클릭으로 세워 둔 부대를 다시
+                // 자율 판단으로 돌려보낼 유일한 길이다.
+                u.Ordered = false;
                 u.ThinkIn = 0;
                 Repath(u, tile, p.Rally);
             }
@@ -393,6 +395,9 @@ namespace Chieftain.Core
             int tileId = Board.TileAt(p.Avatar.Pos);
             var tile = Board.At(tileId);
 
+            // **몸이 있어야 짓는다.** 없으면 아바타가 마지막에 서 있던 자리로
+            // 판정이 나서 거절 사유가 실제 이유와 달라진다(GDD 4.4).
+            if (!p.Avatar.Embodied) return Deny(side, "강림해서 그 자리에 서야 짓는다");
             if (tileId == p.KeepTile) return Deny(side, "본진에는 못 짓는다");
             if (tile.Owner != side) return Deny(side, "내 땅에서만 짓는다");
             foreach (var b in Buildings)
@@ -909,8 +914,9 @@ namespace Chieftain.Core
             if (Det.Dist(u.Pos, next) < 0.5)
             {
                 u.Path.RemoveAt(0);
-                // 다 왔으면 명령이 끝난 것이다.
-                if (u.Path.Count == 0) u.Ordered = false;
+                // **도착해도 명령을 풀지 않는다.** 풀면 자율 판단이 깨어나
+                // 집결 지점으로 돌아가고, 그러면 점령한 땅을 지킬 수가 없다.
+                // 푸는 것은 새 우클릭이거나 새 집결 지점이다(SetRally).
             }
         }
 

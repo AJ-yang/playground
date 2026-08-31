@@ -208,8 +208,10 @@ export class Banner {
         <p>내가 어디 서 있느냐가 전투력이다.</p>
         <button id="start">시작</button>
         <div class="keys">
-          <div><b>Tab</b> — 내 몸으로 들어간다</div>
-          <div><b>좌클릭</b> 부대 / <b>우클릭</b> 나 / <b>1</b>·<b>2</b> 병력 / <b>3</b> 기지</div>
+          <div><b>좌클릭</b> 고른다 <span class="dim">(끌면 여럿)</span> / <b>우클릭</b> 그리로 보낸다</div>
+          <div><b>1</b> 방패병 · <b>2</b> 도끼병 · <b>4</b> 일꾼</div>
+          <div><b>WASD</b> · 커서를 화면 끝에 · <b>휠</b> — 화면을 옮기고 당긴다</div>
+          <div><b>Tab</b> — 강림할 곳을 짚는다. 내려가면 <b>3</b>으로 기지를 짓는다</div>
         </div>
       </div>
     `
