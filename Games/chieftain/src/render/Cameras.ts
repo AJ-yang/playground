@@ -111,13 +111,23 @@ export class Cameras {
   }
 
   /**
-   * 부감을 손으로 민다. `dx`·`dz`는 정규화된 화면 방향, `dt`는 프레임 간격.
+   * 부감을 손으로 민다. `dx`·`dz`는 화면 방향, `dt`는 프레임 간격.
    *
    * 돌아오지 않는다. 신이 판 밖으로 나간 지금 "돌아갈 곳"이 없고, 미니맵이
    * 판 전체를 보여 주므로 화면을 잃어버릴 걱정도 없다.
+   *
+   * **길이가 1을 넘으면 잘라 낸다.** 키보드와 화면 가장자리가 같은 프레임에
+   * 같은 방향을 밀 수 있는데(왼쪽 키를 누른 채 커서를 왼쪽 끝에 두면 그렇다),
+   * 그냥 더하면 그 순간만 두 배로 빨라진다. 부르는 쪽마다 따로 맞추게 두면
+   * 언젠가 하나가 빠지므로 여기서 못 박는다.
    */
   panOverhead(dx: number, dz: number, dt: number): void {
     if (dx === 0 && dz === 0) return
+    const len = Math.sqrt(dx * dx + dz * dz)
+    if (len > 1) {
+      dx /= len
+      dz /= len
+    }
     const SPEED = 150
     this.focusX = clamp(this.focusX + dx * SPEED * dt, -MAP_W / 2, MAP_W / 2)
     this.focusZ = clamp(this.focusZ + dz * SPEED * dt, -MAP_H / 2, MAP_H / 2)
