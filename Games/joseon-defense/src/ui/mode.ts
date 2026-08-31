@@ -42,7 +42,10 @@ export function modeBanner(game: Game): ModeBanner {
     return {
       mode: 'inspect',
       title: `조회 중 · ${tower.def.name} Lv.${tower.level}`,
-      hint: '옆 창에서 강화·철수',
+      // 정보창이 우측 패널에서 판 위 기물 옆으로 옮겨졌는데 이 안내문만
+      // 「옆 창에서」로 남아, 읽은 사람이 오른쪽 패널을 뒤졌다
+      // (PLAYTEST 2회차 막힌 곳 10). 안내는 창이 실제로 있는 곳을 가리킨다.
+      hint: '기물 옆 정보창에서 강화·철수',
       cancel: { id: 'closeTowerBanner', label: '닫기 (Esc)' },
       blocked: false,
     }
@@ -57,4 +60,35 @@ export function modeBanner(game: Game): ModeBanner {
     cancel: null,
     blocked: false,
   }
+}
+
+/**
+ * Esc가 **지금** 하는 일.
+ *
+ * 한 표현은 한 규칙만 나른다(GDD 8.0). Esc는 「지금 열려 있는 것을 닫는다」
+ * 하나만 한다 — 확인창 · 배치 모드 · 정보창. 판을 버리는 것은 되돌릴 수 없는
+ * 조작이라 다른 키(Q·R)로 가른다.
+ *
+ * 2회차에 이 둘이 같은 키였다. 배치를 취소하려고 누른 Esc가 「판을 버릴까요?」를
+ * 띄웠고, 그것을 못 본 사람이 7분 동안 뒤에서 버튼을 눌렀다
+ * (PLAYTEST 2회차 막힌 곳 9).
+ *
+ * 그리는 쪽·입력 쪽·조작 훅이 같은 답을 쓰도록 여기 한 곳에서 만든다.
+ */
+export type EscapeActionId = 'closeConfirm' | 'cancelBuild' | 'closeTower' | 'none'
+
+export interface EscapeAction {
+  id: EscapeActionId
+  /** 이 상태에서 Esc를 누르면 무엇이 되는가 (훅과 화면이 같은 말을 쓴다) */
+  label: string
+}
+
+/** 닫을 것이 없을 때 Esc의 응답. 침묵은 응답이 아니다. */
+export const ESCAPE_NOTHING_NOTICE = '닫을 것이 없습니다 · 판을 나가려면 Q · 다시 하려면 R'
+
+export function escapeAction(game: Game, confirmOpen: boolean): EscapeAction {
+  if (confirmOpen) return { id: 'closeConfirm', label: '확인창 닫기 (계속하기)' }
+  if (game.selectedBuildId) return { id: 'cancelBuild', label: '배치 취소' }
+  if (game.selectedTower) return { id: 'closeTower', label: '정보창 닫기' }
+  return { id: 'none', label: ESCAPE_NOTHING_NOTICE }
 }

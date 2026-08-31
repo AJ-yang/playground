@@ -11,6 +11,7 @@ import { StageSelect } from './ui/StageSelect'
 import { TitleScreen } from './ui/TitleScreen'
 import { computeLayout, hitTest } from './ui/layout'
 import { NoticeBox, type ConfirmPrompt } from './ui/feedback'
+import { ESCAPE_NOTHING_NOTICE, escapeAction } from './ui/mode'
 import { installPlaytest } from './ui/playtest'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement | null
@@ -62,9 +63,35 @@ let firstFrameDrawn = false
 const notices = new NoticeBox()
 /** 열려 있는 확인창. 떠 있는 동안 판은 멈추고 다른 조작은 막힌다. */
 let confirmPrompt: ConfirmPrompt | null = null
+/** 이번 조작이 사유를 남겼는가. `settle()`이 이것만 보고 판단한다. */
+let notified = false
 
 function notify(text: string, at: { x: number; y: number } | null = null): void {
   notices.show(text, 'fail', at)
+  notified = true
+}
+
+/**
+ * 조작 하나가 끝났다 — 화면의 쪽지를 **지금** 것으로 맞춘다.
+ *
+ * 쪽지는 「직전 조작의 결과」 하나만 나른다. 실패면 사유가 그 자리에 뜨고,
+ * 성공이면 앞의 실패 쪽지가 내려간다. 2회차에 배치가 성공했는데도 골드가
+ * 줄고 기물이 늘어난 화면 위에 빨간 「지형이 막혀 있습니다」가 그대로
+ * 남아 있었다(PLAYTEST 2회차 막힌 곳 8) — 화면이 지나간 사건을 보여주고
+ * 있었던 것이다.
+ *
+ * 조작 처리를 감싸는 자리에서만 부른다. 인식되지 않은 키는 조작이 아니므로
+ * 쪽지를 건드리지 않는다.
+ */
+function settle(): void {
+  if (!notified) notices.clear()
+}
+
+/** 조작 하나를 처리한다. `run`이 실패 사유를 남기지 않았으면 쪽지를 내린다. */
+function act(run: () => void): void {
+  notified = false
+  run()
+  settle()
 }
 
 const loop = new GameLoop({
@@ -121,7 +148,7 @@ function drawFrame(): void {
   hud.drawResultActions(game, nextStage() !== null, resultBottom)
 }
 
-/** 플레이 화면 상단 좌측의 스테이지 표시와 나가기 버튼. */
+/** 플레이 화면 좌상단의 스테이지 표시. */
 function drawPlayChrome(): void {
   // 스테이지 이름은 상단 바가 이미 꽉 차 있어 보드 좌상단에 얹는다.
   const x = layout.board.x + 10
@@ -258,11 +285,14 @@ canvas.addEventListener('mouseleave', () => {
 })
 
 canvas.addEventListener('contextmenu', (event) => {
-  // 우클릭은 배치 취소 / 선택 해제로 쓴다.
+  // 우클릭은 배치 취소 / 선택 해제로 쓴다. Esc와 같은 규칙(열린 것을 닫는다)이다.
   event.preventDefault()
   if (confirmPrompt) return
-  game.selectBuild(null)
-  game.selectedTower = null
+  if (!game.selectedBuildId && !game.selectedTower) return
+  act(() => {
+    game.selectBuild(null)
+    game.selectedTower = null
+  })
 })
 
 canvas.addEventListener('mousedown', (event) => {
@@ -294,30 +324,38 @@ canvas.addEventListener('mousedown', (event) => {
     // **못 눌리는 버튼도 이유를 말한다.** 눌러도 아무 일이 없는 것이 침묵의
     // 절반이었다 — 골드가 모자라 회색이 된 강화 버튼과 "게임 종료"로 바뀐
     // 웨이브 버튼이 그랬다.
-    if (button.enabled) handleUiButton(button.id, button.payload)
-    else notify(disabledReason(button.id), { x: button.x + button.w / 2, y: button.y })
+    act(() => {
+      if (button.enabled) handleUiButton(button.id, button.payload)
+      else notify(disabledReason(button.id), { x: button.x + button.w / 2, y: button.y })
+    })
     return
   }
 
-  // 확인창이 떠 있으면 판 위 클릭은 통과시키지 않는다.
-  if (confirmPrompt) return
+  // 확인창이 떠 있으면 판 위 클릭은 통과시키지 않는다. 다만 조용히 삼키지는
+  // 않는다 — 뒤에서 아무 버튼이나 누르던 사람이 7분을 잃은 자리다.
+  if (confirmPrompt) {
+    act(() => notify('먼저 확인창에 답해 주세요', { x, y }))
+    return
+  }
 
   const tile = boardTileAt(x, y)
   if (tile) {
-    const at = {
-      x: layout.board.x + (tile.x + 0.5) * TILE_SIZE,
-      y: layout.board.y + (tile.y + 0.5) * TILE_SIZE,
-    }
-    const onTower = game.grid.towerIdAt(tile.x, tile.y) !== undefined
-    const hadSelection = game.selectedTower !== null
-    const result = game.clickTile(tile.x, tile.y)
-    if (result && !result.ok) {
-      // `BuildResult`가 이미 만들고 있던 사유를 화면에 잇는다.
-      notify(result.reason, at)
-    } else if (!result && !onTower && !game.selectedBuildId && !hadSelection) {
-      // 아무것도 선택하지 않은 상태의 클릭도 실패다.
-      notify('먼저 병종을 고르세요', at)
-    }
+    act(() => {
+      const at = {
+        x: layout.board.x + (tile.x + 0.5) * TILE_SIZE,
+        y: layout.board.y + (tile.y + 0.5) * TILE_SIZE,
+      }
+      const onTower = game.grid.towerIdAt(tile.x, tile.y) !== undefined
+      const hadSelection = game.selectedTower !== null
+      const result = game.clickTile(tile.x, tile.y)
+      if (result && !result.ok) {
+        // `BuildResult`가 이미 만들고 있던 사유를 화면에 잇는다.
+        notify(result.reason, at)
+      } else if (!result && !onTower && !game.selectedBuildId && !hadSelection) {
+        // 아무것도 선택하지 않은 상태의 클릭도 실패다.
+        notify('먼저 병종을 고르세요', at)
+      }
+    })
   }
 })
 
@@ -418,13 +456,26 @@ window.addEventListener('keydown', (event) => {
     return
   }
 
-  // 확인창이 떠 있는 동안은 그 창에만 답할 수 있다.
+  // 확인창이 떠 있는 동안은 그 창에만 답할 수 있다. 나머지 키는 막히되
+  // 침묵하지 않는다 — 창이 떠 있는 줄 모르고 계속 누르던 자리다.
   if (confirmPrompt) {
-    if (event.key === 'Escape') resolveConfirm(false)
-    else if (event.key === 'Enter') resolveConfirm(true)
+    if (event.key === 'Escape') act(() => resolveConfirm(false))
+    else if (event.key === 'Enter') act(() => resolveConfirm(true))
+    else if (event.key.length === 1) act(() => notify('먼저 확인창에 답해 주세요'))
     return
   }
 
+  notified = false
+  if (runGameKey(event)) settle()
+})
+
+/**
+ * 플레이 화면의 키 하나를 처리한다. 인식한 키면 true.
+ *
+ * 인식하지 못한 키에 false를 돌려주는 이유는 쪽지 때문이다 — 아무 뜻도 없는
+ * 키를 누른 것은 조작이 아니므로 직전 응답을 지워서는 안 된다.
+ */
+function runGameKey(event: KeyboardEvent): boolean {
   switch (event.key.toLowerCase()) {
     case '1':
     case '2':
@@ -441,15 +492,24 @@ window.addEventListener('keydown', (event) => {
       else notify(`이번 판에 쓸 수 있는 병종은 ${menu.length}종입니다`)
       break
     }
-    case 'escape':
-      if (game.selectedBuildId || game.selectedTower) {
+    // **Esc는 「열려 있는 것을 닫는다」 하나만 한다.**
+    //
+    // 2회차까지 이 키가 두 규칙을 날랐다 — 모드 취소와 판 버리기. 배치를
+    // 취소하려고 누른 Esc가 「판을 버릴까요?」를 띄웠고, 그걸 못 본 사람이
+    // 7분 동안 뒤에서 버튼을 눌렀다(PLAYTEST 2회차 막힌 곳 9). 판을 버리는
+    // 것은 이 게임에서 유일하게 되돌릴 수 없는 조작이라, 되돌릴 수 있는
+    // 조작(취소·닫기)과 같은 키를 쓰면 안 된다. 나가기는 Q, 다시 하기는 R로
+    // 가른다 — 둘 다 화면 아래 단축키 줄에 이름이 있고 확인창을 거친다.
+    case 'escape': {
+      // 확인창은 위에서 이미 답을 받고 돌아갔으므로 여기서는 열려 있지 않다.
+      const esc = escapeAction(game, false)
+      if (esc.id === 'none') notify(ESCAPE_NOTHING_NOTICE)
+      else {
         game.selectBuild(null)
         game.selectedTower = null
-      } else {
-        // Esc 두 번이 판을 통째로 버리던 자리다. 이제 확인을 거친다.
-        askAbandon('leave')
       }
       break
+    }
     case ' ':
       event.preventDefault()
       if (game.isOver) notify('판이 이미 끝났습니다')
@@ -484,8 +544,11 @@ window.addEventListener('keydown', (event) => {
     case 'q':
       askAbandon('leave')
       break
+    default:
+      return false
   }
-})
+  return true
+}
 
 /** 선택된 기물의 화면 좌표. 기물에 대한 사유는 그 기물 옆에 뜬다. */
 function towerAnchor(): { x: number; y: number } | null {

@@ -30,7 +30,7 @@ import { TARGET_PRIORITY_LABEL, type GamePhase } from '../game/types'
 import { backdropImagesSettled } from '../render/backdropImages'
 import type { ConfirmPrompt, Notice } from './feedback'
 import type { Layout, UiButton } from './layout'
-import { modeBanner } from './mode'
+import { escapeAction, modeBanner } from './mode'
 
 export type PlaytestScreen = 'title' | 'select' | 'play'
 
@@ -242,6 +242,12 @@ export function installPlaytest(src: PlaytestSource): void {
       mode: banner.mode,
       modeLabel: banner.title,
       modeHint: banner.hint,
+      // Esc는 「열려 있는 것을 닫는다」 하나만 한다. 지금 누르면 무엇이
+      // 닫히는지가 훅에서도 읽혀야 한다 — 같은 키가 판을 버리기도 하던
+      // 때에는 화면만 보고는 알 수 없었다.
+      escape: escapeAction(game, confirm !== null),
+      // 쪽지는 **직전 조작 하나**의 결과다. 성공한 조작 뒤에 앞의 실패가
+      // 남아 있으면 안 되므로, 여기 null이 뜨는 것 자체가 응답이다.
       notice: notice ? { text: notice.text, kind: notice.kind } : null,
       confirm: confirm
         ? {

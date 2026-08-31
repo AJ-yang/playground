@@ -81,7 +81,7 @@ export class TitleScreen {
 
     ctx.font = FONT.tiny
     ctx.fillStyle = PALETTE.textDim
-    ctx.fillText('적의 체력만 달라집니다 — 웨이브 구성과 타워 수치는 동일', cx, 246)
+    ctx.fillText('적의 체력만 달라집니다 — 웨이브 구성과 기물 수치는 동일', cx, 246)
 
     const cardW = 224
     const cardH = 98

@@ -870,7 +870,7 @@ export class Renderer {
     )
     y += 22
     ctx.fillText(
-      `남은 생명 ${game.lives} / ${game.stage.startLives} · 건설한 타워 ${game.towers.length} · 누적 ${game.goldEarned}G`,
+      `남은 생명 ${game.lives} / ${game.stage.startLives} · 건설한 기물 ${game.towers.length} · 누적 ${game.goldEarned}G`,
       cx,
       y,
     )

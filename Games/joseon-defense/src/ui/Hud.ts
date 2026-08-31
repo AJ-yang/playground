@@ -65,8 +65,11 @@ export class Hud {
     this.drawPanel(game)
     this.drawModeBanner(game)
     this.drawTowerCard(game)
-    this.drawNotice(view)
     if (view.confirm) this.drawConfirm(view.confirm)
+    // 쪽지가 맨 위다. 확인창이 화면 전체를 덮으므로 그 아래에 그리면 "지금
+    // 왜 안 눌리는가"에 대한 답이 그늘에 묻힌다 — 확인창을 못 본 채 뒤에서
+    // 버튼을 계속 누르던 자리가 정확히 여기다(PLAYTEST 2회차 막힌 곳 9).
+    this.drawNotice(view)
   }
 
   // ────────────────────────────── 상단 바 ──────────────────────────────

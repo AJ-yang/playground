@@ -157,13 +157,13 @@ export class Game {
 
   tryBuild(towerId: string, col: number, row: number): BuildResult {
     if (this.isOver) return { ok: false, reason: '게임이 끝났습니다' }
-    if (!this.canUse(towerId)) return { ok: false, reason: '아직 해금되지 않은 타워입니다' }
+    if (!this.canUse(towerId)) return { ok: false, reason: '아직 해금되지 않은 기물입니다' }
     if (!this.grid.inBounds(col, row)) return { ok: false, reason: '맵 밖입니다' }
 
     const kind = this.grid.kindAt(col, row)
     if (kind === 'path') return { ok: false, reason: '경로 위에는 지을 수 없습니다' }
     if (kind === 'blocked') return { ok: false, reason: '지형이 막혀 있습니다' }
-    if (!this.grid.canBuild(col, row)) return { ok: false, reason: '이미 타워가 있습니다' }
+    if (!this.grid.canBuild(col, row)) return { ok: false, reason: '이미 기물이 있습니다' }
 
     const cost = buildCost(towerId)
     if (this.gold < cost) return { ok: false, reason: `골드가 ${cost - this.gold} 부족합니다` }
@@ -244,13 +244,13 @@ export class Game {
 
   upgradeSelected(): BuildResult {
     const tower = this.selectedTower
-    if (!tower) return { ok: false, reason: '선택된 타워가 없습니다' }
+    if (!tower) return { ok: false, reason: '선택된 기물이 없습니다' }
     return this.upgradeTower(tower)
   }
 
   sellSelected(): BuildResult {
     const tower = this.selectedTower
-    if (!tower) return { ok: false, reason: '선택된 타워가 없습니다' }
+    if (!tower) return { ok: false, reason: '선택된 기물이 없습니다' }
     return this.sellTower(tower)
   }
 
