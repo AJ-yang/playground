@@ -264,7 +264,11 @@ export class Game {
       // 일꾼은 집결 명령을 안 듣는다. 부대와 같이 전선으로 걸어가면
       // 그냥 죽으러 가는 것이고, 그러면 아무도 일꾼을 안 뽑는다.
       if (UNITS[u.kind].civilian) continue
-      if (u.ordered) continue
+      // **집결 지점이 명령을 푼다.** 우클릭으로 세워 둔 부대는 재명령 전까지
+      // 안 움직이므로(`advance`), 다시 자율 판단으로 돌려보낼 길이 하나는
+      // 있어야 한다. 집결 지점을 새로 찍는 것이 그 길이다 — 예전에는 여기서
+      // 명령받은 유닛을 건너뛰었는데, 이제는 그러면 영영 못 푼다.
+      u.ordered = false
       u.thinkIn = 0
       this.repath(u, tile, p.rally)
     }
@@ -416,6 +420,11 @@ export class Game {
     const tileId = this.board.tileAt(p.avatar.pos)
     const tile = this.board.at(tileId)
 
+    // **몸이 있어야 짓는다.** 이 검사가 없으면 부감에서 3을 눌렀을 때 아바타가
+    // 마지막으로 서 있던 자리(판 시작 시 본진)로 판정이 나서, 카메라가 어디에
+    // 있든 "본진에는 못 짓는다"가 뜬다 — 거절 사유가 실제 이유와 달라서 규칙을
+    // 못 배운다. 아바타가 거기 서 있어야 한다는 것이 이 건물의 규칙이다(GDD 4.4).
+    if (!p.avatar.embodied) return this.deny(side, '강림해서 그 자리에 서야 짓는다')
     if (tileId === p.keepTile) return this.deny(side, '본진에는 못 짓는다')
     if (tile.owner !== side) return this.deny(side, '내 땅에서만 짓는다')
     if (this.buildings.some((b) => b.tile === tileId)) {
@@ -879,9 +888,17 @@ export class Game {
     u.pos = moved
     if (dist(u.pos, next) < 0.5) {
       u.path.shift()
-      // 다 왔으면 명령이 끝난 것이다. 여기서 안 풀면 그 유닛은 판이 끝날
-      // 때까지 자율 판단을 영영 안 하고 그 자리에 서 있는다.
-      if (u.path.length === 0) u.ordered = false
+      /**
+       * **도착해도 명령을 풀지 않는다.**
+       *
+       * 예전에는 여기서 `ordered`를 껐다. 그러면 자율 판단이 다시 깨어나고,
+       * 자율 판단이 하는 일은 집결 지점으로 돌아가는 것 하나뿐이다 — 우클릭으로
+       * 보낸 부대가 도착하자마자 걸어서 집으로 돌아왔다. **점령한 땅을 지킬
+       * 수가 없었다.** 이 게임의 중심 규칙이 땅따먹기인데 그랬다.
+       *
+       * 이제 명령받은 부대는 재명령 전까지 그 자리를 지킨다. 풀어 주는 것은
+       * 새 우클릭이거나 새 집결 지점이다(`setRally`).
+       */
     }
   }
 
