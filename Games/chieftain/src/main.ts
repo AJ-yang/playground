@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { GameLoop } from './core/loop'
+import { GameLoop, MAX_FRAME_TIME } from './core/loop'
 import { norm, type Vec2 } from './core/vec2'
 import { TUNING } from './data/tuning'
 import { Ai } from './game/Ai'
@@ -230,8 +230,23 @@ function ascend(): void {
   if (document.pointerLockElement) document.exitPointerLock()
 }
 
-/** 마지막으로 본 커서 자리. 조준 원이 이걸 따라간다. */
+/** 마지막으로 본 커서 자리. 조준 원과 가장자리 스크롤이 이걸 따라간다. */
 const pointer = { x: innerWidth / 2, y: innerHeight / 2 }
+
+/**
+ * 커서가 창 안에 있는가.
+ *
+ * **가장자리 스크롤에서 이것이 없으면 화면이 영영 흘러간다.** 커서를 창 밖으로
+ * 빼거나 다른 창으로 넘어가면 `mousemove`가 끊기는데, 마지막으로 본 자리가
+ * 하필 가장자리라 판이 끝까지 밀려 버린다. 나가는 순간을 잡아서 멈춘다.
+ */
+let pointerIn = true
+document.documentElement.addEventListener('mouseleave', () => {
+  pointerIn = false
+})
+document.documentElement.addEventListener('mouseenter', () => {
+  pointerIn = true
+})
 
 let lookDrag = false
 let dragDist = 0
@@ -264,7 +279,12 @@ addEventListener('keydown', (e) => {
 })
 
 addEventListener('keyup', (e) => session?.keys.delete(e.key.toLowerCase()))
-addEventListener('blur', () => session?.keys.clear())
+addEventListener('blur', () => {
+  session?.keys.clear()
+  // 다른 창으로 넘어가는 것도 커서가 나간 것과 같다. 알트탭 순간 커서가
+  // 가장자리에 있었으면 돌아왔을 때 판이 끝으로 밀려 있다.
+  pointerIn = false
+})
 
 // 포인터 락이 풀리면(사용자가 Esc를 눌렀거나 창을 벗어났다) 올라온다.
 document.addEventListener('pointerlockchange', () => {
@@ -282,6 +302,7 @@ addEventListener('mousemove', (e) => {
   if (!s) return
   pointer.x = e.clientX
   pointer.y = e.clientY
+  pointerIn = true
 
   if (box) {
     box.x1 = e.clientX
@@ -358,6 +379,38 @@ function rallyAhead(s: Session): void {
   if (s.selected.size > 0) s.game.commandUnits(HUMAN, [...s.selected], point)
   else s.game.setRally(HUMAN, point)
 }
+
+/**
+ * 휠로 배율을 바꾼다.
+ *
+ * **커서 아래의 땅을 붙들어 둔다.** 화면 한가운데를 기준으로 당기면, 보려던
+ * 자리가 당길수록 화면 밖으로 밀려나서 밀고 당기기를 번갈아 해야 한다. 바꾸기
+ * 전후로 커서가 짚는 지면 좌표를 재서 그 차이만큼 초점을 되민다 — 손가락으로
+ * 지도를 짚고 당기는 것과 같은 느낌이 된다.
+ *
+ * `passive: false`로 붙이고 `preventDefault`를 부른다. 안 그러면 Ctrl+휠이
+ * 브라우저 자체를 확대해 게임 위에 얹힌다.
+ *
+ * 1인칭에서는 아무 일도 안 한다 — 거기서 화각을 건드리면 걸어 들어간 사람의
+ * 눈이 아니라 망원경이 된다.
+ */
+addEventListener(
+  'wheel',
+  (e) => {
+    const s = session
+    if (!s || s.firstPerson) return
+    e.preventDefault()
+    // deltaY의 크기는 장치마다 제멋대로다(픽셀·줄·페이지). 방향만 쓴다.
+    const notches = Math.sign(e.deltaY)
+    if (notches === 0) return
+    const before = s.cameras.screenToGround(pointer.x, pointer.y, innerWidth, innerHeight)
+    if (!s.cameras.zoomBy(notches)) return
+    if (!before) return
+    const after = s.cameras.screenToGround(pointer.x, pointer.y, innerWidth, innerHeight)
+    if (after) s.cameras.nudge(before.x - after.x, before.z - after.z)
+  },
+  { passive: false },
+)
 
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault())
 
@@ -440,6 +493,60 @@ function walkDir(keys: Set<string>, yaw: number): Vec2 {
 const TURN_RATE = 2.1
 
 /**
+ * 화면 가장자리에서 시점이 밀리기 시작하는 띠의 두께(px).
+ *
+ * 너무 얇으면 겨냥하다 못 맞히고, 너무 두꺼우면 화면 구석의 유닛을 고르려다
+ * 판이 흘러간다. 24px는 커서를 끝까지 밀면 확실히 잡히면서, 구석의 유닛을
+ * 클릭할 자리는 남기는 값이다.
+ */
+const EDGE_PX = 24
+
+/**
+ * 가장자리에 얼마나 깊이 들어갔는지에 따라 속도를 정한다.
+ *
+ * 껐다 켰다 하지 않고 **기울인다** — 띠에 들어서는 순간 최고 속도로 튀면
+ * 조준하다 스치기만 해도 판이 확 밀린다. 대신 0에서 시작하면 띠의 바깥쪽이
+ * 아무 반응도 없어서 먹통으로 느껴지므로, 0.35에서 출발해 끝에서 1이 된다.
+ */
+function edgeRamp(t: number): number {
+  return 0.35 + 0.65 * Math.min(1, t)
+}
+
+/** 미니맵이 차지한 자리. 창 크기가 안 변하면 안 변하므로 재두고 쓴다. */
+let minimapRect = minimapRoot.getBoundingClientRect()
+
+/**
+ * 커서가 화면 끝에 닿아 있으면 그쪽으로 미는 방향.
+ *
+ * `panDir`와 같은 부호 규약을 쓴다 — 화면 위쪽이 −z다. 둘은 더해지고, 합이
+ * 1을 넘으면 `panOverhead`가 잘라 낸다.
+ *
+ * **미니맵 위에서는 안 민다.** 미니맵이 오른쪽 아래 구석에 붙어 있어서
+ * 가장자리 띠와 그대로 겹친다. 빼 두지 않으면 미니맵을 짚으려고 다가가는 것만으로
+ * 판이 대각선으로 흘러가서, 짚으려던 자리가 손 밑에서 도망간다.
+ */
+function edgeDir(): { x: number; z: number } {
+  if (!pointerIn) return { x: 0, z: 0 }
+  const { x: px, y: py } = pointer
+  if (
+    px >= minimapRect.left &&
+    px <= minimapRect.right &&
+    py >= minimapRect.top &&
+    py <= minimapRect.bottom
+  ) {
+    return { x: 0, z: 0 }
+  }
+
+  let x = 0
+  let z = 0
+  if (px < EDGE_PX) x = -edgeRamp((EDGE_PX - px) / EDGE_PX)
+  else if (px > innerWidth - EDGE_PX) x = edgeRamp((px - (innerWidth - EDGE_PX)) / EDGE_PX)
+  if (py < EDGE_PX) z = -edgeRamp((EDGE_PX - py) / EDGE_PX)
+  else if (py > innerHeight - EDGE_PX) z = edgeRamp((py - (innerHeight - EDGE_PX)) / EDGE_PX)
+  return { x, z }
+}
+
+/**
  * 부감에서 화면을 미는 방향. 1인칭의 `walkDir`와 같은 키를 쓴다.
  *
  * 같은 키가 시점에 따라 **다른 것을 움직인다** — 1인칭에서는 몸이 가고
@@ -468,6 +575,18 @@ function panDir(keys: Set<string>): { x: number; z: number } {
  * 다리가 같이 끊긴다. 판정에 관여하지 않는 값이라 결정론도 안 깨진다.
  */
 const renderClock = new THREE.Clock()
+
+/**
+ * 이번 프레임 간격. 시뮬레이션과 **같은 상한**에서 자른다.
+ *
+ * 자르지 않으면 탭을 떠났다 돌아온 첫 프레임의 dt가 몇 초가 되고, 그 한 프레임에
+ * 카메라가 판 끝까지 밀린다 — 가장자리 스크롤을 넣은 뒤로는 이게 흔한 일이 된다.
+ * 알트탭 하는 순간 커서가 화면 끝에 있는 경우가 많기 때문이다. 걸음 애니메이션도
+ * 같은 dt를 쓰므로 한 프레임에 다리가 몇 바퀴 돌던 것이 같이 없어진다.
+ */
+function frameDelta(): number {
+  return Math.min(renderClock.getDelta(), MAX_FRAME_TIME)
+}
 
 const loop = new GameLoop({
   update(dt) {
@@ -499,7 +618,7 @@ const loop = new GameLoop({
     const s = session
     if (!s) return
     const cam = s.firstPerson ? s.cameras.first : s.cameras.overhead
-    const dt = renderClock.getDelta()
+    const dt = frameDelta()
 
     // 번개가 다 치면 몸으로 들어간다.
     if (s.striking > 0) {
@@ -518,7 +637,10 @@ const loop = new GameLoop({
        * 내려다보는 존재에게 맞는 카메라다(GDD 3.2).
        */
       const pan = panDir(s.keys)
-      s.cameras.panOverhead(pan.x, pan.z, dt)
+      // 판이 끝나면 배너가 화면을 덮는다. 그 위에서 다시 시작 버튼을 누르러
+      // 가는 길에 판이 흘러가면 안 된다.
+      const edge = s.ended ? { x: 0, z: 0 } : edgeDir()
+      s.cameras.panOverhead(pan.x + edge.x, pan.z + edge.z, dt)
     }
     /**
      * 죽은 유닛은 선택에서 빠진다.
@@ -541,7 +663,7 @@ const loop = new GameLoop({
       s.actors.aimAt(null, false)
     }
 
-    applyFog(s.scene, s.firstPerson)
+    applyFog(s.scene, s.firstPerson, s.cameras.zoom)
     s.world.sync(s.game, HUMAN)
     // 카메라를 먼저 자리잡고 넘긴다 — 체력바가 카메라를 향해 서야 한다.
     s.actors.sync(s.game, HUMAN, s.firstPerson, cam, dt)
@@ -568,12 +690,22 @@ const loop = new GameLoop({
  * 없고, 1인칭이 멀쩡하면 부감에서 맵 전체가 뿌예진다. 그래서 시점이 바뀔 때
  * 거리만 갈아 끼운다. 색은 지평선 하나로 공유한다.
  */
+/**
+ * 부감 안개. **배율을 곱해서 쓴다**(`applyFog`).
+ *
+ * 이 두 값은 기본 배율에서 카메라가 판까지 219쯤 떨어져 있다는 전제로 잡혔다.
+ * 멀리 당기면 그 거리가 313까지 늘어나는데, 고정해 두면 판 전체가 하늘색으로
+ * 씻겨 나가 미니맵만 남는다. 거리에 비례해 밀면 어느 배율에서나 같은 정도의
+ * 아지랑이가 걸린다.
+ */
 const FOG_OVERHEAD: readonly [number, number] = [170, 400]
 const FOG_FIRST: readonly [number, number] = [45, 165]
 
-function applyFog(scene: THREE.Scene, firstPerson: boolean): void {
+function applyFog(scene: THREE.Scene, firstPerson: boolean, zoom: number): void {
   const fog = scene.fog as THREE.Fog
-  const [near, far] = firstPerson ? FOG_FIRST : FOG_OVERHEAD
+  const [near, far] = firstPerson
+    ? FOG_FIRST
+    : ([FOG_OVERHEAD[0] * zoom, FOG_OVERHEAD[1] * zoom] as const)
   fog.near = near
   fog.far = far
 }
@@ -583,6 +715,9 @@ function applyFog(scene: THREE.Scene, firstPerson: boolean): void {
 function resize(): void {
   renderer.setSize(innerWidth, innerHeight, false)
   session?.cameras.layout(innerWidth / innerHeight)
+  // 미니맵은 오른쪽 아래에 붙어 있으므로 창이 바뀌면 자리도 바뀐다. 매 프레임
+  // 물어보면 HUD가 방금 갈아엎은 문서를 다시 배치하게 만들어서, 여기서만 잰다.
+  minimapRect = minimapRoot.getBoundingClientRect()
 }
 addEventListener('resize', resize)
 
