@@ -13,18 +13,40 @@ import { FONT, PALETTE, roundRect } from '../render/palette'
 import { enemySilhouettePath } from '../render/shapes'
 import { ENEMY_ART, TOWER_ART, drawArt } from '../render/art'
 import type { Layout, UiButton } from './layout'
+import { NOTICE_LIFE_MS, type ConfirmPrompt, type Notice } from './feedback'
+import { modeBanner } from './mode'
 
 const SPEEDS = [1, 2, 3] as const
 
+/** 이번 프레임에 HUD가 알아야 하는 화면 바깥 상태. */
+export interface HudView {
+  timeScale: number
+  paused: boolean
+  /** 방금 조작에 대한 응답. 없으면 null. */
+  notice: Notice | null
+  /** 쪽지 수명 진행도 0~1. 사라질 때 흐려지는 데 쓴다. */
+  noticeProgress: number
+  /** 열려 있는 확인창. 열려 있는 동안 나머지 조작은 전부 막힌다. */
+  confirm: ConfirmPrompt | null
+}
+
 /**
- * 상단 HUD와 우측 패널.
+ * 상단 HUD·우측 패널·판 위 오버레이(안내 띠·정보창·쪽지·확인창).
  *
  * 그리기와 히트 영역 계산을 한 곳에서 한다. 버튼을 그리면서 좌표를 배열에
  * 쌓아 반환하고, 입력 처리는 그 배열만 보고 판정한다 — 그림과 클릭 영역이
  * 어긋날 수 없는 구조다.
+ *
+ * **패널의 자리 다툼은 건설 카드가 이긴다.** 예전에는 기물을 하나 세우면
+ * 정보창이 카드 목록을 통째로 밀어내서, 다음 기물을 지으려면 먼저 선택을
+ * 풀어야 한다는 것을 아무도 알 수 없었다(566골드를 쥔 채로 진 판). 건설은
+ * 매 웨이브 반복되는 행동이고 조회는 가끔 하는 일이라, 비키는 쪽은 정보창이다
+ * — 정보창은 판 위 기물 옆에 뜬다.
  */
 export class Hud {
   private buttons: UiButton[] = []
+  /** 확인창이 떠 있는 동안 다른 버튼은 전부 죽는다. */
+  private modal = false
 
   constructor(
     private readonly ctx: CanvasRenderingContext2D,
@@ -36,10 +58,15 @@ export class Hud {
     return this.buttons
   }
 
-  draw(game: Game, timeScale: number, paused: boolean): void {
+  draw(game: Game, view: HudView): void {
     this.buttons = []
-    this.drawTopBar(game, timeScale, paused)
+    this.modal = view.confirm !== null
+    this.drawTopBar(game, view.timeScale, view.paused)
     this.drawPanel(game)
+    this.drawModeBanner(game)
+    this.drawTowerCard(game)
+    this.drawNotice(view)
+    if (view.confirm) this.drawConfirm(view.confirm)
   }
 
   // ────────────────────────────── 상단 바 ──────────────────────────────
@@ -248,20 +275,15 @@ export class Hud {
     ctx.lineWidth = 1
     ctx.stroke()
 
+    // **카드는 절대 자리를 내주지 않는다.** 기물을 골라도, 세워도, 판이
+    // 끝나도 목록은 같은 자리에 같은 순서로 남는다. 이 패널이 흔들리지 않는
+    // 것 자체가 "언제든 또 지을 수 있다"는 응답이다.
     let y = p.y + 14
-    // 기물이 여덟 종으로 늘면서 배치 목록만으로 패널 대부분이 찬다. 기물을 고른
-    // 상태에서는 목록을 접어 상세 수치가 잘리지 않게 한다 — 어차피 그 순간에
-    // 필요한 것은 "이걸 올릴까 팔까"지 "무엇을 새로 지을까"가 아니다.
-    if (!game.selectedTower) {
-      y = this.drawBuildMenu(game, y)
-      y += 6
-      this.divider(y)
-      y += 12
-      this.drawWavePreview(game, y)
-    } else {
-      this.drawTowerInfo(game, y)
-    }
-
+    y = this.drawBuildMenu(game, y)
+    y += 6
+    this.divider(y)
+    y += 12
+    this.drawWavePreview(game, y)
   }
 
   /**
@@ -424,7 +446,10 @@ export class Hud {
         y,
         w,
         h: cardH,
-        enabled: !game.isOver,
+        // 골드가 모자라도 **고를 수는 있다.** 고르면 사거리 미리보기가 뜨고
+        // 띠가 "골드가 N 부족합니다"를 말해 준다 — 못 고르게 막으면 왜 못
+        // 짓는지가 다시 침묵이 된다.
+        enabled: this.allow(`build:${towerId}`, !game.isOver),
         payload: towerId,
         // 카드에 실제로 찍히는 두 글자 덩어리("1. 사수"와 "70G")를 그대로 잇는다.
         label: `${i + 1}. ${def.name} ${cost}G`,
@@ -436,18 +461,84 @@ export class Hud {
     return y
   }
 
-  private drawTowerInfo(game: Game, startY: number): void {
+  /**
+   * 선택한 기물의 정보창 — **판 위, 그 기물 옆에** 뜬다.
+   *
+   * 우측 패널에서 나온 이유는 건설 카드와 자리를 다투지 않기 위해서다(위 클래스
+   * 주석). 옮기고 보니 덤이 하나 있었다 — 조회는 "이 기물"에 대한 것이므로
+   * 창이 그 기물 옆에 붙는 편이 애초에 옳다. 창과 기물을 잇는 짧은 선을 그어
+   * 어느 기물의 것인지 못 박는다.
+   *
+   * 건설 모드일 때는 그리지 않는다. 기물을 세우면 `Game`이 그 기물을 선택
+   * 상태로 두는데, 지을 때마다 창이 튀어나오면 연속 배치를 방해한다.
+   */
+  private drawTowerCard(game: Game): void {
     const { ctx, layout } = this
-    const p = layout.panel
+    const tower = game.selectedTower
+    if (!tower || game.isOver || game.selectedBuildId) return
+    const board = layout.board
+    const stats = tower.stats
+
+    // 높이는 내용에서 뽑는다 — 감속·중독 줄은 기물마다 있고 없다.
+    let rowCount = 4
+    if (stats.splashRadius > 0) rowCount++
+    if (stats.slowAmount > 0) rowCount += stats.cavalrySlow > 0 ? 2 : 1
+    if (stats.poisonDps > 0) rowCount++
+    const w = 234
+    const h = 26 + 22 + rowCount * 18 + 24 + 34 + 40 + 28 + 26
+
+    const anchorX = board.x + tower.pos.x
+    const anchorY = board.y + tower.pos.y
+    const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
+    let x = anchorX + 30
+    if (x + w > board.x + board.w - 8) x = anchorX - 30 - w
+    x = clamp(x, board.x + 8, board.x + board.w - w - 8)
+    // 위쪽은 안내 띠(모드 표시)를 피한다.
+    const y0 = clamp(anchorY - h / 2, board.y + 52, board.y + board.h - h - 8)
+
+    // 기물과 창을 잇는 선
+    ctx.strokeStyle = `${tower.def.accent}99`
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(anchorX, anchorY)
+    ctx.lineTo(x < anchorX ? x + w : x, clamp(anchorY, y0 + 12, y0 + h - 12))
+    ctx.stroke()
+
+    ctx.fillStyle = 'rgba(15,20,29,0.96)'
+    roundRect(ctx, x, y0, w, h, 8)
+    ctx.fill()
+    ctx.strokeStyle = `${tower.def.accent}aa`
+    ctx.lineWidth = 1.4
+    ctx.stroke()
+
+    this.drawTowerInfo(game, x, y0 + 14, w)
+  }
+
+  private drawTowerInfo(game: Game, cardX: number, startY: number, cardW: number): void {
+    const { ctx } = this
+    const p = { x: cardX, w: cardW }
     const tower = game.selectedTower!
     const stats = tower.stats
     const next = tower.nextStats
 
     let y = startY
     ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
     ctx.font = FONT.title
     ctx.fillStyle = PALETTE.text
     ctx.fillText(`${tower.def.name} Lv.${tower.level}`, p.x + 14, y + 8)
+
+    // 닫는 길이 화면에 있어야 한다. 우클릭·Esc는 아는 사람만 쓰는 길이다.
+    this.button({
+      id: 'closeTower',
+      x: p.x + p.w - 40,
+      y: y - 4,
+      w: 26,
+      h: 24,
+      label: '✕',
+      hotspotLabel: '✕ 닫기 (Esc)',
+      enabled: true,
+    })
     y += 26
 
     const typeLabel = DAMAGE_TYPE_LABEL[tower.def.damageType]
@@ -650,12 +741,224 @@ export class Hud {
 
     const hint = game.selectedBuildId
       ? '빈 땅을 클릭해 배치 · Esc 로 취소'
-      : '기물을 클릭하면 강화·철수'
+      : game.selectedTower
+        ? '정보창은 판 위 기물 옆에 · Esc 닫기'
+        : '카드를 고르고 빈 땅을 클릭'
     ctx.fillStyle = PALETTE.textDim
     ctx.font = FONT.tiny
     ctx.fillText(hint, p.x + 14, y + 8)
 
     return y + 24
+  }
+
+  // ────────────────────────────── 판 위 오버레이 ──────────────────────────────
+
+  /**
+   * 지금 무슨 모드인가 — **상시** 판 위에 있다.
+   *
+   * 세 가지가 한 자리에서 갈린다.
+   *   - 모드 없음: 안내가 **가장 크다.** 방법을 이미 아는 사람에게만 보이는
+   *     안내는 안내가 아니다. 예전에는 "빈 땅을 클릭해 배치"가 병종을 고른
+   *     **뒤에야** 떴다.
+   *   - 배치 모드: 무엇을 얼마에 놓으려는지 + 취소 버튼. 같은 숫자키가 모드를
+   *     끄는 것은 그대로지만, 꺼진 것이 화면에 보인다.
+   *   - 조회 모드: 무엇을 보고 있는지 + 닫기 버튼.
+   */
+  private drawModeBanner(game: Game): void {
+    if (game.isOver) return
+    const { ctx, layout } = this
+    const board = layout.board
+    const cx = board.x + board.w / 2
+    const top = board.y + 8
+    const banner = modeBanner(game)
+
+    if (banner.mode === 'none') {
+      const main = banner.title
+      const sub = banner.hint
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.font = FONT.title
+      const mw = ctx.measureText(main).width
+      ctx.font = FONT.small
+      const sw = ctx.measureText(sub).width
+      const w = Math.max(mw, sw) + 48
+      const h = 50
+      const x = cx - w / 2
+      this.pill(x, top, w, h, 'rgba(90,169,230,0.55)', 'rgba(12,17,25,0.86)')
+      ctx.font = FONT.title
+      ctx.fillStyle = PALETTE.text
+      ctx.fillText(main, cx, top + 18)
+      ctx.font = FONT.small
+      ctx.fillStyle = PALETTE.accent
+      ctx.fillText(sub, cx, top + 36)
+      ctx.textAlign = 'left'
+      return
+    }
+
+    // 모드가 켜져 있을 때는 띠를 낮춰 판을 덜 가린다.
+    const h = 32
+    const btnW = 92
+    const text = banner.title
+    const sub = banner.hint
+    const accent =
+      banner.mode === 'build'
+        ? getTowerDef(game.selectedBuildId!).accent
+        : game.selectedTower!.def.accent
+    const edge = banner.blocked ? 'rgba(255,92,92,0.75)' : `${accent}cc`
+
+    ctx.textBaseline = 'middle'
+    ctx.font = FONT.label
+    const tw = ctx.measureText(text).width
+    ctx.font = FONT.small
+    const sw = ctx.measureText(sub).width
+    const w = 16 + tw + 10 + sw + 12 + btnW + 12
+    const x = cx - w / 2
+    this.pill(x, top, w, h, edge, 'rgba(12,17,25,0.86)')
+
+    ctx.textAlign = 'left'
+    ctx.font = FONT.label
+    ctx.fillStyle = PALETTE.text
+    ctx.fillText(text, x + 16, top + h / 2)
+    ctx.font = FONT.small
+    ctx.fillStyle = banner.blocked ? PALETTE.danger : PALETTE.textMuted
+    ctx.fillText(sub, x + 16 + tw + 10, top + h / 2)
+
+    const cancel = banner.cancel!
+    this.button({
+      id: cancel.id,
+      x: x + w - 12 - btnW,
+      y: top + 5,
+      w: btnW,
+      h: h - 10,
+      label: cancel.label,
+      enabled: true,
+    })
+  }
+
+  private pill(x: number, y: number, w: number, h: number, edge: string, fill: string): void {
+    const { ctx } = this
+    ctx.fillStyle = fill
+    roundRect(ctx, x, y, w, h, h / 2 > 16 ? 16 : h / 2)
+    ctx.fill()
+    ctx.strokeStyle = edge
+    ctx.lineWidth = 1.4
+    ctx.stroke()
+  }
+
+  /**
+   * 방금 조작에 대한 응답 쪽지 — **그 자리에, 이유와 함께.**
+   *
+   * 실패한 클릭에 화면이 침묵하던 것이 566골드 사건의 직접 원인이다.
+   * 사유 문자열은 `BuildResult`가 이미 만들고 있으므로 여기서는 나르기만 한다.
+   */
+  private drawNotice(view: HudView): void {
+    const notice = view.notice
+    if (!notice) return
+    const { ctx, layout } = this
+
+    // 마지막 0.5초에만 흐려진다 — 읽을 시간을 먼저 주고 나서 사라진다.
+    const fadeFrom = 1 - 500 / NOTICE_LIFE_MS
+    const alpha = view.noticeProgress < fadeFrom ? 1 : 1 - (view.noticeProgress - fadeFrom) / (1 - fadeFrom)
+    // 뜨자마자 살짝 떠오른다. 같은 사유가 다시 떠도 "새로 떴다"가 읽힌다.
+    const rise = Math.max(0, 1 - view.noticeProgress * 6) * 6
+
+    const fail = notice.kind === 'fail'
+    const icon = fail ? '✕' : '✓'
+    ctx.save()
+    ctx.globalAlpha = Math.max(0, alpha)
+    ctx.textBaseline = 'middle'
+    ctx.font = FONT.bodyBold
+    const tw = ctx.measureText(notice.text).width
+    const w = tw + 46
+    const h = 30
+
+    const board = layout.board
+    let x: number
+    let y: number
+    if (notice.at) {
+      x = notice.at.x - w / 2
+      y = notice.at.y - 44 - rise
+    } else {
+      x = board.x + board.w / 2 - w / 2
+      y = board.y + 70 - rise
+    }
+    // 판이 아니라 화면 안으로 가둔다 — 패널의 카드를 눌러 난 사유는 그 카드
+    // 옆에 떠야 "이것 때문에 안 됐다"가 이어진다.
+    x = Math.min(Math.max(x, 6), layout.width - w - 6)
+    y = Math.min(Math.max(y, layout.hudHeight + 6), layout.height - h - 6)
+
+    ctx.fillStyle = fail ? 'rgba(56,16,18,0.95)' : 'rgba(18,34,20,0.95)'
+    roundRect(ctx, x, y, w, h, 8)
+    ctx.fill()
+    ctx.strokeStyle = fail ? 'rgba(255,92,92,0.85)' : 'rgba(139,212,80,0.85)'
+    ctx.lineWidth = 1.4
+    ctx.stroke()
+
+    ctx.textAlign = 'left'
+    ctx.fillStyle = fail ? PALETTE.danger : PALETTE.good
+    ctx.fillText(icon, x + 14, y + h / 2)
+    ctx.fillStyle = PALETTE.text
+    ctx.fillText(notice.text, x + 32, y + h / 2)
+    ctx.restore()
+    ctx.textAlign = 'left'
+  }
+
+  /**
+   * 되돌릴 수 없는 조작 앞의 확인창.
+   *
+   * 화면 전체를 덮는다 — 이 창이 떠 있는 동안 다른 버튼은 전부 죽으므로
+   * (`modal`), 죽은 것이 죽은 것처럼 보여야 한다.
+   */
+  private drawConfirm(prompt: ConfirmPrompt): void {
+    const { ctx, layout } = this
+    ctx.fillStyle = 'rgba(6,8,12,0.72)'
+    ctx.fillRect(0, 0, layout.width, layout.height)
+
+    const w = 420
+    const h = 168
+    const x = layout.board.x + layout.board.w / 2 - w / 2
+    const y = layout.board.y + layout.board.h / 2 - h / 2
+
+    ctx.fillStyle = 'rgba(15,20,29,0.98)'
+    roundRect(ctx, x, y, w, h, 10)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,92,92,0.55)'
+    ctx.lineWidth = 1.6
+    ctx.stroke()
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = FONT.big
+    ctx.fillStyle = PALETTE.text
+    ctx.fillText(prompt.title, x + w / 2, y + 44)
+    ctx.font = FONT.body
+    ctx.fillStyle = PALETTE.textMuted
+    ctx.fillText(prompt.detail, x + w / 2, y + 74)
+    ctx.textAlign = 'left'
+
+    const bw = 176
+    const gap = 12
+    const by = y + h - 54
+    this.button({
+      id: 'confirm:no',
+      x: x + w / 2 - bw - gap / 2,
+      y: by,
+      w: bw,
+      h: 38,
+      label: prompt.cancelLabel,
+      enabled: true,
+      primary: true,
+    })
+    this.button({
+      id: 'confirm:yes',
+      x: x + w / 2 + gap / 2,
+      y: by,
+      w: bw,
+      h: 38,
+      label: prompt.confirmLabel,
+      enabled: true,
+      danger: true,
+    })
   }
 
   private divider(y: number): void {
@@ -670,6 +973,17 @@ export class Hud {
   }
 
   // ────────────────────────────── 공통 버튼 ──────────────────────────────
+
+  /**
+   * 확인창이 떠 있으면 그 창의 버튼만 살아 있다.
+   *
+   * 목록에서 지우지 않고 `enabled: false`로 남기는 것이 핵심이다 — 조작 훅이
+   * "지금 왜 안 눌리는가"를 답할 수 있어야 한다(`CONTRIBUTING` 4.2).
+   */
+  private allow(id: string, enabled: boolean): boolean {
+    if (this.modal && !id.startsWith('confirm:')) return false
+    return enabled
+  }
 
   private button(opts: {
     id: string
@@ -686,7 +1000,8 @@ export class Hud {
     hotspotLabel?: string
   }): void {
     const { ctx } = this
-    const { x, y, w, h, label, enabled, active, primary, danger } = opts
+    const { x, y, w, h, label, active, primary, danger } = opts
+    const enabled = this.allow(opts.id, opts.enabled)
 
     let fill = 'rgba(255,255,255,0.06)'
     let edge = 'rgba(255,255,255,0.10)'

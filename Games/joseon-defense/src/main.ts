@@ -10,6 +10,7 @@ import { Hud } from './ui/Hud'
 import { StageSelect } from './ui/StageSelect'
 import { TitleScreen } from './ui/TitleScreen'
 import { computeLayout, hitTest } from './ui/layout'
+import { NoticeBox, type ConfirmPrompt } from './ui/feedback'
 import { installPlaytest } from './ui/playtest'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement | null
@@ -52,6 +53,19 @@ let unlockBanner: string[] = []
 let resultRecorded = false
 /** 첫 프레임을 그렸는가. 조작 훅의 ready 판정에만 쓴다. */
 let firstFrameDrawn = false
+/**
+ * 방금 조작이 어떻게 됐는지 말해 주는 쪽지.
+ *
+ * 게임 상태가 아니라 화면 상태라 `Game` 밖에 둔다 — 시뮬레이터는 이 층을
+ * 통째로 쓰지 않으므로 게임 규칙이 여기 섞이면 안 된다.
+ */
+const notices = new NoticeBox()
+/** 열려 있는 확인창. 떠 있는 동안 판은 멈추고 다른 조작은 막힌다. */
+let confirmPrompt: ConfirmPrompt | null = null
+
+function notify(text: string, at: { x: number; y: number } | null = null): void {
+  notices.show(text, 'fail', at)
+}
 
 const loop = new GameLoop({
   update(dt) {
@@ -93,10 +107,18 @@ function drawFrame(): void {
   renderer.drawBoard(game, elapsed)
   const unlock = unlockBanner.map(getTowerDef)
   const resultBottom = renderer.drawGameOver(game, unlock)
-  hud.draw(game, speed, paused)
-  // 결과 화면 버튼은 오버레이 위에 그려야 하므로 HUD 다음이다.
-  hud.drawResultActions(game, nextStage() !== null, resultBottom)
+  // 스테이지 이름은 확인창 그늘 아래로 들어가야 하므로 HUD보다 먼저 그린다.
   drawPlayChrome()
+  hud.draw(game, {
+    timeScale: speed,
+    paused,
+    notice: notices.current(),
+    noticeProgress: notices.progress(),
+    confirm: confirmPrompt,
+  })
+  // 결과 화면 버튼은 오버레이 위에 그려야 하므로 HUD 다음이다.
+  // (확인창은 판이 끝나기 전에만 뜨므로 둘이 겹치는 일은 없다.)
+  hud.drawResultActions(game, nextStage() !== null, resultBottom)
 }
 
 /** 플레이 화면 상단 좌측의 스테이지 표시와 나가기 버튼. */
@@ -126,11 +148,16 @@ function nextStage(): StageDef | null {
 }
 
 function applyTimeScale(): void {
-  loop.timeScale = screen === 'play' && !paused ? speed : 0
+  // 확인창이 떠 있는 동안은 판이 멈춘다. "이 판을 버릴까요"를 묻는 사이에
+  // 웨이브가 계속 밀려오면 묻는 의미가 없다.
+  const stopped = paused || confirmPrompt !== null
+  loop.timeScale = screen === 'play' && !stopped ? speed : 0
 }
 
 function startStage(target: StageDef): void {
   stage = target
+  confirmPrompt = null
+  notices.clear()
   game = new Game(target, {
     availableTowers: progress.unlockedTowers(),
     hpScale: progress.hpScale,
@@ -148,7 +175,58 @@ function startStage(target: StageDef): void {
 function backToSelect(): void {
   screen = 'select'
   unlockBanner = []
+  confirmPrompt = null
+  notices.clear()
   applyTimeScale()
+}
+
+/**
+ * 진행 중인 판이 있는가 — 확인창을 띄울지 판단한다.
+ *
+ * 아무것도 안 한 판(첫 웨이브 준비 중, 기물 0기)까지 확인을 물으면 확인창이
+ * 소음이 되고, 소음이 된 확인창은 사람이 읽지 않고 누른다.
+ */
+function runInProgress(): boolean {
+  if (game.isOver) return false
+  return (
+    game.towers.length > 0 ||
+    game.waves.running ||
+    game.waves.waveNumber > 1 ||
+    game.lives < stage.startLives
+  )
+}
+
+/**
+ * 판을 버리는 조작 — 확인을 거친다.
+ *
+ * GDD 8.0: 되돌릴 수 없는 조작에는 확인을 둔다. 판매는 70% 환급으로 되돌릴 수
+ * 있고, 배치는 팔면 되고, 배속·일시정지는 언제든 되돌아온다. 진행 중인 판을
+ * 버리는 것만 되돌아올 길이 없는데 그것 하나만 확인이 없었다.
+ */
+function askAbandon(kind: 'leave' | 'restart'): void {
+  const act = kind === 'leave' ? backToSelect : () => startStage(stage)
+  if (!runInProgress()) {
+    act()
+    return
+  }
+  const wave = Math.min(game.waves.waveNumber, game.waves.totalWaves)
+  confirmPrompt = {
+    title: kind === 'leave' ? '진행 중인 판을 버릴까요?' : '처음부터 다시 할까요?',
+    detail: `웨이브 ${wave}/${game.waves.totalWaves} · 기물 ${game.towers.length}기 · 보유 ${game.gold}G · 생명 ${game.lives}`,
+    confirmLabel: kind === 'leave' ? '버리고 나가기' : '처음부터 다시',
+    cancelLabel: '계속하기 (Esc)',
+    onConfirm: act,
+  }
+  notices.clear()
+  applyTimeScale()
+}
+
+function resolveConfirm(accept: boolean): void {
+  const prompt = confirmPrompt
+  if (!prompt) return
+  confirmPrompt = null
+  applyTimeScale()
+  if (accept) prompt.onConfirm()
 }
 
 // ────────────────────────────── 입력 ──────────────────────────────
@@ -182,6 +260,7 @@ canvas.addEventListener('mouseleave', () => {
 canvas.addEventListener('contextmenu', (event) => {
   // 우클릭은 배치 취소 / 선택 해제로 쓴다.
   event.preventDefault()
+  if (confirmPrompt) return
   game.selectBuild(null)
   game.selectedTower = null
 })
@@ -212,15 +291,62 @@ canvas.addEventListener('mousedown', (event) => {
 
   const button = hitTest(hud.hitAreas, x, y)
   if (button) {
+    // **못 눌리는 버튼도 이유를 말한다.** 눌러도 아무 일이 없는 것이 침묵의
+    // 절반이었다 — 골드가 모자라 회색이 된 강화 버튼과 "게임 종료"로 바뀐
+    // 웨이브 버튼이 그랬다.
     if (button.enabled) handleUiButton(button.id, button.payload)
+    else notify(disabledReason(button.id), { x: button.x + button.w / 2, y: button.y })
     return
   }
 
+  // 확인창이 떠 있으면 판 위 클릭은 통과시키지 않는다.
+  if (confirmPrompt) return
+
   const tile = boardTileAt(x, y)
-  if (tile) game.clickTile(tile.x, tile.y)
+  if (tile) {
+    const at = {
+      x: layout.board.x + (tile.x + 0.5) * TILE_SIZE,
+      y: layout.board.y + (tile.y + 0.5) * TILE_SIZE,
+    }
+    const onTower = game.grid.towerIdAt(tile.x, tile.y) !== undefined
+    const hadSelection = game.selectedTower !== null
+    const result = game.clickTile(tile.x, tile.y)
+    if (result && !result.ok) {
+      // `BuildResult`가 이미 만들고 있던 사유를 화면에 잇는다.
+      notify(result.reason, at)
+    } else if (!result && !onTower && !game.selectedBuildId && !hadSelection) {
+      // 아무것도 선택하지 않은 상태의 클릭도 실패다.
+      notify('먼저 병종을 고르세요', at)
+    }
+  }
 })
 
+/**
+ * 회색 버튼을 눌렀을 때의 사유.
+ *
+ * 강화는 `Game.upgradeSelected()`가 돌려주는 사유를 그대로 쓴다 — 버튼이
+ * 회색인 조건과 그 메서드가 거절하는 조건이 같으므로 실제로 강화되는 일은
+ * 없고, 사유 문자열을 UI에서 다시 짓지 않으니 둘이 어긋날 수도 없다.
+ */
+function disabledReason(id: string): string {
+  if (confirmPrompt) return '먼저 확인창에 답해 주세요'
+  if (id === 'upgrade') {
+    const result = game.upgradeSelected()
+    return result.ok ? '강화했습니다' : result.reason
+  }
+  if (id === 'nextWave') {
+    return game.isOver ? '판이 이미 끝났습니다' : '웨이브가 진행 중입니다'
+  }
+  if (id === 'nextStage') return '다음 스테이지가 아직 잠겨 있습니다'
+  if (game.isOver) return '판이 끝나 조작할 수 없습니다'
+  return '지금은 누를 수 없습니다'
+}
+
 function handleUiButton(id: string, payload?: string): void {
+  if (id.startsWith('confirm:')) {
+    resolveConfirm(id === 'confirm:yes')
+    return
+  }
   if (id.startsWith('build:')) {
     const towerId = payload ?? id.slice('build:'.length)
     game.selectBuild(game.selectedBuildId === towerId ? null : towerId)
@@ -250,8 +376,17 @@ function handleUiButton(id: string, payload?: string): void {
     case 'targeting':
       game.cycleSelectedTargeting()
       break
+    // 배치 취소·정보창 닫기. 우클릭과 Esc는 아는 사람만 쓰는 길이라
+    // 화면에도 같은 길을 낸다.
+    case 'cancelBuild':
+      game.selectBuild(null)
+      break
+    case 'closeTower':
+    case 'closeTowerBanner':
+      game.selectedTower = null
+      break
     case 'restart':
-      startStage(stage)
+      askAbandon('restart')
       break
     case 'nextStage': {
       const next = nextStage()
@@ -259,7 +394,7 @@ function handleUiButton(id: string, payload?: string): void {
       break
     }
     case 'toSelect':
-      backToSelect()
+      askAbandon('leave')
       break
   }
 }
@@ -283,6 +418,13 @@ window.addEventListener('keydown', (event) => {
     return
   }
 
+  // 확인창이 떠 있는 동안은 그 창에만 답할 수 있다.
+  if (confirmPrompt) {
+    if (event.key === 'Escape') resolveConfirm(false)
+    else if (event.key === 'Enter') resolveConfirm(true)
+    return
+  }
+
   switch (event.key.toLowerCase()) {
     case '1':
     case '2':
@@ -296,6 +438,7 @@ window.addEventListener('keydown', (event) => {
       const menu = TOWER_ORDER.filter((id) => game.canUse(id))
       const towerId = menu[Number(event.key) - 1]
       if (towerId) game.selectBuild(game.selectedBuildId === towerId ? null : towerId)
+      else notify(`이번 판에 쓸 수 있는 병종은 ${menu.length}종입니다`)
       break
     }
     case 'escape':
@@ -303,34 +446,53 @@ window.addEventListener('keydown', (event) => {
         game.selectBuild(null)
         game.selectedTower = null
       } else {
-        backToSelect()
+        // Esc 두 번이 판을 통째로 버리던 자리다. 이제 확인을 거친다.
+        askAbandon('leave')
       }
       break
     case ' ':
       event.preventDefault()
-      game.callNextWave()
+      if (game.isOver) notify('판이 이미 끝났습니다')
+      else if (game.waves.running) notify('웨이브가 진행 중입니다')
+      else game.callNextWave()
       break
     case 'p':
       paused = !paused
       applyTimeScale()
       break
-    case 'u':
-      game.upgradeSelected()
+    case 'u': {
+      const result = game.upgradeSelected()
+      if (!result.ok) notify(result.reason, towerAnchor())
       break
-    case 'x':
-      game.sellSelected()
+    }
+    case 'x': {
+      if (game.isOver) notify('판이 끝나 조작할 수 없습니다')
+      else {
+        const anchor = towerAnchor()
+        const result = game.sellSelected()
+        if (!result.ok) notify(result.reason, anchor)
+      }
       break
+    }
     case 't':
-      game.cycleSelectedTargeting()
+      if (!game.selectedTower) notify('먼저 기물을 클릭해 고르세요')
+      else game.cycleSelectedTargeting()
       break
     case 'r':
-      startStage(stage)
+      askAbandon('restart')
       break
     case 'q':
-      backToSelect()
+      askAbandon('leave')
       break
   }
 })
+
+/** 선택된 기물의 화면 좌표. 기물에 대한 사유는 그 기물 옆에 뜬다. */
+function towerAnchor(): { x: number; y: number } | null {
+  const tower = game.selectedTower
+  if (!tower) return null
+  return { x: layout.board.x + tower.pos.x, y: layout.board.y + tower.pos.y }
+}
 
 // 탭이 백그라운드로 가면 자동 일시정지 — 돌아왔을 때 웨이브가 다 지나가 있는 사고를 막는다.
 document.addEventListener('visibilitychange', () => {
@@ -363,6 +525,8 @@ installPlaytest({
         ? stageSelect.hitAreas
         : hud.hitAreas,
   rendered: () => firstFrameDrawn,
+  notice: () => notices.current(),
+  confirm: () => confirmPrompt,
 })
 
 // 개발 편의: 콘솔에서 상태를 들여다볼 수 있게 노출한다.

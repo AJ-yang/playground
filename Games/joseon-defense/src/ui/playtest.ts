@@ -28,7 +28,9 @@ import { TILE_SIZE, type Game } from '../game/Game'
 import type { Progress } from '../game/Progress'
 import { TARGET_PRIORITY_LABEL, type GamePhase } from '../game/types'
 import { backdropImagesSettled } from '../render/backdropImages'
+import type { ConfirmPrompt, Notice } from './feedback'
 import type { Layout, UiButton } from './layout'
+import { modeBanner } from './mode'
 
 export type PlaytestScreen = 'title' | 'select' | 'play'
 
@@ -68,6 +70,10 @@ export interface PlaytestSource {
   uiButtons(): readonly UiButton[]
   /** 첫 프레임을 그렸는가. `ready` 판정에 쓴다. */
   rendered(): boolean
+  /** 화면에 떠 있는 응답 쪽지. 실패 사유가 여기로 나간다. */
+  notice(): Notice | null
+  /** 열려 있는 확인창. */
+  confirm(): ConfirmPrompt | null
 }
 
 const PHASE_LABEL: Record<GamePhase, string> = {
@@ -114,6 +120,10 @@ export function installPlaytest(src: PlaytestSource): void {
   /**
    * 보드 위의 누를 곳 — 이미 선 기물과, **기물을 고른 동안에만** 빈 터.
    *
+   * 건설 카드(`build:*`)는 여기가 아니라 패널에서 나온다. 기물을 선택해도
+   * 카드가 사라지지 않게 바꾼 뒤로는 **어느 모드에서든 목록에 남는다** —
+   * 예전에는 정보창이 카드를 통째로 밀어내서 훅에서도 같이 사라졌다.
+   *
    * 빈 터를 항상 내보내지 않는 이유는 24×15 격자에서 250칸이 넘게 나오는데,
    * 건설 모드가 아닐 때 빈 터를 누르면 선택이 풀리는 것 말고는 아무 일도
    * 일어나지 않기 때문이다. "지금 누를 수 있는 것"이라는 훅의 질문에 대한
@@ -124,6 +134,9 @@ export function installPlaytest(src: PlaytestSource): void {
     const game = src.game()
     const board = src.layout.board
     const out: Hotspot[] = []
+    // 확인창이 떠 있으면 판 위 클릭은 통과하지 않는다. 목록에서 지우지 않고
+    // `enabled: false`로 남겨 "왜 안 눌리는가"를 훅에서도 읽을 수 있게 한다.
+    const live = src.confirm() === null && !game.isOver
 
     for (const tower of game.towers) {
       out.push({
@@ -135,7 +148,7 @@ export function installPlaytest(src: PlaytestSource): void {
           TILE_SIZE,
         ),
         label: `${tower.def.name} Lv.${tower.level} (${tower.col},${tower.row})`,
-        enabled: !game.isOver,
+        enabled: live,
       })
     }
 
@@ -157,7 +170,7 @@ export function installPlaytest(src: PlaytestSource): void {
             TILE_SIZE,
           ),
           label: `${name} 배치 (${col},${row})`,
-          enabled: affordable && !game.isOver,
+          enabled: live && affordable,
         })
       }
     }
@@ -218,9 +231,26 @@ export function installPlaytest(src: PlaytestSource): void {
     const stage = src.stage()
     const waves = game.waves
     const spawn = waves.spawnProgress
+    const banner = modeBanner(game)
+    const notice = src.notice()
+    const confirm = src.confirm()
 
     return {
       ...base,
+      // 화면에 떠 있는 글자는 훅에서도 읽혀야 한다. 이 셋이 "지금 내 조작이
+      // 어떻게 됐는가"에 대한 화면의 답 전부다.
+      mode: banner.mode,
+      modeLabel: banner.title,
+      modeHint: banner.hint,
+      notice: notice ? { text: notice.text, kind: notice.kind } : null,
+      confirm: confirm
+        ? {
+            title: confirm.title,
+            detail: confirm.detail,
+            confirmLabel: confirm.confirmLabel,
+            cancelLabel: confirm.cancelLabel,
+          }
+        : null,
       stage: {
         id: stage.id,
         index: stage.index,
