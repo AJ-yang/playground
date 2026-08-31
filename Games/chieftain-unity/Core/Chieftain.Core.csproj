@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unity가 읽을 코드다. TFM을 netstandard2.1로 잡은 이유는 Unity 2021 이후의
+    스크립팅 런타임이 그 표준을 따르기 때문이다 — 여기서 dotnet으로 컴파일해
+    검증한 그대로가 에디터에서도 컴파일된다.
+
+    UnityEngine을 참조하지 않는다. 이것이 이 프로젝트의 전부다: 시뮬레이션은
+    엔진을 몰라야 하고(GDD 7.2), 몰라야 이렇게 엔진 밖에서 검증할 수 있다.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Chieftain.Core</AssemblyName>
+    <RootNamespace>Chieftain.Core</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

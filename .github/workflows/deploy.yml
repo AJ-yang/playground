@@ -5,6 +5,7 @@
 # 흐트러지지 않는다.
 #
 #   Games/joseon-defense/dist            →  /playground/joseon-defense/
+#   Games/chieftain/dist                 →  /playground/chieftain/
 #   Games/casino-learning-game/index.html →  /playground/casino-learning-game/
 #   Services/gyeol/out                   →  /playground/gyeol/
 #   Services/volleyball-rotation/index.html → /playground/volleyball-rotation/
@@ -54,6 +55,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             Games/joseon-defense/package-lock.json
+            Games/chieftain/package-lock.json
             Services/gyeol/package-lock.json
 
       - run: npm ci
@@ -64,6 +66,14 @@ jobs:
       - name: 조선 방어전 빌드
         run: npm run build
         working-directory: Games/joseon-defense
+
+      - run: npm ci
+        working-directory: Games/chieftain
+
+      # 여기도 build가 tsc --noEmit을 먼저 돌린다.
+      - name: 족장 빌드
+        run: npm run build
+        working-directory: Games/chieftain
 
       - run: npm ci
         working-directory: Services/gyeol
@@ -80,6 +90,8 @@ jobs:
         run: |
           mkdir -p _site/joseon-defense
           cp -r Games/joseon-defense/dist/. _site/joseon-defense/
+          mkdir -p _site/chieftain
+          cp -r Games/chieftain/dist/. _site/chieftain/
           # 카지노 학습 게임은 빌드 산출물이 없다 — HTML 한 장이 곧 게임이라
           # dist가 아니라 소스를 그대로 올린다.
           mkdir -p _site/casino-learning-game
