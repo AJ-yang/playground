@@ -42,7 +42,12 @@ namespace Chieftain.Core
         private const double AutonomyThink = 1.5;
 
         /// <summary>유닛이 스스로 달려드는 거리. 이보다 멀면 못 본 척한다.</summary>
-        private const double Aggro = 9;
+        /// <summary>
+        /// 유닛이 스스로 달려드는 거리. 9였을 때는 근접 사거리(약 7.2)보다 겨우
+        /// 커서, 같은 지역(한 변 60)에 서 있는 두 부대가 서로를 못 봤다 —
+        /// AI끼리 20분 다섯 판에 전사자가 여덟 명이었다. TS 쪽 주석에 근거가 있다.
+        /// </summary>
+        private const double Aggro = 22;
 
         /// <summary>
         /// 유닛이 서로 지키는 간격. 판정 반지름이 아니라 **눈에 보이는 몸 크기**를
