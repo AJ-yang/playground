@@ -693,12 +693,17 @@ const loop = new GameLoop({
 /**
  * 부감 안개. **배율을 곱해서 쓴다**(`applyFog`).
  *
- * 이 두 값은 기본 배율에서 카메라가 판까지 219쯤 떨어져 있다는 전제로 잡혔다.
- * 멀리 당기면 그 거리가 313까지 늘어나는데, 고정해 두면 판 전체가 하늘색으로
+ * 이 두 값은 기본 배율에서 카메라가 판까지 얼마나 떨어져 있는지를 전제로
+ * 잡혔다. 멀리 당기면 그 거리가 늘어나는데, 고정해 두면 판 전체가 하늘색으로
  * 씻겨 나가 미니맵만 남는다. 거리에 비례해 밀면 어느 배율에서나 같은 정도의
  * 아지랑이가 걸린다.
+ *
+ * 기본 배율을 168에서 96으로 당기면서 그 거리가 219에서 125로 줄었으므로,
+ * 두 값도 같은 비율로 줄인다(170·400 → 97·229). 안 줄이면 near가 카메라
+ * 거리보다 멀어져서 부감에서 안개가 통째로 사라진다 — 배율에 따라 같은
+ * 그림이 나와야 한다는 성질을 여기서 지킨다.
  */
-const FOG_OVERHEAD: readonly [number, number] = [170, 400]
+const FOG_OVERHEAD: readonly [number, number] = [97, 229]
 const FOG_FIRST: readonly [number, number] = [45, 165]
 
 function applyFog(scene: THREE.Scene, firstPerson: boolean, zoom: number): void {
